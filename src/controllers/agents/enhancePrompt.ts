@@ -21,16 +21,31 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Set up streaming response
+    // Set up streaming response with production-ready headers
+    // Note: For production, ensure reverse proxy (nginx/cloudflare) doesn't buffer
+    // Add to nginx config: proxy_buffering off; proxy_cache off;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
     res.setHeader('Transfer-Encoding', 'chunked');
 
+    // Disable buffering for various platforms and reverse proxies
+    res.setHeader('X-Accel-Buffering', 'no'); // Nginx
+    res.setHeader('X-Nginx-Buffering', 'no'); // Nginx alternative
+    res.setHeader('X-Apache-Buffering', 'no'); // Apache
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    // Prevent compression middleware from buffering
+    res.setHeader('Content-Encoding', 'identity');
+
+    // Send headers immediately
     if (res.flushHeaders) {
       res.flushHeaders();
     }
+
+    // Write initial empty chunk to force headers to be sent immediately
+    // This is critical for production environments with reverse proxies
+    res.write('');
 
     if (res.finished) {
       return;
@@ -155,21 +170,36 @@ Enhance this prompt: "${finalPrompt}"`;
           return;
         }
 
-        const written = res.write(data);
+        try {
+          const written = res.write(data);
 
-        if (written) {
+          // Always try to flush immediately for streaming
           if (typeof (res as any).flush === 'function') {
-            (res as any).flush();
-          }
-          resolve();
-        } else {
-          res.once('drain', () => {
-            if (typeof (res as any).flush === 'function') {
+            try {
               (res as any).flush();
+            } catch (flushError) {
+              // Ignore flush errors, continue with write
             }
+          }
+
+          if (written) {
             resolve();
-          });
-          res.once('error', reject);
+          } else {
+            res.once('drain', () => {
+              // Flush again after drain
+              if (typeof (res as any).flush === 'function') {
+                try {
+                  (res as any).flush();
+                } catch (flushError) {
+                  // Ignore flush errors
+                }
+              }
+              resolve();
+            });
+            res.once('error', reject);
+          }
+        } catch (writeError) {
+          reject(writeError);
         }
       });
     };
