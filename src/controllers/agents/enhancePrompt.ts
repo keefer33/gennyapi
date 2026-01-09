@@ -22,9 +22,19 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
     }
 
     // Set up streaming response
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    if (res.flushHeaders) {
+      res.flushHeaders();
+    }
+
+    if (res.finished) {
+      return;
+    }
 
     // Handle random prompt generation
     let finalPrompt = prompt;
@@ -128,25 +138,104 @@ Examples:
 Enhance this prompt: "${finalPrompt}"`;
 
     // Stream the response
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4.1',
-      messages: [
+    const stream = await openai.responses.create({
+      model: 'gpt-5.2',
+      input: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: finalPrompt },
       ],
       stream: true,
-      //max_tokens: 300,
-      //temperature: 0.8,
     });
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        res.write(content);
-      }
-    }
+    // Helper function to write data with backpressure handling
+    const writeToResponse = (data: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        if (!res.writable || res.destroyed) {
+          reject(new Error('Response is not writable'));
+          return;
+        }
 
-    res.end();
+        const written = res.write(data);
+
+        if (written) {
+          if (typeof (res as any).flush === 'function') {
+            (res as any).flush();
+          }
+          resolve();
+        } else {
+          res.once('drain', () => {
+            if (typeof (res as any).flush === 'function') {
+              (res as any).flush();
+            }
+            resolve();
+          });
+          res.once('error', reject);
+        }
+      });
+    };
+
+    try {
+      for await (const chunk of stream) {
+        const chunkAny = chunk as any;
+        let textToWrite = '';
+
+        // Handle response.output_item.delta events (streaming text deltas)
+        if (chunkAny.type === 'response.output_item.delta' && chunkAny.delta) {
+          if (chunkAny.delta.text && typeof chunkAny.delta.text === 'string') {
+            textToWrite = chunkAny.delta.text;
+          } else if (chunkAny.delta.content && typeof chunkAny.delta.content === 'string') {
+            textToWrite = chunkAny.delta.content;
+          } else if (typeof chunkAny.delta === 'string') {
+            textToWrite = chunkAny.delta;
+          }
+        }
+        // Handle response.output_item.added events (complete items)
+        else if (chunkAny.type === 'response.output_item.added' && chunkAny.item) {
+          if (chunkAny.item.content && typeof chunkAny.item.content === 'string') {
+            textToWrite = chunkAny.item.content;
+          } else if (chunkAny.item.text && typeof chunkAny.item.text === 'string') {
+            textToWrite = chunkAny.item.text;
+          } else if (typeof chunkAny.item === 'string') {
+            textToWrite = chunkAny.item;
+          }
+        }
+        // Handle response.output_text.delta events - delta IS the text (string)
+        else if (chunkAny.type === 'response.output_text.delta' && chunkAny.delta) {
+          if (typeof chunkAny.delta === 'string') {
+            textToWrite = chunkAny.delta;
+          } else if (chunkAny.delta.text && typeof chunkAny.delta.text === 'string') {
+            textToWrite = chunkAny.delta.text;
+          }
+        }
+        // Fallback: check if delta exists directly as string
+        else if (chunkAny.delta && typeof chunkAny.delta === 'string') {
+          textToWrite = chunkAny.delta;
+        }
+        // Fallback: check if delta exists as object with text property
+        else if (chunkAny.delta?.text && typeof chunkAny.delta.text === 'string') {
+          textToWrite = chunkAny.delta.text;
+        }
+        // Fallback: check for direct text property
+        else if (chunkAny.text && typeof chunkAny.text === 'string') {
+          textToWrite = chunkAny.text;
+        }
+
+        // Write and flush the text if we have any
+        if (textToWrite && typeof textToWrite === 'string' && textToWrite.length > 0) {
+          try {
+            await writeToResponse(textToWrite);
+          } catch (writeError) {
+            console.error('Error writing to response:', writeError);
+            throw writeError;
+          }
+        }
+      }
+    } catch (streamError) {
+      console.error('Error processing stream:', streamError);
+      throw streamError;
+    } finally {
+      res.end();
+    }
   } catch (error) {
     console.error('Error enhancing prompt:', error);
     if (!res.headersSent) {
