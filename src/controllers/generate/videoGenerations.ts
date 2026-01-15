@@ -1,14 +1,18 @@
 import axios, { AxiosResponse } from 'axios';
+import { removeEmptyValues } from '../../utils/payloadUtils';
 
 export const videoGenerations = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
   console.log('endpoint', endpoint);
   console.log('api model name', taskObject.api.model_name);
   console.log('api key', taskObject.api.key.key);
-  const payload = {
+  const rawPayload = {
     model: taskObject.api.model_name,
     ...taskObject.payload,
-  }
+  };
+  const cleanedPayload = removeEmptyValues(rawPayload);
+  // Ensure payload is an object (not undefined) before sending
+  const payload = cleanedPayload && typeof cleanedPayload === 'object' ? cleanedPayload : {};
   console.log('payload', payload);
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
