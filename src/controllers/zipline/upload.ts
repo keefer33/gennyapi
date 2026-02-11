@@ -1,20 +1,20 @@
-import axios from "axios";
-import { getServerClient, getUserClient, SupabaseServerClients, SupabaseUserClients } from "../../utils/supabaseClient";
+import axios from 'axios';
+import { getServerClient, getUserClient, SupabaseServerClients, SupabaseUserClients } from '../../utils/supabaseClient';
 import { Request, Response } from 'express';
 import multer from 'multer';
-import FormData from 'form-data';  
+import FormData from 'form-data';
 
 // Configure multer for memory storage
-const uploadMiddleware = multer({ 
+const uploadMiddleware = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit
-  }
+  },
 });
 
 export const upload = async (req: Request, res: Response): Promise<void> => {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
     return;
   }
 
@@ -23,7 +23,7 @@ export const upload = async (req: Request, res: Response): Promise<void> => {
 
   const baseUrl = process.env.ZIPLINE_URL;
   if (!baseUrl) {
-    res.status(500).json({ error: "Zipline URL not configured" });
+    res.status(500).json({ error: 'Zipline URL not configured' });
     return;
   }
 
@@ -35,22 +35,22 @@ export const upload = async (req: Request, res: Response): Promise<void> => {
     .eq('user_id', user?.id)
     .single();
   if (profileError) {
-    res.status(500).json({ error: profileError?.message || "Failed to get user profile" });
+    res.status(500).json({ error: profileError?.message || 'Failed to get user profile' });
     return;
   }
 
   try {
     // Use multer to parse the multipart form data
-    uploadMiddleware.single('file')(req, res, async (err) => {
+    uploadMiddleware.single('file')(req, res, async err => {
       if (err) {
-        console.error("Multer error:", err);
-        res.status(400).json({ error: "File upload error" });
+        console.error('Multer error:', err);
+        res.status(400).json({ error: 'File upload error' });
         return;
       }
 
       const file = req.file;
       if (!file) {
-        res.status(400).json({ error: "No file provided" });
+        res.status(400).json({ error: 'No file provided' });
         return;
       }
 
@@ -58,9 +58,9 @@ export const upload = async (req: Request, res: Response): Promise<void> => {
       const formData = new FormData();
       formData.append('file', file.buffer, {
         filename: file.originalname,
-        contentType: file.mimetype
+        contentType: file.mimetype,
       });
-console.log(userProfile?.zipline?.token);
+      console.log(userProfile?.zipline?.token);
       const response = await axios.post(`${baseUrl}/api/upload`, formData, {
         headers: {
           ...formData.getHeaders(),
@@ -71,14 +71,14 @@ console.log(userProfile?.zipline?.token);
 
       const data = response.data;
       if (response.status < 200 || response.status >= 300) {
-        res.status(response.status).json({ error: data?.message || "Upload failed", details: data });
+        res.status(response.status).json({ error: data?.message || 'Upload failed', details: data });
         return;
       }
 
       res.status(200).json({ success: true, data: data });
     });
   } catch (error) {
-    console.error("Zipline upload error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Zipline upload error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-}
+};
