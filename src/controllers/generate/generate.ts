@@ -4,6 +4,7 @@ import { createTask } from './createTask';
 import { videoGenerations } from './videoGenerations';
 import { mergeVideos } from './mergeVideos';
 import { customApiGenerate } from './customApiGenerate';
+import { falGenerate } from './falGenerate';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -43,6 +44,9 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
         break;
       case 'customApiGenerate':
         generationResponse = await customApiGenerate(taskObject);
+        break;
+      case 'falGenerate':
+        generationResponse = await falGenerate(taskObject);
         break;
       default:
         throw new Error('Invalid model');

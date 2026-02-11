@@ -23,9 +23,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.76.1",
+    "@fal-ai/client": "^1.9.1",
+    "@openai/agents": "^0.4.5",
+    "@openai/agents-extensions": "^0.4.6",
+    "@supabase/supabase-js": "^2.95.0",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/multer": "^2.0.0",
+    "ai": "^6.0.78",
     "axios": "^1.12.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -35,7 +39,8 @@
     "multer": "^2.0.2",
     "openai": "^6.15.0",
     "sharp": "^0.34.5",
-    "stripe": "^19.1.0"
+    "stripe": "^19.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

@@ -43,7 +43,7 @@ export const uploadFileToZipline = async (
   authToken: string
 ): Promise<ZiplineUploadResponse> => {
   const baseUrl = process.env.ZIPLINE_URL;
-  
+
   if (!baseUrl) {
     throw new Error('ZIPLINE_URL environment variable is not set');
   }
@@ -63,14 +63,16 @@ export const uploadFileToZipline = async (
   try {
     const userResponse = await axios.get(`${baseUrl}/api/user`, {
       headers: {
-        'Authorization': authToken,
+        Authorization: authToken,
       },
       //timeout: 10000,
     });
     console.log('Authentication test successful:', userResponse.data);
   } catch (authError: any) {
-    console.error('Authentication test failed:', authError.response?.status, authError.response?.data,authError);
-    throw new Error(`Zipline authentication failed: ${authError.response?.status} - ${authError.response?.data?.message || authError.message}`);
+    console.error('Authentication test failed:', authError.response?.status, authError.response?.data, authError);
+    throw new Error(
+      `Zipline authentication failed: ${authError.response?.status} - ${authError.response?.data?.message || authError.message}`
+    );
   }
 
   const uploadUrl = `${baseUrl}/api/upload`;
@@ -79,11 +81,11 @@ export const uploadFileToZipline = async (
   try {
     console.log('Creating FormData for upload...');
     const formData = new FormData();
-    
+
     // Dynamically determine content type based on file extension
     const contentType = getMimeType(filename);
     console.log('Detected content type:', contentType);
-    
+
     formData.append('file', file, {
       filename: filename,
       contentType: contentType,
@@ -91,18 +93,18 @@ export const uploadFileToZipline = async (
 
     console.log('Making axios request to Zipline...');
     const requestStart = Date.now();
-    
+
     const response = await axios.post(uploadUrl, formData, {
       headers: {
         ...formData.getHeaders(),
-        'Authorization': authToken,
+        Authorization: authToken,
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       timeout: 300000,
       validateStatus: () => true,
     });
-    
+
     const requestTime = Date.now() - requestStart;
     console.log('Axios request completed in:', requestTime, 'ms');
     console.log('Response status:', response.status);
@@ -123,12 +125,8 @@ export const uploadFileToZipline = async (
     console.error('- Response status:', error.response?.status);
     console.error('- Response data:', error.response?.data);
     console.error('- Request URL:', `${baseUrl}/api/upload`);
-    
-    throw new Error(
-      `Failed to upload file to Zipline: ${
-        error.response?.data?.message || error.message
-      }`
-    );
+
+    throw new Error(`Failed to upload file to Zipline: ${error.response?.data?.message || error.message}`);
   }
 };
 
@@ -169,12 +167,9 @@ export const uploadFromUrlToZipline = async (
  * @param authToken - Zipline authentication token
  * @returns Promise with file data
  */
-export const getZipData = async (
-  fileId: string,
-  authToken: string
-): Promise<ZiplineFileData> => {
+export const getZipData = async (fileId: string, authToken: string): Promise<ZiplineFileData> => {
   const baseUrl = process.env.ZIPLINE_URL;
-  
+
   if (!baseUrl) {
     throw new Error('ZIPLINE_URL environment variable is not set');
   }
@@ -189,7 +184,7 @@ export const getZipData = async (
   try {
     const response = await axios.get(fileUrl, {
       headers: {
-        'Authorization': authToken,
+        Authorization: authToken,
       },
       timeout: 30000,
       validateStatus: () => true,
@@ -210,11 +205,7 @@ export const getZipData = async (
     console.error('Error message:', error.message);
     console.error('Response status:', error.response?.status);
     console.error('Response data:', error.response?.data);
-    
-    throw new Error(
-      `Failed to get file data from Zipline: ${
-        error.response?.data?.message || error.message
-      }`
-    );
+
+    throw new Error(`Failed to get file data from Zipline: ${error.response?.data?.message || error.message}`);
   }
 };
