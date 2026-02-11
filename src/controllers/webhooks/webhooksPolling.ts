@@ -7,6 +7,7 @@ import { updateUserGeneration } from '../../utils/getSupaData';
 import { webhookMergeVideos } from './webhookMergeVideos';
 import { webhookImageInstantGeneration } from './webhookImageInstantGeneration';
 import { webhookCustomApiGenerate } from './webhookCustomApiGenerate';
+import { webhookFalGenerate } from './webhookFalGenerate';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -43,6 +44,10 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
       case 'customApiGenerate':
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookCustomApiGenerate(pollingFileData, pollingFileResponse);
+        break;
+      case 'falGenerate':
+        pollingFileResponse = await webhookCheckStatus(pollingFileData);
+        status = await webhookFalGenerate(pollingFileData, pollingFileResponse);
         break;
       default:
         console.warn('Unknown API type:', pollingFileData.api_id.api_type);
