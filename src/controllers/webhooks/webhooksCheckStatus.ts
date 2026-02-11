@@ -7,16 +7,24 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
   const files: any[] = [];
   let pollingFileResponse: any = null;
   let headers: any = {};
-  if (api.api_type === 'mergeVideos') {
-    headers = {
-      'Content-Type': 'application/json',
-      'X-API-Key': api.key.key,
-    };
-  } else {
-    headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${api.key.key}`,
-    };
+  switch (api.api_type) {
+    case 'mergeVideos':
+      headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': api.key.key,
+      };
+      break;
+    case 'falGenerate':
+      headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Key ${api.key.key}`,
+      };
+      break;
+    default:
+      headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${api.key.key}`,
+      };
   }
 
   const endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
