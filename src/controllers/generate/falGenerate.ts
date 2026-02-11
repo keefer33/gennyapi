@@ -2,7 +2,6 @@ import axios, { AxiosResponse } from 'axios';
 
 export const falGenerate = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
-console.log('taskObject.payload', taskObject.payload);
 
   const response: AxiosResponse = await axios
     .post(endpoint, taskObject.payload, {
