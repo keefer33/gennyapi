@@ -5,6 +5,7 @@ import { videoGenerations } from './videoGenerations';
 import { mergeVideos } from './mergeVideos';
 import { customApiGenerate } from './customApiGenerate';
 import { falGenerate } from './falGenerate';
+import { predictionGenerate } from './predictionGenerate';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -45,8 +46,11 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
       case 'customApiGenerate':
         generationResponse = await customApiGenerate(taskObject);
         break;
-      case 'falGenerate':
-        generationResponse = await falGenerate(taskObject);
+        case 'falGenerate':
+          generationResponse = await falGenerate(taskObject);
+          break;
+      case 'prediction':
+        generationResponse = await predictionGenerate(taskObject);
         break;
       default:
         throw new Error('Invalid model');
