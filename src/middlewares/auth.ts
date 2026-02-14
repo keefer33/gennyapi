@@ -1,75 +1,52 @@
 import { Request, Response, NextFunction } from 'express';
-import { getUserClient, SupabaseUserClients } from '../utils/supabaseClient';
+import jwt from 'jsonwebtoken';
 
 /**
- * 401 flow for POST /zipline/upload (and any route using authenticateUser):
- * 1. No Authorization header or no "Bearer <token>" → 401 here.
- * 2. We call Supabase auth.getUser(jwt) → GET Supabase Auth /user with the JWT.
- * 3. If Supabase returns session_not_found (Auth session missing!), we get authError → 401 here.
- *    That happens when the JWT’s session_id no longer exists (e.g. user signed out, session
- *    expired and not refreshed). Frontend should refresh the session and send a fresh access token.
- * 4. If authError or !user → 401; otherwise we attach req.user and call next().
+ * Authenticate using the API key (JWT from createToken / authApiKey).
+ * The frontend Supabase token is only used for login; after createToken,
+ * the client sends this JWT so users can call the API without an active
+ * Supabase session (and eventually use created API keys).
+ *
+ * - Expects: Authorization: Bearer <authApiKey>
+ * - Verifies JWT with JWT_SECRET; payload must contain u (user id).
+ * - Sets req.user = { id: payload.u }.
  */
-
-/** Decode JWT payload only (no verification) for logging. */
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
-    return JSON.parse(payload) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
 
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const rawAuth = req.headers.authorization;
-    console.log('[auth] Authorization header present:', !!rawAuth);
+    const userToken = rawAuth?.trim().startsWith('Bearer ') ? rawAuth!.slice(7).trim() : null;
 
-    let userToken = rawAuth?.split(' ')[1];
     if (!userToken) {
-      console.log('[auth] 401: No Bearer token');
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Unauthorized', message: 'Bearer token required' });
       return;
     }
 
-    const decoded = decodeJwtPayload(userToken);
-    console.log('[auth] Decoded JWT payload:', decoded);
-    if (decoded) {
-      const exp = decoded.exp as number | undefined;
-      const sub = decoded.sub;
-      console.log('[auth] JWT sub (user id):', sub);
-      if (exp != null) {
-        const expDate = new Date(exp * 1000);
-        console.log('[auth] JWT exp (expires):', expDate.toISOString(), expDate > new Date() ? '(valid)' : '(EXPIRED)');
-      }
-    }
-
-    console.log('[auth] Calling Supabase getUser(token)...');
-    const { supabaseUserClient }: SupabaseUserClients = await getUserClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseUserClient.auth.getUser(userToken);
-
-    if (authError) {
-      console.log('[auth] 401: Supabase getUser error:', authError.message, authError.name);
-    }
-    if (!user) {
-      console.log('[auth] 401: No user in response');
-    }
-    if (authError || !user) {
-      res.status(401).json({ error: 'Unauthorized' });
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('[auth] JWT_SECRET is not set');
+      res.status(500).json({ error: 'Internal server error' });
       return;
     }
 
-    console.log('[auth] OK: user id=', user.id);
-    (req as any).user = user;
+    let decoded: { u?: string };
+    try {
+      decoded = jwt.verify(userToken, jwtSecret) as { u?: string };
+    } catch (_err) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
+      return;
+    }
+
+    const userId = decoded?.u;
+    if (!userId || typeof userId !== 'string') {
+      res.status(401).json({ error: 'Unauthorized', message: 'Invalid token payload' });
+      return;
+    }
+
+    (req as any).user = { id: userId };
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
+    console.error('[auth] Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

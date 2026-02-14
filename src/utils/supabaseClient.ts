@@ -4,10 +4,6 @@ export interface SupabaseServerClients {
   supabaseServerClient: SupabaseClient;
 }
 
-export interface SupabaseUserClients {
-  supabaseUserClient: SupabaseClient;
-}
-
 const getServerClient = async (): Promise<SupabaseServerClients> => {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -20,17 +16,4 @@ const getServerClient = async (): Promise<SupabaseServerClients> => {
   return { supabaseServerClient };
 };
 
-const getUserClient = async (): Promise<SupabaseUserClients> => {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  
-  const supabaseUserClient: SupabaseClient = createClient(supabaseUrl, supabaseKey);
-
-  return { supabaseUserClient };
-};
-
-export { getServerClient, getUserClient };
+export { getServerClient };
