@@ -1,21 +1,10 @@
 import axios from "axios";
-import { getServerClient, getUserClient, SupabaseServerClients, SupabaseUserClients } from "../../utils/supabaseClient";
-import { Request, Response } from 'express';  
+import { getServerClient, SupabaseServerClients } from "../../utils/supabaseClient";
+import { Request, Response } from 'express';
 
 export const userGet = async (req: Request, res: Response): Promise<void> => {
-  if (req.method !== "GET") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-  const { supabaseUserClient }: SupabaseUserClients = await getUserClient();
-  let userToken = req.headers.authorization;
-  userToken = userToken?.split(' ')[1];
-  if (!userToken) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser(userToken);
-  if (authError || !user) {
+  const user = (req as any).user;
+  if (!user?.id) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -31,7 +20,7 @@ export const userGet = async (req: Request, res: Response): Promise<void> => {
   const { data: userProfile, error: profileError } = await supabaseServerClient
     .from('user_profiles')
     .select('zipline')
-    .eq('user_id', user?.id)
+    .eq('user_id', user.id)
     .single();
   if (profileError) {
     res.status(500).json({ error: profileError?.message || "Failed to get user profile" });

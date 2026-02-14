@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getServerClient, getUserClient, SupabaseServerClients, SupabaseUserClients } from "../../utils/supabaseClient";
+import { getServerClient, SupabaseServerClients } from "../../utils/supabaseClient";
 import { Request, Response } from 'express';  
 
 export const userFileDelete = async (req: Request, res: Response): Promise<void> => {
