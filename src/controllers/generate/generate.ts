@@ -6,6 +6,7 @@ import { mergeVideos } from './mergeVideos';
 import { customApiGenerate } from './customApiGenerate';
 import { falGenerate } from './falGenerate';
 import { predictionGenerate } from './predictionGenerate';
+import { calculateTokensUtil } from '../../utils/generate';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -56,6 +57,8 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
         throw new Error('Invalid model');
     }
 
+    const tokensCost = await calculateTokensUtil(body.payload, model?.api?.pricing);
+
     const userGeneration = await createUserGeneration({
       user_id: user?.id,
       payload: body.payload,
@@ -65,7 +68,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
       model_id: model.id,
       generation_type: model.generation_type,
       api_id: model.api.id,
-      cost: body.tokensCost,
+      cost: tokensCost,
     });
 
     res.status(200).json({ success: true, data: userGeneration });

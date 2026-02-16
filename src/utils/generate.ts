@@ -285,41 +285,80 @@ export const saveFileFromUrl = async (
   }
 };
 
-export const calculatePricing = (pricing: any, response?: any) => {
-  // Calculate pricing based on number of files
-  const resultJson = JSON.parse(response?.data?.resultJson || '{}');
-  const params = JSON.parse(response?.data?.param || '{}');
-  console.log('params', params);
-  let tokensCost = 0;
-  let numFiles = 0;
+export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
+  let tokensCost: number = 0;
 
-  if (pricing) {
-    switch (pricing.type) {
-      case 'perMulti':
-        // Calculate number of files for pricing
-        if (resultJson.resultUrls && Array.isArray(resultJson.resultUrls)) {
-          numFiles = resultJson.resultUrls.length;
-        } else if (resultJson.resultUrls && typeof resultJson.resultUrls === 'string') {
-          numFiles = 1;
-        }
-        tokensCost = (pricing.tokens || 0) * (numFiles || 1);
-        break;
-      case 'duration':
-        tokensCost = pricing.tokens[params?.input[pricing.field]] || 0;
-        break;
-      case 'durationResolution':
-        tokensCost = (pricing.tokens[params?.input?.resolution] || 0) * Number(params?.input?.duration || 0);
-        break;
-      case 'durationSize':
-        tokensCost = pricing.tokens[params?.input?.size][params?.input?.duration];
-        break;
-      case 'per':
-        tokensCost = pricing.tokens || 0;
-        break;
-      default:
-        tokensCost = pricing.tokens || 0;
-        break;
+  // Recursive helper function for multiFields lookup
+  const lookupMultiFields = (config: any, formValues: any): number => {
+    // If we've reached a tokens value, return it
+    if (config.tokens !== undefined) {
+      return config.tokens;
     }
+
+    // If we have a field and values, continue the lookup
+    if (config.field && config.values) {
+      const fieldValue = formValues[config.field];
+
+      // Handle undefined, null, or missing values
+      if (fieldValue === undefined || fieldValue === null) {
+        return 0;
+      }
+
+      // Convert value to string for lookup (handles booleans, numbers, and strings)
+      const fieldKey = String(fieldValue);
+      const nextConfig = config.values[fieldKey];
+
+      // If no matching value found, return 0
+      if (!nextConfig) {
+        return 0;
+      }
+
+      // Recursively continue the lookup
+      return lookupMultiFields(nextConfig, formValues);
+    }
+
+    // If structure is invalid, return 0
+    return 0;
+  };
+
+  switch (pricing.type) {
+    case "per":
+      tokensCost = pricing.tokens;
+      break;
+    case "perMulti":
+      if (formValues.num_images || formValues.max_images) {
+        tokensCost = pricing.tokens * (formValues.num_images || formValues.max_images);
+      }
+      break;
+    case "singleField":
+      tokensCost = pricing.tokens[formValues[pricing.field]] || 0;
+      break;
+    case "multiFields":
+      if (pricing.tokens) {
+        tokensCost = lookupMultiFields(pricing.tokens, formValues);
+      }
+      break;
+    case "twoFieldLookup": {
+      // Check if both fields exist (including false values)
+      const field1Value = formValues[pricing.tokens.field1];
+      const field2Value = formValues[pricing.tokens.field2];
+
+      if (
+        field1Value !== undefined &&
+        field1Value !== null &&
+        field2Value !== undefined &&
+        field2Value !== null
+      ) {
+        // Convert values to strings for lookup (handles booleans, numbers, and strings)
+        const field1Key = String(field1Value);
+        const field2Key = String(field2Value);
+
+        tokensCost = pricing.tokens.prices[field1Key]?.[field2Key] || 0;
+      }
+      break;
+    }
+    default:
+      tokensCost = 0;
   }
   return tokensCost;
 };
