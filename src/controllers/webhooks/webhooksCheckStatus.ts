@@ -20,6 +20,12 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
         Authorization: `Key ${api.key.key}`,
       };
       break;
+    case 'viduGenerate':
+      headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Token ${api.key.key}`,
+      };
+      break;
     default:
       headers = {
         'Content-Type': 'application/json',
@@ -27,7 +33,10 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
       };
   }
 
-  const endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
+  let endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
+  if (api.api_type === 'viduGenerate') {
+    endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
+  }
   const response = await axios.get(endpoint, {
     headers: headers,
     validateStatus: () => true,
