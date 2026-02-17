@@ -9,6 +9,7 @@ import { webhookImageInstantGeneration } from './webhookImageInstantGeneration';
 import { webhookCustomApiGenerate } from './webhookCustomApiGenerate';
 import { webhookFalGenerate } from './webhookFalGenerate';
 import { webhookPrediction } from './webhookPrediction';
+import { webhookViduGenerate } from './webhookViduGenerate';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -53,6 +54,10 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
       case 'prediction':
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookPrediction(pollingFileData, pollingFileResponse);
+        break;
+      case 'viduGenerate':
+        pollingFileResponse = await webhookCheckStatus(pollingFileData);
+        status = await webhookViduGenerate(pollingFileData, pollingFileResponse);
         break;
       default:
         console.warn('Unknown API type:', pollingFileData.api_id.api_type);

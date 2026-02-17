@@ -3,9 +3,6 @@ import { removeEmptyValues } from '../../utils/payloadUtils';
 
 export const videoGenerations = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
-  console.log('endpoint', endpoint);
-  console.log('api model name', taskObject.api.model_name);
-  console.log('api key', taskObject.api.key.key);
   const rawPayload = {
     model: taskObject.api.model_name,
     ...taskObject.payload,
