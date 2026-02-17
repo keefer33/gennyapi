@@ -2,10 +2,11 @@ import axios, { AxiosResponse } from 'axios';
 
 export const viduGenerate = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
+  console.log('endpoint', endpoint);
   const payload = {
     model: taskObject.api.model_name,
     ...taskObject.payload,
-  };
+  };  
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
       headers: {
@@ -14,7 +15,7 @@ export const viduGenerate = async (taskObject: any) => {
       },
     })
     .catch(error => {
-      console.log('error', JSON.stringify(error.response.data));
+      console.log('error', JSON.stringify(error));
 
       throw new Error(error.message || 'Failed to generate');
     });
