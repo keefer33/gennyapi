@@ -6,7 +6,7 @@ export const webhookViduGenerate = async (pollingFileData: any, pollingFileRespo
   let status = 'pending';
   const files: any[] = [];
 
-  status = pollingFileResponse.status;
+  status = pollingFileResponse.state;
   if (status === 'success') {
     const videoUrl = pollingFileResponse.creations[0].url;
     const savedFile: any = await saveFileFromUrl(videoUrl, pollingFileData, pollingFileResponse);
