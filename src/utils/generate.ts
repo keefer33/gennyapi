@@ -352,8 +352,24 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
         // Convert values to strings for lookup (handles booleans, numbers, and strings)
         const field1Key = String(field1Value);
         const field2Key = String(field2Value);
+        const priceEntry = pricing.tokens.prices[field1Key];
 
-        tokensCost = pricing.tokens.prices[field1Key]?.[field2Key] || 0;
+        // Support two shapes:
+        // 1) Matrix lookup: prices[field1][field2] => tokens
+        // 2) Multiplier lookup: prices[field1] => multiplier, tokens = field2 * multiplier
+        if (priceEntry && typeof priceEntry === "object" && !Array.isArray(priceEntry)) {
+          tokensCost = priceEntry[field2Key] || 0;
+        } else if (priceEntry !== undefined && priceEntry !== null) {
+          const multiplier = Number(priceEntry);
+          const perValue = Number(field2Value);
+          if (!Number.isNaN(multiplier) && !Number.isNaN(perValue)) {
+            tokensCost = perValue * multiplier;
+          } else {
+            tokensCost = 0;
+          }
+        } else {
+          tokensCost = 0;
+        }
       }
       break;
     }
