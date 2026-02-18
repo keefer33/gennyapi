@@ -11,6 +11,7 @@ import { webhookFalGenerate } from './webhookFalGenerate';
 import { webhookPrediction } from './webhookPrediction';
 import { webhookViduGenerate } from './webhookViduGenerate';
 import { webhookKlingGenerate } from './webhookKlingGenerate';
+import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -61,6 +62,8 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
         status = await webhookViduGenerate(pollingFileData, pollingFileResponse);
         break;
       case 'klingGenerate':
+        const jwt = klingCreateJWT(pollingFileData.api_id.key.key, process.env.KLING_SECRET_KEY || '');   
+        pollingFileData.api_id.key.key = jwt    
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookKlingGenerate(pollingFileData, pollingFileResponse);
         break;
