@@ -21,8 +21,8 @@ export const webhookKlingGenerate = async (pollingFileData: any, pollingFileResp
  
   if (status === 'succeed') {
     const task_result = pollingFileResponse.data.task_result;
-    task_result === 'images' ? 'images' : 'videos';
-    const fileUrl = pollingFileResponse.task_result[task_result][0].url;
+    const task_result_type = pollingFileResponse.data.task_result_type;
+    const fileUrl = pollingFileResponse.data.task_result[task_result_type][0].url;
     const savedFile: any = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
     await createUserGenerationFile({
       generation_id: pollingFileData.id,
