@@ -20,9 +20,18 @@ export const webhookKlingGenerate = async (pollingFileData: any, pollingFileResp
   }
  
   if (status === 'succeed') {
-    const task_result = pollingFileResponse.data.task_result;
-    const task_result_type = pollingFileResponse.data.task_result_type;
-    const fileUrl = pollingFileResponse.data.task_result[task_result_type][0].url;
+    const taskResult = pollingFileResponse?.data?.task_result || {};
+    const mediaItems = Array.isArray(taskResult.images)
+      ? taskResult.images
+      : Array.isArray(taskResult.videos)
+        ? taskResult.videos
+        : [];
+    const fileUrl = mediaItems?.[0]?.url;
+
+    if (!fileUrl) {
+      throw new Error('Kling webhook missing media URL in task_result');
+    }
+
     const savedFile: any = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
     await createUserGenerationFile({
       generation_id: pollingFileData.id,
