@@ -41,11 +41,11 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
     headers: headers,
     validateStatus: () => true,
   }).catch(async (error) => {
-    console.log('error', JSON.stringify(error.response.data));
+    console.log('error', JSON.stringify(error));
     await updateUserGeneration({
       id: pollingFileData.id,
       status: 'error',
-      polling_response: error.response.data,
+      polling_response: error?.response?.data,
     });
     throw new Error(error.response?.data?.message || error.message || 'Failed to generate');
   });
