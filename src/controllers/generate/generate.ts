@@ -8,6 +8,7 @@ import { falGenerate } from './falGenerate';
 import { predictionGenerate } from './predictionGenerate';
 import { calculateTokensUtil } from '../../utils/generate';
 import { viduGenerate } from './viduGenerate';
+import { klingGenerate } from './klingGenerate';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -56,6 +57,9 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
         break;
       case 'viduGenerate':
         generationResponse = await viduGenerate(taskObject);
+        break;
+      case 'klingGenerate':
+        generationResponse = await klingGenerate(taskObject);
         break;
       default:
         throw new Error('Invalid model');
