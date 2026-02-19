@@ -373,6 +373,35 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
       }
       break;
     }
+    case "twoFieldMultiplierLookup": {
+      const field1Value = formValues[pricing.tokens.field1];
+      const field2Value = formValues[pricing.tokens.field2];
+      const multiplierValue = formValues[pricing.tokens.multiplier];
+
+      if (
+        field1Value !== undefined &&
+        field1Value !== null &&
+        field2Value !== undefined &&
+        field2Value !== null &&
+        multiplierValue !== undefined &&
+        multiplierValue !== null
+      ) {
+        const field1Key = String(field1Value);
+        const field2Key = String(field2Value);
+        const basePrice = pricing.tokens.prices?.[field1Key]?.[field2Key];
+        const multiplier = Number(multiplierValue);
+
+        if (basePrice !== undefined && basePrice !== null && !Number.isNaN(multiplier)) {
+          tokensCost = Number(basePrice) * multiplier;
+        } else {
+          tokensCost = 0;
+        }
+      } else {
+        tokensCost = 0;
+      }
+
+      break;
+    }
     default:
       tokensCost = 0;
   }

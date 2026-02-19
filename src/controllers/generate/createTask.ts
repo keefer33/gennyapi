@@ -1,10 +1,19 @@
 import axios, { AxiosResponse } from 'axios';
+import { removeEmptyValues } from '../../utils/payloadUtils';
+
 
 export const createTask = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
+
+  const inputModelName = taskObject.payload?.model_name || taskObject.api.model_name;
+  const inputPayload = { ...(taskObject.payload || {}) };
+
+  delete inputPayload?.model_name;
+  const cleanedPayload = removeEmptyValues(inputPayload);
+
   const payload = {
-    model: taskObject.api.model_name,
-    input: taskObject.payload,
+    model: inputModelName,
+    input: cleanedPayload,
   };
   console.log('payload', JSON.stringify(payload));
   const response: AxiosResponse = await axios

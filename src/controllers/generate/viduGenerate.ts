@@ -1,11 +1,9 @@
 import axios, { AxiosResponse } from 'axios';
 
 export const viduGenerate = async (taskObject: any) => {
-  const endpoint = taskObject.api.api_url;
-  const payload = {
-    model: taskObject.api.model_name,
-    ...taskObject.payload,
-  };  
+  const endpoint = `${taskObject.api.api_url}${taskObject.payload.genType}`;
+  delete taskObject.payload.genType;
+  const payload = taskObject.payload;  
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
       headers: {
