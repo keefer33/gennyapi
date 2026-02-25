@@ -9,6 +9,8 @@ import { predictionGenerate } from './predictionGenerate';
 import { calculateTokensUtil } from '../../utils/generate';
 import { viduGenerate } from './viduGenerate';
 import { klingGenerate } from './klingGenerate';
+import { ltxGenerateBackground } from './ltxGenerate';
+import { randomUUID } from 'crypto';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -61,6 +63,25 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
       case 'klingGenerate':
         generationResponse = await klingGenerate(taskObject);
         break;
+      case 'ltxGenerate': {
+        const tokensCostLtx = await calculateTokensUtil(body.payload, model?.api?.pricing);
+        const userGenerationLtx = await createUserGeneration({
+          user_id: user?.id,
+          payload: body.payload,
+          response: {},
+          status: 'pending',
+          task_id: randomUUID(),
+          model_id: model.id,
+          generation_type: model.generation_type,
+          api_id: model.api.id,
+          cost: tokensCostLtx,
+        });
+        ltxGenerateBackground(userGenerationLtx.id, taskObject).catch((err) =>
+          console.error('ltxGenerateBackground unhandled:', err)
+        );
+        res.status(200).json({ success: true, data: userGenerationLtx });
+        return;
+      }
       default:
         throw new Error('Invalid model');
     }

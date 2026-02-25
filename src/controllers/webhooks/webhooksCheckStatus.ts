@@ -37,6 +37,9 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
   if (api.api_type === 'viduGenerate') {
     endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
   }
+  if (api.api_type === 'klingGenerate') {
+    endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
+  }
   const response = await axios.get(endpoint, {
     headers: headers,
     validateStatus: () => true,
