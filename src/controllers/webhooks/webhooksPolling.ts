@@ -11,6 +11,7 @@ import { webhookFalGenerate } from './webhookFalGenerate';
 import { webhookPrediction } from './webhookPrediction';
 import { webhookViduGenerate } from './webhookViduGenerate';
 import { webhookKlingGenerate } from './webhookKlingGenerate';
+import { webhookLtxGenerate } from './webhookLtxGenerate';
 import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
@@ -62,10 +63,14 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
         status = await webhookViduGenerate(pollingFileData, pollingFileResponse);
         break;
       case 'klingGenerate':
-        const jwt = klingCreateJWT(pollingFileData.api_id.key.key, process.env.KLING_SECRET_KEY || '');   
-        pollingFileData.api_id.key.key = jwt    
+        const jwt = klingCreateJWT(pollingFileData.api_id.key.key, process.env.KLING_SECRET_KEY || '');
+        pollingFileData.api_id.key.key = jwt;
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookKlingGenerate(pollingFileData, pollingFileResponse);
+        break;
+      case 'ltxGenerate':
+        status = await webhookLtxGenerate(pollingFileData);
+        pollingFileResponse = pollingFileData.polling_response ?? {};
         break;
       default:
         console.warn('Unknown API type:', pollingFileData.api_id.api_type);

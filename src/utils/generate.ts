@@ -285,6 +285,84 @@ export const saveFileFromUrl = async (
   }
 };
 
+/**
+ * Save a file from an in-memory buffer (e.g. LTX API returns video binary directly).
+ * Same flow as saveFileFromUrl but skips the URL fetch.
+ */
+export const saveFileFromBuffer = async (
+  buffer: Buffer,
+  filename: string,
+  pollingFileData: any,
+  callbackData: any = {}
+): Promise<{ file_id: string | null; file_url: string }> => {
+  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
+  try {
+    const { data: userProfile, error: profileError } = await supabaseServerClient
+      .from('user_profiles')
+      .select('zipline')
+      .eq('user_id', pollingFileData.user_id)
+      .single();
+
+    if (profileError || !userProfile?.zipline?.token) {
+      throw new Error('Zipline authentication token not found for user');
+    }
+
+    const authToken = userProfile.zipline.token;
+    const uploadResponse = await uploadFileToZipline(buffer, filename, authToken);
+
+    if (!uploadResponse.files || uploadResponse.files.length === 0) {
+      throw new Error('No files returned from Zipline upload');
+    }
+
+    const uploadedFile = uploadResponse.files[0];
+    const zipData = await getZipData(uploadedFile.id, authToken);
+    const generatedInfo = {
+      payload: pollingFileData.payload,
+      callback_data: callbackData,
+    };
+
+    const fakeUrlForType = filename.toLowerCase().endsWith('.mp4') ? 'https://temp/video.mp4' : 'https://temp/image.jpg';
+    let thumbnailUrl: string | undefined;
+    if (isImageUrl(fakeUrlForType) || isVideoUrl(fakeUrlForType)) {
+      const thumbnailBuffer = await generateThumbnail(buffer, fakeUrlForType);
+      if (thumbnailBuffer) {
+        try {
+          const filenameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+          const thumbnailFilename = `${filenameWithoutExt}_thumb.jpg`;
+          const thumbRes = await uploadFileToZipline(thumbnailBuffer, thumbnailFilename, authToken);
+          if (thumbRes.files?.[0]) thumbnailUrl = thumbRes.files[0].url;
+        } catch {
+          // ignore thumbnail errors
+        }
+      }
+    }
+
+    const fileMetadata: FileMetadata = {
+      user_id: pollingFileData.user_id,
+      file_name: zipData.name,
+      file_path: uploadedFile.url,
+      file_size: zipData.size,
+      file_type: zipData.type,
+      zip_data: zipData,
+      model_id: pollingFileData.models?.id,
+      generated_info: generatedInfo,
+      thumbnail_url: thumbnailUrl,
+    };
+
+    const { data: dbData, error: dbError } = await supabaseServerClient
+      .from('user_files')
+      .insert(fileMetadata)
+      .select()
+      .single();
+
+    if (dbError) throw new Error(`Failed to save file metadata: ${dbError.message}`);
+    return { file_id: dbData?.id || null, file_url: uploadedFile.url };
+  } catch (error: any) {
+    console.error('saveFileFromBuffer error:', error);
+    throw new Error(`Failed to save file from buffer: ${error.message}`);
+  }
+};
+
 export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
   let tokensCost: number = 0;
 
