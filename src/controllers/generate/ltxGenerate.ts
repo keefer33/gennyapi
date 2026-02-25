@@ -27,10 +27,13 @@ export const ltxGenerateBackground = async (generationId: string, taskObject: an
       validateStatus: () => true,
     });
 
+    const requestId = (response.headers as Record<string, string>)['x-request-id']?.trim() || null;
+
     if (response.status !== 200) {
       await updateUserGeneration({
         id: generationId,
         status: 'error',
+        ...(requestId && { task_id: requestId }),
         polling_response: { status: response.status, error: 'LTX returned non-200' },
       });
       return;
@@ -52,6 +55,7 @@ export const ltxGenerateBackground = async (generationId: string, taskObject: an
     await updateUserGeneration({
       id: generationId,
       status: 'completed',
+      ...(requestId && { task_id: requestId }),
       polling_response: { file_url: savedFile.file_url },
     });
   } catch (error: any) {
