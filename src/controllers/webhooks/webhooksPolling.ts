@@ -68,10 +68,23 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookKlingGenerate(pollingFileData, pollingFileResponse);
         break;
-      case 'ltxGenerate':
+      case 'ltxGenerate': {
         status = await webhookLtxGenerate(pollingFileData);
         pollingFileResponse = pollingFileData.polling_response ?? {};
+        // Trigger only selects status = 'pending'. Set back to pending while background is still
+        // running so the job gets re-selected every 5s and we keep updating duration.
+        if (status === 'processing' || status === 'pending') {
+          // Re-fetch so we don't overwrite 'completed' if background just finished
+          const fresh = await getUserGeneration(pollingFileData.id);
+          if (fresh.status === 'completed' || fresh.status === 'error') {
+            status = fresh.status;
+            pollingFileResponse = fresh.polling_response ?? pollingFileResponse;
+          } else {
+            status = 'pending';
+          }
+        }
         break;
+      }
       default:
         console.warn('Unknown API type:', pollingFileData.api_id.api_type);
         break;
