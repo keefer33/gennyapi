@@ -12,6 +12,7 @@ import { webhookPrediction } from './webhookPrediction';
 import { webhookViduGenerate } from './webhookViduGenerate';
 import { webhookKlingGenerate } from './webhookKlingGenerate';
 import { webhookLtxGenerate } from './webhookLtxGenerate';
+import { webhookXaiVideoGenerate } from './webhookXaiVideoGenerate';
 import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
@@ -75,6 +76,20 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
         // running so the job gets re-selected every 5s and we keep updating duration.
         if (status === 'processing' || status === 'pending') {
           // Re-fetch so we don't overwrite 'completed' if background just finished
+          const fresh = await getUserGeneration(pollingFileData.id);
+          if (fresh.status === 'completed' || fresh.status === 'error') {
+            status = fresh.status;
+            pollingFileResponse = fresh.polling_response ?? pollingFileResponse;
+          } else {
+            status = 'pending';
+          }
+        }
+        break;
+      }
+      case 'xaiVideoGenerate': {
+        status = await webhookXaiVideoGenerate(pollingFileData);
+        pollingFileResponse = pollingFileData.polling_response ?? {};
+        if (status === 'processing' || status === 'pending') {
           const fresh = await getUserGeneration(pollingFileData.id);
           if (fresh.status === 'completed' || fresh.status === 'error') {
             status = fresh.status;

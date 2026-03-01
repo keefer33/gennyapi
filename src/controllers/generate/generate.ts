@@ -10,6 +10,7 @@ import { calculateTokensUtil } from '../../utils/generate';
 import { viduGenerate } from './viduGenerate';
 import { klingGenerate } from './klingGenerate';
 import { ltxGenerateBackground } from './ltxGenerate';
+import { xaiVideoGenerate } from './xaiVideoGenerate';
 import { randomUUID } from 'crypto';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
@@ -80,6 +81,25 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           console.error('ltxGenerateBackground unhandled:', err)
         );
         res.status(200).json({ success: true, data: userGenerationLtx });
+        return;
+      }
+      case 'xaiVideoGenerate': {
+        const tokensCostXai = await calculateTokensUtil(body.payload, model?.api?.pricing);
+        const userGenerationXai = await createUserGeneration({
+          user_id: user?.id,
+          payload: body.payload,
+          response: {},
+          status: 'pending',
+          task_id: randomUUID(),
+          model_id: model.id,
+          generation_type: model.generation_type,
+          api_id: model.api.id,
+          cost: tokensCostXai,
+        });
+        xaiVideoGenerate(userGenerationXai.id, taskObject).catch((err) =>
+          console.error('xaiVideoGenerate unhandled:', err)
+        );
+        res.status(200).json({ success: true, data: userGenerationXai });
         return;
       }
       default:
