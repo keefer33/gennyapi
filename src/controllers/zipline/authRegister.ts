@@ -42,8 +42,9 @@ export const authRegister = async (req: Request, res: Response): Promise<void> =
     }
     const superadminToken = superadmin.zipline?.token;
 
-    // Make the request to Zipline API
+    // Make the request to Zipline API (noincl must be "true" or "false" per Zipline querystring validation)
     const response = await axios.post(`${baseUrl}/api/users`, requestBody, {
+      params: { noincl: "false" },
       headers: {
         "Content-Type": "application/json",
         "Authorization": superadminToken,
@@ -76,11 +77,12 @@ export const authRegister = async (req: Request, res: Response): Promise<void> =
     // After successful registration, we need to login to get the session cookie
     // and then get the user's token
     try {
-      // Step 1: Login to get the session cookie
+      // Step 1: Login to get the session cookie (noincl per Zipline querystring validation)
       const loginResponse = await axios.post(`${baseUrl}/api/auth/login`, {
         username,
         password,
       }, {
+        params: { noincl: "false" },
         headers: {
           "Content-Type": "application/json",
         },
@@ -113,8 +115,9 @@ export const authRegister = async (req: Request, res: Response): Promise<void> =
         return;
       }
 
-      // Step 2: Get the user's token using the session cookie
+      // Step 2: Get the user's token using the session cookie (noincl per Zipline querystring validation)
       const tokenResponse = await axios.get(`${baseUrl}/api/user/token`, {
+        params: { noincl: "false" },
         headers: {
           "Cookie": sessionCookie,
         },
