@@ -128,16 +128,30 @@ const generateThumbnail = async (
         await unlink(tempFramePath).catch(() => {});
 
         return thumbnailBuffer;
-      } catch (error) {
+      } catch (error: any) {
         // Clean up temp files on error
         await unlink(tempVideoPath).catch(() => {});
         await unlink(tempFramePath).catch(() => {});
+        const msg = error?.message ?? String(error);
+        if (msg.includes('Cannot find ffmpeg') || msg.includes('ffmpeg not found')) {
+          console.warn(
+            'Video thumbnails skipped: ffmpeg is not installed. Install ffmpeg and add it to PATH for video thumbnail generation (see README).'
+          );
+          return null;
+        }
         throw error;
       }
     }
 
     return null;
   } catch (error: any) {
+    const msg = error?.message ?? String(error);
+    if (msg.includes('Cannot find ffmpeg') || msg.includes('ffmpeg not found')) {
+      console.warn(
+        'Video thumbnails skipped: ffmpeg is not installed. Install ffmpeg and add it to PATH for video thumbnail generation (see README).'
+      );
+      return null;
+    }
     console.error('Error generating thumbnail:', error);
     return null;
   }
@@ -360,6 +374,63 @@ export const saveFileFromBuffer = async (
   } catch (error: any) {
     console.error('saveFileFromBuffer error:', error);
     throw new Error(`Failed to save file from buffer: ${error.message}`);
+  }
+};
+
+/**
+ * If the user_files row is a video/image and has no thumbnail_url, download the file,
+ * generate a thumbnail, upload to Zipline, and update user_files.thumbnail_url.
+ * Used by polling when ltx/xai video generation completes so the file has a thumbnail for cards.
+ */
+export const ensureThumbnailForUserFile = async (fileId: string): Promise<void> => {
+  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
+  try {
+    const { data: fileRow, error: fileError } = await supabaseServerClient
+      .from('user_files')
+      .select('id, file_path, file_type, thumbnail_url, user_id')
+      .eq('id', fileId)
+      .single();
+
+    if (fileError || !fileRow?.file_path) return;
+    if (fileRow.thumbnail_url) return;
+    const ft = fileRow.file_type || '';
+    if (!ft.startsWith('image/') && !ft.startsWith('video/')) return;
+
+    const { data: userProfile, error: profileError } = await supabaseServerClient
+      .from('user_profiles')
+      .select('zipline')
+      .eq('user_id', fileRow.user_id)
+      .single();
+
+    if (profileError || !userProfile?.zipline?.token) return;
+
+    const response = await axios.get(fileRow.file_path, {
+      responseType: 'arraybuffer',
+      validateStatus: () => true,
+    });
+    if (response.status < 200 || response.status >= 300) return;
+
+    const buffer = Buffer.from(response.data);
+    const fileUrl = fileRow.file_path;
+    const thumbnailBuffer = await generateThumbnail(buffer, fileUrl);
+    if (!thumbnailBuffer) return;
+
+    const originalFilename = fileUrl.split('/').pop()?.split('?')[0] || 'file';
+    const filenameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '');
+    const thumbnailFilename = `${filenameWithoutExt}_thumb.jpg`;
+    const thumbRes = await uploadFileToZipline(
+      thumbnailBuffer,
+      thumbnailFilename,
+      userProfile.zipline.token
+    );
+    if (!thumbRes.files?.[0]?.url) return;
+
+    await supabaseServerClient
+      .from('user_files')
+      .update({ thumbnail_url: thumbRes.files[0].url })
+      .eq('id', fileId);
+  } catch (err: any) {
+    console.error('[ensureThumbnailForUserFile]', fileId, err?.message ?? err);
   }
 };
 

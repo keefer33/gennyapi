@@ -17,6 +17,10 @@ Visit [https://genny.bot](https://genny.bot) to use the application.
 - PostgreSQL database (via Supabase)
 - Stripe account (for payments)
 - OpenAI API key (for prompt enhancement)
+- **ffmpeg** (optional, for video thumbnail generation): Install and add to PATH so video outputs get a thumbnail in the UI. Without it, video thumbnails are skipped and the app still runs.
+  - **Windows:** `winget install ffmpeg` or [download](https://ffmpeg.org/download.html) and add the `bin` folder to PATH.
+  - **macOS:** `brew install ffmpeg`
+  - **Linux:** `apt install ffmpeg` / `yum install ffmpeg` (or your distro’s package manager).
 
 ### Installation
 

@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import { getUserGeneration } from '../../utils/getSupaData';
+import { getUserGeneration, getGenerationFileIds, updateUserGeneration } from '../../utils/getSupaData';
+import { ensureThumbnailForUserFile } from '../../utils/generate';
 import { webhookCreateTask } from './webhookCreateTask';
 import { webhookVideoGenerations } from './webhookVideoGenerations';
 import { webhookCheckStatus } from './webhooksCheckStatus';
-import { updateUserGeneration } from '../../utils/getSupaData';
 import { webhookMergeVideos } from './webhookMergeVideos';
 import { webhookImageInstantGeneration } from './webhookImageInstantGeneration';
 import { webhookCustomApiGenerate } from './webhookCustomApiGenerate';
