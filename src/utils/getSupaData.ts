@@ -77,6 +77,17 @@ export const createUserGenerationFile = async (userGenerationFile: any) => {
   return data;
 };
 
+/** Get file_id(s) linked to a generation (for thumbnail backfill when completed). */
+export const getGenerationFileIds = async (generationId: string): Promise<string[]> => {
+  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_generation_files')
+    .select('file_id')
+    .eq('generation_id', generationId);
+  if (error) return [];
+  return (data ?? []).map((r: { file_id: string }) => r.file_id).filter(Boolean);
+};
+
 export const getUserTokens = async (userId: string): Promise<number> => {
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   const { data, error } = await supabaseServerClient

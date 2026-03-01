@@ -24,9 +24,7 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
   const urls: string[] = [];
 
   const isHttpUrl = (s: string) =>
-    typeof s === 'string' &&
-    (s.startsWith('http://') || s.startsWith('https://')) &&
-    s.length < 2000;
+    typeof s === 'string' && (s.startsWith('http://') || s.startsWith('https://')) && s.length < 2000;
   const isFromAifile = (s: string) => typeof s === 'string' && s.startsWith(VISION_MEDIA_ORIGIN);
 
   const looksLikeMedia = (url: string, key: string) => {
@@ -36,9 +34,9 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
     const path = lower.split('?')[0];
     const ext = path.includes('.') ? path.slice(path.lastIndexOf('.')) : '';
     return (
-      ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.mp4', '.webm', '.mov'].includes(
-        ext
-      ) || path.includes('/storage/') || path.includes('/object/')
+      ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.mp4', '.webm', '.mov'].includes(ext) ||
+      path.includes('/storage/') ||
+      path.includes('/object/')
     );
   };
 
@@ -73,6 +71,9 @@ const ALLOWED_MODELS = new Set([
   'openai/gpt-5.2',
 ]);
 
+/** xAI models that can return 412 when given image content via the gateway; we send text-only for these when reference media is present. */
+const XAI_MODELS_TEXT_ONLY_WHEN_VISION = new Set(['xai/grok-4.1-fast-non-reasoning']);
+
 export const enhancePrompt = async (req: Request, res: Response): Promise<void> => {
   const requestId = `enhance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -86,18 +87,14 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
     } = req.body;
 
     const formValues =
-      rawFormValues && typeof rawFormValues === 'object'
-        ? (rawFormValues as Record<string, unknown>)
-        : {};
+      rawFormValues && typeof rawFormValues === 'object' ? (rawFormValues as Record<string, unknown>) : {};
     const referenceMediaUrls = extractReferenceMediaUrls(formValues);
     const hasVision = referenceMediaUrls.length > 0;
     if (hasVision) {
       console.log(`[enhancePrompt] ${requestId} reference media: ${referenceMediaUrls.length} url(s)`);
     }
 
-    console.log(
-      `[enhancePrompt] ${requestId} request: model=${modelId}, generationType=${generationType}`
-    );
+    console.log(`[enhancePrompt] ${requestId} request: model=${modelId}, generationType=${generationType}`);
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       res.status(400).json({ error: 'message is required and must be a non-empty string' });
@@ -111,16 +108,16 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const normalizedType = String(generationType || 'image').toLowerCase().trim();
+    const normalizedType = String(generationType || 'image')
+      .toLowerCase()
+      .trim();
     if (normalizedType !== 'image' && normalizedType !== 'video') {
       res.status(400).json({ error: "generationType must be 'image' or 'video'" });
       return;
     }
 
     const promptMaxLength =
-      typeof rawPromptMaxLength === 'number' && rawPromptMaxLength > 0
-        ? Math.floor(rawPromptMaxLength)
-        : undefined;
+      typeof rawPromptMaxLength === 'number' && rawPromptMaxLength > 0 ? Math.floor(rawPromptMaxLength) : undefined;
 
     const lengthInstruction = promptMaxLength
       ? ` The enhanced prompt MUST be at most ${promptMaxLength} characters. Output only the prompt text, no quotes or "Prompt:" label.`
@@ -145,16 +142,25 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
 
     if (res.finished) return;
 
-    const userContent =
-      hasVision && referenceMediaUrls.length > 0
-        ? [
-            { type: 'text' as const, text: message.trim() },
-            ...referenceMediaUrls.slice(0, 10).map((url) => ({
-              type: 'image' as const,
-              image: url,
-              mediaType: 'image/jpeg' as const,
-            })),
-          ]
+    const useVisionContent =
+      hasVision && referenceMediaUrls.length > 0 && !XAI_MODELS_TEXT_ONLY_WHEN_VISION.has(modelId.trim());
+    if (hasVision && referenceMediaUrls.length > 0 && !useVisionContent) {
+      console.log(
+        `[enhancePrompt] ${requestId} using text-only content for model ${modelId} (reference media omitted to avoid provider 412)`
+      );
+    }
+
+    const userContent = useVisionContent
+      ? [
+          { type: 'text' as const, text: message.trim() },
+          ...referenceMediaUrls.slice(0, 10).map(url => ({
+            type: 'image' as const,
+            image: url,
+            mediaType: 'image/jpeg' as const,
+          })),
+        ]
+      : hasVision && referenceMediaUrls.length > 0
+        ? `${message.trim()}\n\n[Reference image(s) or video thumbnail(s) were attached but could not be analyzed by this model; use the text above to enhance the prompt.]`
         : message.trim();
 
     const result = streamText({
@@ -176,19 +182,42 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
           }
         }
       }
-    } catch (streamErr) {
+    } catch (streamErr: unknown) {
       console.error(`[enhancePrompt] ${requestId} stream error:`, streamErr);
+      const statusCode =
+        (streamErr as { statusCode?: number })?.statusCode ??
+        (streamErr as { cause?: { statusCode?: number } })?.cause?.statusCode;
+      if (statusCode === 412 && !res.writableEnded) {
+        const msg =
+          'This model rejected the request (Precondition Failed). Try another model (e.g. Claude or Gemini) for prompt enhancement, or try without reference images.';
+        res.write(msg);
+      }
       if (!res.writableEnded) res.end();
       return;
     }
 
     console.log(`[enhancePrompt] ${requestId} stream finished`);
     res.end();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[enhancePrompt] Error:', error);
+    const statusCode =
+      (error as { statusCode?: number })?.statusCode ??
+      (error as { cause?: { statusCode?: number } })?.cause?.statusCode;
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to enhance prompt' });
+      if (statusCode === 412) {
+        res.status(412).json({
+          error:
+            'This model rejected the request (Precondition Failed). Try another model (e.g. Claude or Gemini) for prompt enhancement, or try without reference images.',
+        });
+      } else {
+        res.status(500).json({ error: 'Failed to enhance prompt' });
+      }
     } else if (!res.writableEnded) {
+      if (statusCode === 412) {
+        res.write(
+          'This model rejected the request (Precondition Failed). Try another model (e.g. Claude or Gemini) for prompt enhancement, or try without reference images.'
+        );
+      }
       res.end();
     }
   }
