@@ -11,6 +11,7 @@ import { viduGenerate } from './viduGenerate';
 import { klingGenerate } from './klingGenerate';
 import { ltxGenerateBackground } from './ltxGenerate';
 import { xaiVideoGenerate } from './xaiVideoGenerate';
+import { alibabaWanVideoGenerate } from './alibabaWanVideoGenerate';
 import { randomUUID } from 'crypto';
 
 export const generate = async (req: Request, res: Response): Promise<void> => {
@@ -77,9 +78,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           api_id: model.api.id,
           cost: tokensCostLtx,
         });
-        ltxGenerateBackground(userGenerationLtx.id, taskObject).catch((err) =>
-          console.error('ltxGenerateBackground unhandled:', err)
-        );
+        ltxGenerateBackground(userGenerationLtx.id, taskObject)
         res.status(200).json({ success: true, data: userGenerationLtx });
         return;
       }
@@ -96,10 +95,25 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           api_id: model.api.id,
           cost: tokensCostXai,
         });
-        xaiVideoGenerate(userGenerationXai.id, taskObject).catch((err) =>
-          console.error('xaiVideoGenerate unhandled:', err)
-        );
+        xaiVideoGenerate(userGenerationXai.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationXai });
+        return;
+      }
+      case 'alibabaWanVideoGenerate': {
+        const tokensCostWan = await calculateTokensUtil(body.payload, model?.api?.pricing);
+        const userGenerationWan = await createUserGeneration({
+          user_id: user?.id,
+          payload: body.payload,
+          response: {},
+          status: 'pending',
+          task_id: randomUUID(),
+          model_id: model.id,
+          generation_type: model.generation_type,
+          api_id: model.api.id,
+          cost: tokensCostWan,
+        });
+        alibabaWanVideoGenerate(userGenerationWan.id, taskObject);
+        res.status(200).json({ success: true, data: userGenerationWan });
         return;
       }
       default:
