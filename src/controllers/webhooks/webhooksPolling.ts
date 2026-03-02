@@ -13,6 +13,7 @@ import { webhookViduGenerate } from './webhookViduGenerate';
 import { webhookKlingGenerate } from './webhookKlingGenerate';
 import { webhookLtxGenerate } from './webhookLtxGenerate';
 import { webhookXaiVideoGenerate } from './webhookXaiVideoGenerate';
+import { webhookAlibabaWanVideoGenerate } from './webhookAlibabaWanVideoGenerate';
 import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
@@ -96,6 +97,32 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
             pollingFileResponse = fresh.polling_response ?? pollingFileResponse;
           } else {
             status = 'pending';
+          }
+        }
+        if (status === 'completed') {
+          const fileIds = await getGenerationFileIds(pollingFileData.id);
+          for (const fileId of fileIds) {
+            await ensureThumbnailForUserFile(fileId);
+          }
+        }
+        break;
+      }
+      case 'alibabaWanVideoGenerate': {
+        status = await webhookAlibabaWanVideoGenerate(pollingFileData);
+        pollingFileResponse = pollingFileData.polling_response ?? {};
+        if (status === 'processing' || status === 'pending') {
+          const fresh = await getUserGeneration(pollingFileData.id);
+          if (fresh.status === 'completed' || fresh.status === 'error') {
+            status = fresh.status;
+            pollingFileResponse = fresh.polling_response ?? pollingFileResponse;
+          } else {
+            status = 'pending';
+          }
+        }
+        if (status === 'completed') {
+          const fileIds = await getGenerationFileIds(pollingFileData.id);
+          for (const fileId of fileIds) {
+            await ensureThumbnailForUserFile(fileId);
           }
         }
         break;

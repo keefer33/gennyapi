@@ -31,7 +31,7 @@ export const xaiVideoGenerate = async (
         status: 'error',
         polling_response: { error: 'AI Gateway API key not configured (AI_GATEWAY_API_KEY or model API key)' },
       });
-      return;
+      throw new Error('AI Gateway API key not configured');
     }
 
     const gateway = createGateway({ apiKey: gatewayApiKey });
@@ -60,16 +60,6 @@ export const xaiVideoGenerate = async (
         : 5;
     const resolutionVal = resolution(payload.resolution);
 
-    console.log('[xaiVideoGenerate] generateVideo params', {
-      promptType: typeof prompt,
-      promptPreview: typeof prompt === 'string' ? prompt.slice(0, 80) : { image: (prompt as { image: string }).image?.slice(0, 60), text: (prompt as { text?: string }).text?.slice(0, 80) },
-      aspectRatio,
-      duration,
-      resolution: resolutionVal,
-      hasVideoUrl: !!payload.video,
-      providerOptionsKeys: Object.keys((providerOptions.xai as object) ?? {}),
-    });
-
     const result = await generateVideo({
       model: gateway.video(XAI_VIDEO_MODEL_ID),
       prompt,
@@ -77,6 +67,9 @@ export const xaiVideoGenerate = async (
       duration,
       resolution: resolutionVal,
       providerOptions: providerOptions as any,
+    }).catch(error => {
+      console.log('error', error.response.data);
+      throw new Error(error?.response?.data?.message || 'Failed to generate');
     });
 
     const firstVideo = result.videos?.[0];
@@ -86,7 +79,7 @@ export const xaiVideoGenerate = async (
         status: 'error',
         polling_response: { error: 'No video in response' },
       });
-      return;
+      throw new Error('No video in response');
     }
 
     const buffer = Buffer.from(
@@ -111,17 +104,6 @@ export const xaiVideoGenerate = async (
     });
   } catch (error: any) {
     console.error('xaiVideoGenerate error:', error?.message ?? error);
-    // APICallError (AI SDK) uses responseBody (raw string), data (parsed), requestBodyValues (what we sent)
-    console.error('[xaiVideoGenerate] error details', {
-      name: error?.name,
-      message: error?.message,
-      statusCode: error?.statusCode ?? error?.status,
-      responseBody: error?.responseBody ?? error?.response?.data ?? error?.body,
-      data: error?.data,
-      requestBodyValues: error?.requestBodyValues,
-      cause: error?.cause ? String(error.cause) : undefined,
-      errorKeys: error != null ? Object.keys(error) : [],
-    });
     await updateUserGeneration({
       id: generationId,
       status: 'error',
@@ -129,8 +111,6 @@ export const xaiVideoGenerate = async (
         error: error?.message ?? 'xAI video generation failed',
         stack: error?.stack,
       },
-    }).catch((updateErr) =>
-      console.error('Failed to update generation status:', updateErr)
-    );
+    })
   }
 };
