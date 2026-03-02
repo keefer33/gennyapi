@@ -6,6 +6,30 @@ import {
 } from '../../utils/getSupaData';
 import { saveFileFromBuffer } from '../../utils/generate';
 
+/** Optional extended-timeout fetch for long-running video (requires optional dependency `undici`). */
+function createGatewayWithOptionalExtendedTimeout(apiKey: string) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Agent } = require('undici') as {
+      Agent: new (opts: { headersTimeout: number; bodyTimeout: number }) => unknown;
+    };
+    const agent = new Agent({
+      headersTimeout: 15 * 60 * 1000,
+      bodyTimeout: 15 * 60 * 1000,
+    });
+    return createGateway({
+      apiKey,
+      fetch: (url, init) =>
+        fetch(url, {
+          ...init,
+          dispatcher: agent,
+        } as RequestInit & { dispatcher?: unknown }),
+    });
+  } catch {
+    return createGateway({ apiKey });
+  }
+}
+
 /** xAI video model id when using AI Gateway (creator/model-name). */
 const XAI_VIDEO_MODEL_ID = 'xai/grok-imagine-video';
 
@@ -29,12 +53,14 @@ export const xaiVideoGenerate = async (
       await updateUserGeneration({
         id: generationId,
         status: 'error',
-        polling_response: { error: 'AI Gateway API key not configured (AI_GATEWAY_API_KEY or model API key)' },
+        polling_response: {
+          error: 'AI Gateway API key not configured (AI_GATEWAY_API_KEY or model API key)',
+        },
       });
-      throw new Error('AI Gateway API key not configured');
+      return;
     }
 
-    const gateway = createGateway({ apiKey: gatewayApiKey });
+    const gateway = createGatewayWithOptionalExtendedTimeout(gatewayApiKey);
 
     const providerOptions: Record<string, unknown> = {
       xai: {
@@ -61,15 +87,12 @@ export const xaiVideoGenerate = async (
     const resolutionVal = resolution(payload.resolution);
 
     const result = await generateVideo({
-      model: gateway.video(XAI_VIDEO_MODEL_ID),
+      model: gateway.video(XAI_VIDEO_MODEL_ID as any),
       prompt,
       aspectRatio: aspectRatio as `${number}:${number}`,
       duration,
       resolution: resolutionVal,
       providerOptions: providerOptions as any,
-    }).catch(error => {
-      console.log('error', error.response.data);
-      throw new Error(error?.response?.data?.message || 'Failed to generate');
     });
 
     const firstVideo = result.videos?.[0];
@@ -79,7 +102,7 @@ export const xaiVideoGenerate = async (
         status: 'error',
         polling_response: { error: 'No video in response' },
       });
-      throw new Error('No video in response');
+      return;
     }
 
     const buffer = Buffer.from(
@@ -103,14 +126,15 @@ export const xaiVideoGenerate = async (
       polling_response: { file_url: savedFile.file_url },
     });
   } catch (error: any) {
-    console.error('xaiVideoGenerate error:', error?.message ?? error);
+    const message = error?.message ?? 'xAI video generation failed';
+    console.error('[xaiVideoGenerate] error', { generationId, message });
     await updateUserGeneration({
       id: generationId,
       status: 'error',
       polling_response: {
-        error: error?.message ?? 'xAI video generation failed',
+        error: typeof message === 'string' ? message : 'xAI video generation failed',
         stack: error?.stack,
       },
-    })
+    });
   }
 };
