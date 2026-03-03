@@ -1,40 +1,43 @@
-import axios from 'axios';
 import { saveFileFromUrl } from '../../utils/generate';
 import { createUserGenerationFile, updateUserGeneration } from '../../utils/getSupaData';
 
-// Default jobs processing function
-const processResponse = async (pollingFileResponse: any, pollingFileData: any) => {
-  let status = 'pending';
+/** Shared: save a file from URL and return { status, files } for webhook processing. */
+const processResponseWithFileUrl = async (
+  isCompleted: boolean,
+  fileUrl: string | null,
+  pollingFileData: any,
+  pollingFileResponse: any
+): Promise<{ status: string; files: any[] }> => {
   const files: any[] = [];
-  let cost = 0;
+  if (isCompleted && fileUrl) {
+    try {
+      const savedFile: any = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
+      if (savedFile) files.push(savedFile);
+    } catch (error) {
+      console.error('Error saving file:', fileUrl, error);
+    }
+  }
+  return { status: isCompleted ? 'completed' : 'pending', files };
+};
 
-  if (pollingFileResponse.data?.state === 'success') {
-    status = 'completed';
+const kieProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const isSuccess = pollingFileResponse.data?.state === 'success';
+  let fileUrl: string | null = null;
+  if (isSuccess && pollingFileResponse.data?.resultJson) {
     const resultJson = JSON.parse(pollingFileResponse.data.resultJson);
-
-    // Process only the first file (index 0 if array, or the string itself)
-    let fileUrl: string | null = null;
     if (resultJson.resultUrls && Array.isArray(resultJson.resultUrls)) {
       fileUrl = resultJson.resultUrls[0] || null;
     } else if (resultJson.resultUrls && typeof resultJson.resultUrls === 'string') {
       fileUrl = resultJson.resultUrls;
     }
-
-    if (fileUrl) {
-      try {
-        const savedFile: any = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
-        if (savedFile) {
-          files.push(savedFile);
-        }
-      } catch (error) {
-        console.error('Error saving file:', fileUrl, error);
-      }
-    }
-  } else {
-    status = 'pending';
   }
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
+};
 
-  return { status, files };
+const wanProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const isSuccess = pollingFileResponse.output?.task_status === 'SUCCEEDED';
+  const fileUrl = isSuccess ? pollingFileResponse.output?.video_url ?? null : null;
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
 };
 
 export const webhookCreateTask = async (pollingFileData: any, pollingFileResponse: any) => {
@@ -56,9 +59,21 @@ export const webhookCreateTask = async (pollingFileData: any, pollingFileRespons
     throw new Error(`API error: ${pollingFileResponse?.code} ${pollingFileResponse?.msg}`);
   }
 
-  const processResult = await processResponse(pollingFileResponse, pollingFileData);
-
-  status = processResult.status;
+  let processResult: any = {};
+  switch (pollingFileData.api_id.poll_type) {
+    case 'wan':
+      processResult = await wanProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'kie':
+      processResult = await kieProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    default:
+      processResult = await kieProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+  }
 
   for (const file of processResult.files) {
     await createUserGenerationFile({
