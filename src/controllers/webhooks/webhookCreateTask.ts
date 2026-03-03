@@ -41,23 +41,7 @@ const wanProcessResponse = async (pollingFileResponse: any, pollingFileData: any
 };
 
 export const webhookCreateTask = async (pollingFileData: any, pollingFileResponse: any) => {
-  let api = pollingFileData?.api_id;
   let status = 'pending';
-  const files: any[] = [];
-  let cost = 0;
-
-  if (
-    pollingFileResponse.code !== 200 ||
-    pollingFileResponse.data?.state === 'fail' ||
-    pollingFileResponse.data?.successFlag === 3
-  ) {
-    await updateUserGeneration({
-      id: pollingFileData.id,
-      status: 'error',
-      polling_response: pollingFileResponse,
-    });
-    throw new Error(`API error: ${pollingFileResponse?.code} ${pollingFileResponse?.msg}`);
-  }
 
   let processResult: any = {};
   switch (pollingFileData.api_id.poll_type) {
