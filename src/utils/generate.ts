@@ -62,6 +62,46 @@ export interface FileMetadata {
   thumbnail_url?: string;
 }
 
+/** 720P: resolution string by aspect ratio (e.g. Wan/Alibaba). */
+export const RES_720: Record<string, string> = {
+  '16:9': '1280*720',
+  '9:16': '720*1280',
+  '1:1': '960*960',
+  '4:3': '1088*832',
+  '3:4': '832*1088',
+};
+/** 1080P: resolution string by aspect ratio (e.g. Wan/Alibaba). */
+export const RES_1080: Record<string, string> = {
+  '16:9': '1920*1080',
+  '9:16': '1080*1920',
+  '1:1': '1440*1440',
+  '4:3': '1632*1248',
+  '3:4': '1248*1632',
+};
+
+/** Normalize aspect ratio string to one of 16:9, 9:16, 1:1, 4:3, 3:4; default 16:9. */
+export function normalizeAspectRatio(ar: unknown): string {
+  if (typeof ar !== 'string' || !ar) return '16:9';
+  const t = ar.trim().replace(/\s/g, '').toLowerCase();
+  if (t === '16:9' || t === '9:16' || t === '1:1' || t === '4:3' || t === '3:4') return t;
+  if (t === '16/9') return '16:9';
+  if (t === '9/16') return '9:16';
+  return '16:9';
+}
+
+/** Map payload resolution (720p | 1080p) + aspectRatio to Wan-style resolution string (e.g. 1280x720). */
+export function toWanResolution(
+  resolution: unknown,
+  aspectRatio: unknown
+): `${number}*${number}` {
+  const tier = String(resolution ?? '720p')
+    .trim()
+    .toLowerCase();
+  const ar = normalizeAspectRatio(aspectRatio);
+  const map = tier === '1080p' ? RES_1080 : RES_720;
+  return (map[ar] ?? map['16:9']) as `${number}*${number}`;
+}
+
 const generateThumbnail = async (
   fileBuffer: Buffer,
   fileUrl: string,

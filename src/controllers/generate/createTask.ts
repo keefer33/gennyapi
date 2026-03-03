@@ -1,6 +1,52 @@
 import axios, { AxiosResponse } from 'axios';
 import { removeEmptyValues } from '../../utils/payloadUtils';
+import { toWanResolution } from '../../utils/generate';
 
+const WAN_INPUT_FIELDS = [
+  'prompt',
+  'audio_url',
+  'img_url',
+  'first_frame_url',
+  'last_frame_url',
+  'reference_urls',
+] as const;
+
+const createWanPayload = (cleanedPayload: any, inputModelName: string) => {
+  const input: Record<string, unknown> = {};
+  for (const key of WAN_INPUT_FIELDS) {
+    if (cleanedPayload[key] != null) {
+      input[key] = cleanedPayload[key];
+    }
+  }
+
+  const size = toWanResolution(
+    cleanedPayload.resolution,
+    cleanedPayload.aspect_ratio ?? cleanedPayload.aspectRatio
+  );
+
+  const parameters = { ...cleanedPayload };
+  for (const key of WAN_INPUT_FIELDS) {
+    delete parameters[key];
+  }
+  delete parameters.model_name;
+  delete parameters.resolution;
+  delete parameters.aspect_ratio;
+  delete parameters.aspectRatio;
+  parameters.size = size;
+
+  return {
+    model: inputModelName,
+    input,
+    parameters,
+  };
+};
+
+const createKiePayload = (cleanedPayload: any, inputModelName: string) => {
+  return {
+    model: inputModelName,
+    input: cleanedPayload,
+  };
+}
 
 export const createTask = async (taskObject: any) => {
   const endpoint = taskObject.api.api_url;
@@ -18,51 +64,18 @@ export const createTask = async (taskObject: any) => {
   let payload: any = {};
   switch(taskObject.api.poll_type){
     case 'wan':
-      payload = {
-        model: inputModelName,
-        input: {},
-      };
-      if(cleanedPayload.prompt) {
-        payload.input.prompt = cleanedPayload.prompt
-        delete cleanedPayload.prompt;
-      } 
-      if(cleanedPayload.audio_url) {
-        payload.input.audio_url = cleanedPayload.audio_url
-        delete cleanedPayload.audio_url;
-      } 
-      if(cleanedPayload.img_url) {
-        payload.input.img_url = cleanedPayload.img_url
-        delete cleanedPayload.img_url;
-      }
-      if(cleanedPayload.first_frame_url) {
-        payload.input.first_frame_url = cleanedPayload.first_frame_url
-        delete cleanedPayload.first_frame_url;
-      }
-      if(cleanedPayload.last_frame_url) {
-        payload.input.last_frame_url = cleanedPayload.last_frame_url
-        delete cleanedPayload.last_frame_url;
-      }
-      if(cleanedPayload.reference_urls) {
-        payload.input.reference_urls = cleanedPayload.reference_urls
-        delete cleanedPayload.reference_urls;
-      }
-      payload.parameters = cleanedPayload;
+      payload = createWanPayload(cleanedPayload, inputModelName);
       headers['X-DashScope-Async'] = 'enable';
       break;
     case 'kie':
-      payload = {
-        model: inputModelName,
-        input: cleanedPayload,
-      };
+      payload = createKiePayload(cleanedPayload, inputModelName);
       break;
     default:
-      payload = {
-        model: inputModelName,
-        input: cleanedPayload,
-      };
+      payload = createKiePayload(cleanedPayload, inputModelName);
       break;
   }
 
+  console.log('payload', JSON.stringify(payload));
 
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
@@ -73,11 +86,6 @@ export const createTask = async (taskObject: any) => {
 
       throw new Error(error.message || 'Failed to generate');
     });
-
-  if (response.data?.code !== 200) {
-    console.error('Error creating task:', response.data);
-    throw new Error(response.data?.msg || response.data?.message || 'Failed to generate');
-  }
 
   let task_id = response.data?.data?.taskId || response.data?.output?.task_id;
   return { success: true, data: response.data, task_id: task_id };
