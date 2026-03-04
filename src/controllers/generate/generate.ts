@@ -1,15 +1,8 @@
 import { Request, Response } from 'express';
 import { createUserGeneration, getModel } from '../../utils/getSupaData';
 import { createTask } from './createTask';
-import { videoGenerations } from './videoGenerations';
-import { mergeVideos } from './mergeVideos';
 import { customApiGenerate } from './customApiGenerate';
-import { falGenerate } from './falGenerate';
-import { predictionGenerate } from './predictionGenerate';
 import { calculateTokensUtil } from '../../utils/generate';
-import { viduGenerate } from './viduGenerate';
-import { klingGenerate } from './klingGenerate';
-import { ltxGenerateBackground } from './ltxGenerate';
 import { xaiVideoGenerate } from './xaiVideoGenerate';
 import { alibabaWanVideoGenerate } from './alibabaWanVideoGenerate';
 import { randomUUID } from 'crypto';
@@ -40,48 +33,20 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           },
         };
         break;
-      case 'videoGenerations':
-        generationResponse = await videoGenerations(taskObject);
-        break;
       case 'createTask': {
         generationResponse = await createTask(taskObject);
         break;
       }
-      case 'mergeVideos':
-        generationResponse = await mergeVideos(taskObject);
-        break;
       case 'customApiGenerate':
         generationResponse = await customApiGenerate(taskObject);
         break;
-        case 'falGenerate':
-          generationResponse = await falGenerate(taskObject);
-          break;
-      case 'prediction':
-        generationResponse = await predictionGenerate(taskObject);
+      case 'ltxGenerate':
+        generationResponse = {
+          data: {
+            task_id: randomUUID(),
+          },
+        };
         break;
-      case 'viduGenerate':
-        generationResponse = await viduGenerate(taskObject);
-        break;
-      case 'klingGenerate':
-        generationResponse = await klingGenerate(taskObject);
-        break;
-      case 'ltxGenerate': {
-        const tokensCostLtx = await calculateTokensUtil(body.payload, model?.api?.pricing);
-        const userGenerationLtx = await createUserGeneration({
-          user_id: user?.id,
-          payload: body.payload,
-          response: {},
-          status: 'pending',
-          task_id: randomUUID(),
-          model_id: model.id,
-          generation_type: model.generation_type,
-          api_id: model.api.id,
-          cost: tokensCostLtx,
-        });
-        ltxGenerateBackground(userGenerationLtx.id, taskObject)
-        res.status(200).json({ success: true, data: userGenerationLtx });
-        return;
-      }
       case 'xaiVideoGenerate': {
         const tokensCostXai = await calculateTokensUtil(body.payload, model?.api?.pricing);
         const userGenerationXai = await createUserGeneration({

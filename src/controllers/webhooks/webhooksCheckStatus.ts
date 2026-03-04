@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { updateUserGeneration } from '../../utils/getSupaData';
+import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhookCheckStatus = async (pollingFileData: any) => {
   let api = pollingFileData?.api_id;
@@ -8,23 +9,33 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
   let pollingFileResponse: any = null;
   let headers: any = {};
   switch (api.api_type) {
-    case 'mergeVideos':
-      headers = {
-        'Content-Type': 'application/json',
-        'X-API-Key': api.key.key,
-      };
-      break;
-    case 'falGenerate':
-      headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${api.key.key}`,
-      };
-      break;
-    case 'viduGenerate':
-      headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Token ${api.key.key}`,
-      };
+    case 'createTask':
+      if (api.poll_type === 'eachlabs') {
+        headers = {
+          'Content-Type': 'application/json',
+          'X-API-Key': api.key.key,
+        };
+      } else if (api.poll_type === 'fal') {
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Key ${api.key.key}`,
+        };
+      } else if (api.poll_type === 'kling') {
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${klingCreateJWT(api.key.key, process.env.KLING_SECRET_KEY || '')}`,
+        };
+      } else if (api.poll_type === 'vidu') {
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Token ${api.key.key}`,
+        };
+      } else {
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${api.key.key}`,
+        };
+      }
       break;
     default:
       headers = {
@@ -34,11 +45,12 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
   }
 
   let endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
-  if (api.api_type === 'viduGenerate') {
-    endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
-  }
-  if (api.api_type === 'klingGenerate') {
-    endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
+  if (api.api_type === 'createTask') {
+    if (api.poll_type === 'vidu') {
+      endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
+    } else if (api.poll_type === 'kling') {
+      endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
+    }
   }
   const response = await axios.get(endpoint, {
     headers: headers,
