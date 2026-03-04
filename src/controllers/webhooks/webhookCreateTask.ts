@@ -21,7 +21,16 @@ const processResponseWithFileUrl = async (
 };
 
 const kieProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
-  const isSuccess = pollingFileResponse.data?.state === 'success';
+  const status = pollingFileResponse.data?.state;
+  if (status === 'fail') {
+    await updateUserGeneration({
+      id: pollingFileData.id,
+      status: 'error',
+      polling_response: pollingFileResponse,
+    });
+    throw new Error(`API error: ${pollingFileResponse?.err_code ?? 'unknown'}`);
+  }
+  const isSuccess = status === 'success';
   let fileUrl: string | null = null;
   if (isSuccess && pollingFileResponse.data?.resultJson) {
     const resultJson = JSON.parse(pollingFileResponse.data.resultJson);
