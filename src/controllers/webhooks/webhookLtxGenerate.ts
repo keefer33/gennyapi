@@ -33,6 +33,7 @@ const runLtxGeneration = async (pollingFileData: any): Promise<void> => {
 
     const requestId = (response.headers as Record<string, string>)['x-request-id']?.trim() || null;
 
+    console.log('response', response, response.data, response.status);
     if (response.status !== 200) {
       await updateUserGeneration({
         id: generationId,
