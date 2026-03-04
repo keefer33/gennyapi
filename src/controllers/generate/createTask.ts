@@ -20,10 +20,7 @@ const createWanPayload = (cleanedPayload: any, inputModelName: string) => {
     }
   }
 
-  const size = toWanResolution(
-    cleanedPayload.resolution,
-    cleanedPayload.aspect_ratio ?? cleanedPayload.aspectRatio
-  );
+  const size = toWanResolution(cleanedPayload.resolution, cleanedPayload.aspect_ratio ?? cleanedPayload.aspectRatio);
 
   const parameters = { ...cleanedPayload };
   for (const key of WAN_INPUT_FIELDS) {
@@ -49,8 +46,9 @@ const createKiePayload = (cleanedPayload: any, inputModelName: string) => {
   };
 };
 
-const createViduPayload = (cleanedPayload: any) => {
+const createViduPayload = (cleanedPayload: any, inputModelName: string) => {
   const { genType, ...rest } = cleanedPayload;
+  !rest.model && (rest.model = inputModelName);
   return { payload: rest, pathSuffix: genType ?? '' };
 };
 
@@ -77,9 +75,9 @@ export const createTask = async (taskObject: any) => {
   let headers: any = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${taskObject.api.key.key}`,
-  }
+  };
   let payload: any = {};
-  switch(taskObject.api.poll_type){
+  switch (taskObject.api.poll_type) {
     case 'wan':
       payload = createWanPayload(cleanedPayload, inputModelName);
       headers['X-DashScope-Async'] = 'enable';
@@ -88,7 +86,7 @@ export const createTask = async (taskObject: any) => {
       payload = createKiePayload(cleanedPayload, inputModelName);
       break;
     case 'vidu': {
-      const viduResult = createViduPayload(cleanedPayload);
+      const viduResult = createViduPayload(cleanedPayload, inputModelName);
       payload = viduResult.payload;
       endpoint = `${endpoint}${viduResult.pathSuffix}`;
       headers.Authorization = `Token ${taskObject.api.key.key}`;
@@ -98,10 +96,7 @@ export const createTask = async (taskObject: any) => {
       const klingResult = createKlingPayload(cleanedPayload);
       payload = klingResult.payload;
       endpoint = `${endpoint}${klingResult.pathSuffix}`;
-      headers.Authorization = `Bearer ${klingCreateJWT(
-        taskObject.api.key.key,
-        process.env.KLING_SECRET_KEY || ''
-      )}`;
+      headers.Authorization = `Bearer ${klingCreateJWT(taskObject.api.key.key, process.env.KLING_SECRET_KEY || '')}`;
       break;
     }
     case 'fal':
@@ -135,7 +130,7 @@ export const createTask = async (taskObject: any) => {
       throw new Error(error.message || 'Failed to generate');
     });
 
-  const task_id =
+    const task_id =
     response.data?.data?.taskId ||
     response.data?.data?.task_id ||
     response.data?.output?.task_id ||
@@ -143,5 +138,8 @@ export const createTask = async (taskObject: any) => {
     response.data?.request_id ||
     response.data?.id ||
     response.data?.predictionID;
+  if (!task_id) {
+    throw new Error('Failed to generate');
+  }
   return { success: true, data: response.data, task_id };
 };
