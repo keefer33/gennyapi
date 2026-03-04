@@ -13,7 +13,7 @@ const runLtxGeneration = async (pollingFileData: any): Promise<void> => {
   const generationId = pollingFileData.id;
   const api = pollingFileData.api_id;
   const payload = pollingFileData.payload;
-  const endpoint = `${api.api_url}${payload.genType}`;
+  const endpoint = `${api.api_url}${payload.genType ?? ''}`;
 
   try {
     const response = await axios
