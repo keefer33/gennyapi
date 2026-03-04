@@ -2,19 +2,12 @@ import { Request, Response } from 'express';
 import { getUserGeneration, getGenerationFileIds, updateUserGeneration } from '../../utils/getSupaData';
 import { ensureThumbnailForUserFile } from '../../utils/generate';
 import { webhookCreateTask } from './webhookCreateTask';
-import { webhookVideoGenerations } from './webhookVideoGenerations';
 import { webhookCheckStatus } from './webhooksCheckStatus';
-import { webhookMergeVideos } from './webhookMergeVideos';
 import { webhookImageInstantGeneration } from './webhookImageInstantGeneration';
 import { webhookCustomApiGenerate } from './webhookCustomApiGenerate';
-import { webhookFalGenerate } from './webhookFalGenerate';
-import { webhookPrediction } from './webhookPrediction';
-import { webhookViduGenerate } from './webhookViduGenerate';
-import { webhookKlingGenerate } from './webhookKlingGenerate';
 import { webhookLtxGenerate } from './webhookLtxGenerate';
 import { webhookXaiVideoGenerate } from './webhookXaiVideoGenerate';
 import { webhookAlibabaWanVideoGenerate } from './webhookAlibabaWanVideoGenerate';
-import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -40,35 +33,9 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookCreateTask(pollingFileData, pollingFileResponse);
         break;
-      case 'videoGenerations':
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookVideoGenerations(pollingFileData, pollingFileResponse);
-        break;
-      case 'mergeVideos':
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookMergeVideos(pollingFileData, pollingFileResponse);
-        break;
       case 'customApiGenerate':
         pollingFileResponse = await webhookCheckStatus(pollingFileData);
         status = await webhookCustomApiGenerate(pollingFileData, pollingFileResponse);
-        break;
-      case 'falGenerate':
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookFalGenerate(pollingFileData, pollingFileResponse);
-        break;
-      case 'prediction':
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookPrediction(pollingFileData, pollingFileResponse);
-        break;
-      case 'viduGenerate':
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookViduGenerate(pollingFileData, pollingFileResponse);
-        break;
-      case 'klingGenerate':
-        const jwt = klingCreateJWT(pollingFileData.api_id.key.key, process.env.KLING_SECRET_KEY || '');
-        pollingFileData.api_id.key.key = jwt;
-        pollingFileResponse = await webhookCheckStatus(pollingFileData);
-        status = await webhookKlingGenerate(pollingFileData, pollingFileResponse);
         break;
       case 'ltxGenerate': {
         status = await webhookLtxGenerate(pollingFileData);

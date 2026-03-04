@@ -40,6 +40,76 @@ const wanProcessResponse = async (pollingFileResponse: any, pollingFileData: any
   return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
 };
 
+const viduProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const state = pollingFileResponse.state;
+  if (state === 'failed') {
+    await updateUserGeneration({
+      id: pollingFileData.id,
+      status: 'error',
+      polling_response: pollingFileResponse,
+    });
+    throw new Error(`API error: ${pollingFileResponse?.err_code ?? 'unknown'}`);
+  }
+  const isSuccess = state === 'success';
+  const fileUrl = isSuccess ? pollingFileResponse.creations?.[0]?.url ?? null : null;
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
+};
+
+const klingProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const status = pollingFileResponse.data?.task_status;
+  if (status === 'failed') {
+    await updateUserGeneration({
+      id: pollingFileData.id,
+      status: 'error',
+      polling_response: pollingFileResponse,
+    });
+    throw new Error(`API error: ${pollingFileResponse?.err_code ?? 'unknown'}`);
+  }
+  const isSuccess = status === 'succeed';
+  let fileUrl: string | null = null;
+  if (isSuccess) {
+    const taskResult = pollingFileResponse?.data?.task_result ?? {};
+    const mediaItems = Array.isArray(taskResult.images)
+      ? taskResult.images
+      : Array.isArray(taskResult.videos)
+        ? taskResult.videos
+        : [];
+    fileUrl = mediaItems?.[0]?.url ?? null;
+    if (!fileUrl) {
+      throw new Error('Kling webhook missing media URL in task_result');
+    }
+  }
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
+};
+
+const falProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const images = pollingFileResponse?.images;
+  const fileUrl =
+    Array.isArray(images) && images[0]?.url ? (images[0].url || '').trim() || null : null;
+  const isCompleted = !!fileUrl;
+  return processResponseWithFileUrl(isCompleted, fileUrl, pollingFileData, pollingFileResponse);
+};
+
+const replicateProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const status = pollingFileResponse?.status;
+  const isSuccess = status === 'succeeded';
+  const fileUrl =
+    isSuccess && typeof pollingFileResponse?.output === 'string'
+      ? pollingFileResponse.output
+      : null;
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
+};
+
+const eachlabsProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
+  const status = pollingFileResponse?.status;
+  const isSuccess = status === 'success';
+  const fileUrl =
+    isSuccess && typeof pollingFileResponse?.output === 'string'
+      ? pollingFileResponse.output
+      : null;
+  return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
+};
+
 export const webhookCreateTask = async (pollingFileData: any, pollingFileResponse: any) => {
   let status = 'pending';
 
@@ -51,6 +121,26 @@ export const webhookCreateTask = async (pollingFileData: any, pollingFileRespons
       break;
     case 'kie':
       processResult = await kieProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'vidu':
+      processResult = await viduProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'kling':
+      processResult = await klingProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'fal':
+      processResult = await falProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'replicate':
+      processResult = await replicateProcessResponse(pollingFileResponse, pollingFileData);
+      status = processResult.status;
+      break;
+    case 'eachlabs':
+      processResult = await eachlabsProcessResponse(pollingFileResponse, pollingFileData);
       status = processResult.status;
       break;
     default:
