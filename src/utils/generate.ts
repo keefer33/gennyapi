@@ -111,7 +111,6 @@ const generateThumbnail = async (
   try {
     if (isImageUrl(fileUrl)) {
       // Generate thumbnail from image using sharp
-      console.log('Generating thumbnail from image...');
       const thumbnail = await sharp(fileBuffer)
         .resize(width, height, {
           fit: 'cover',
@@ -120,12 +119,8 @@ const generateThumbnail = async (
         .jpeg({ quality: 85 })
         .toBuffer();
 
-      console.log('Image thumbnail generated successfully');
       return thumbnail;
     } else if (isVideoUrl(fileUrl)) {
-      // Generate thumbnail from video using ffmpeg
-      console.log('Generating thumbnail from video...');
-
       // Create temporary file for video
       const tempVideoPath = join(tmpdir(), `video_${Date.now()}_${Math.random().toString(36).substring(7)}.tmp`);
       const tempFramePath = join(tmpdir(), `frame_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`);
@@ -202,10 +197,6 @@ export const saveFileFromUrl = async (
   pollingFileData: any,
   pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
-  console.log('=== saveFileFromUrl START ===');
-  console.log('URL:', url);
-  console.log('User ID:', pollingFileData.user_id);
-  console.log('Model Data:', JSON.stringify(pollingFileData.models, null, 2));
 
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   try {
@@ -215,10 +206,7 @@ export const saveFileFromUrl = async (
       throw new Error(`Invalid URL: ${url}`);
     }
 
-    console.log('URL validation passed');
-
     // Get user's Zipline token from user_profiles
-    console.log('Fetching user profile for Zipline token...');
     const { data: userProfile, error: profileError } = await supabaseServerClient
       .from('user_profiles')
       .select('zipline')
@@ -271,7 +259,6 @@ export const saveFileFromUrl = async (
     // Generate thumbnail if file is an image or video
     let thumbnailUrl: string | undefined;
     if (isImageUrl(url) || isVideoUrl(url)) {
-      console.log('File is an image or video, generating thumbnail...');
       const thumbnailBuffer = await generateThumbnail(nodeBuffer, url);
 
       if (thumbnailBuffer) {
@@ -285,7 +272,6 @@ export const saveFileFromUrl = async (
 
           if (thumbnailUploadResponse.files && thumbnailUploadResponse.files.length > 0) {
             thumbnailUrl = thumbnailUploadResponse.files[0].url;
-            console.log('Thumbnail uploaded successfully:', thumbnailUrl);
           } else {
             console.warn('Thumbnail generation succeeded but upload returned no files');
           }
@@ -298,12 +284,6 @@ export const saveFileFromUrl = async (
       }
     }
 
-    console.log('zipData', zipData);
-    console.log('uploadedFile', uploadedFile);
-    console.log('generatedInfo', generatedInfo);
-    console.log('thumbnailUrl', thumbnailUrl);
-    console.log('pollingFileData', pollingFileData);
-    console.log('pollingFileResponse', pollingFileResponse.data);
     // Save file metadata to database
     const fileMetadata: FileMetadata = {
       user_id: pollingFileData.user_id,
@@ -327,8 +307,6 @@ export const saveFileFromUrl = async (
       throw new Error(`Failed to save file metadata to database: ${dbError.message}`);
     }
 
-    console.log('=== saveFileFromUrl SUCCESS ===');
-    console.log('Final uploaded file URL:', uploadedFile.url);
     return { file_id: dbData?.id || null, file_url: uploadedFile.url };
   } catch (error: any) {
     console.error('=== saveFileFromUrl ERROR ===');
@@ -522,6 +500,14 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
     case "singleField":
       tokensCost = pricing.tokens[formValues[pricing.field]] || 0;
       break;
+    case "singleFieldMultiplier": {
+      // cost = price * fieldValue (e.g. price per unit × duration)
+      const price = Number(pricing.tokens);
+      const fieldValue = formValues[pricing.field];
+      const value = fieldValue !== undefined && fieldValue !== null ? Number(fieldValue) : NaN;
+      tokensCost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
+      break;
+    }
     case "multiFields":
       if (pricing.tokens) {
         tokensCost = lookupMultiFields(pricing.tokens, formValues);

@@ -118,7 +118,6 @@ export const createTask = async (taskObject: any) => {
       break;
   }
 
-  console.log('payload', JSON.stringify(payload));
 
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
@@ -127,7 +126,7 @@ export const createTask = async (taskObject: any) => {
     .catch(error => {
       console.log('error', JSON.stringify(error.response.data));
 
-      throw new Error(error.message || 'Failed to generate');
+      throw new Error(error.message || 'Failed to generate.  Please try again later.  If the problem persists, please contact support.');
     });
 
     const task_id =
@@ -139,7 +138,7 @@ export const createTask = async (taskObject: any) => {
     response.data?.id ||
     response.data?.predictionID;
   if (!task_id) {
-    throw new Error('Failed to generate');
+    throw new Error('Failed to generate.  Please try again later.  If the problem persists, please contact support.');
   }
   return { success: true, data: response.data, task_id };
 };
