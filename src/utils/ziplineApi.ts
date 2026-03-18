@@ -48,18 +48,7 @@ export const uploadFileToZipline = async (
     throw new Error('ZIPLINE_URL environment variable is not set');
   }
 
-  console.log('=== uploadFileToZipline START ===');
-  console.log('Zipline base URL:', baseUrl);
-  console.log('Auth token length:', authToken?.length || 0);
-  console.log('Auth token preview:', authToken?.substring(0, 10) + '...');
-  console.log('File buffer details:');
-  console.log('- Length:', file.length, 'bytes');
-  console.log('- Type:', file.constructor.name);
-  console.log('- First 10 bytes:', Array.from(file.slice(0, 10)));
-  console.log('- Last 10 bytes:', Array.from(file.slice(-10)));
-
   // First, test authentication with /api/user endpoint
-  console.log('Testing authentication with /api/user...');
   try {
     const userResponse = await axios.get(`${baseUrl}/api/user`, {
       headers: {
@@ -67,7 +56,6 @@ export const uploadFileToZipline = async (
       },
       //timeout: 10000,
     });
-    console.log('Authentication test successful:', userResponse.data);
   } catch (authError: any) {
     console.error('Authentication test failed:', authError.response?.status, authError.response?.data, authError);
     throw new Error(
@@ -76,22 +64,18 @@ export const uploadFileToZipline = async (
   }
 
   const uploadUrl = `${baseUrl}/api/upload`;
-  console.log('Upload URL:', uploadUrl);
 
   try {
-    console.log('Creating FormData for upload...');
     const formData = new FormData();
 
     // Dynamically determine content type based on file extension
     const contentType = getMimeType(filename);
-    console.log('Detected content type:', contentType);
 
     formData.append('file', file, {
       filename: filename,
       contentType: contentType,
     });
 
-    console.log('Making axios request to Zipline...');
     const requestStart = Date.now();
 
     const response = await axios.post(uploadUrl, formData, {
@@ -106,9 +90,6 @@ export const uploadFileToZipline = async (
     });
 
     const requestTime = Date.now() - requestStart;
-    console.log('Axios request completed in:', requestTime, 'ms');
-    console.log('Response status:', response.status);
-    console.log('Response headers:', response.headers);
 
     // Check if the response indicates success
     if (response.status < 200 || response.status >= 300) {
@@ -116,7 +97,6 @@ export const uploadFileToZipline = async (
       throw new Error(`Zipline upload failed: ${response.status} - ${response.data?.message || 'Unknown error'}`);
     }
 
-    console.log('Zipline upload successful:', response.data);
     return response.data;
   } catch (error: any) {
     console.error('Zipline upload error details:');
@@ -174,12 +154,8 @@ export const getZipData = async (fileId: string, authToken: string): Promise<Zip
     throw new Error('ZIPLINE_URL environment variable is not set');
   }
 
-  console.log('=== getZipData START ===');
-  console.log('File ID:', fileId);
-  console.log('Auth token length:', authToken?.length || 0);
 
   const fileUrl = `${baseUrl}/api/user/files/${fileId}`;
-  console.log('File data URL:', fileUrl);
 
   try {
     const response = await axios.get(fileUrl, {
@@ -190,14 +166,11 @@ export const getZipData = async (fileId: string, authToken: string): Promise<Zip
       validateStatus: () => true,
     });
 
-    console.log('File data response status:', response.status);
-    console.log('File data response:', JSON.stringify(response.data, null, 2));
 
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Failed to get file data: ${response.status} - ${response.data?.message || 'Unknown error'}`);
     }
 
-    console.log('=== getZipData SUCCESS ===');
     return response.data;
   } catch (error: any) {
     console.error('=== getZipData ERROR ===');

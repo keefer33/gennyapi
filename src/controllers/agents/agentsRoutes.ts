@@ -1,38 +1,28 @@
 import express from 'express';
 import { enhancePrompt } from './enhancePrompt';
 import { authenticateUser } from '../../middlewares/auth';
-import { aiGatewayPrompt } from './aiGatewayPrompt';
-import { getAiGatewayModels } from './aiGatewayModels';
-import { runAgent } from './runAgent';
+import { listAgentModels } from './listAgentModels';
 import {
-  createConversation,
-  getConversation,
-  updateConversation,
-  deleteConversation,
-  createConversationItems,
-  listConversationItems,
-  getConversationItem,
-  deleteConversationItem,
-} from './conversations';
+  createUserAgent,
+  listUserAgents,
+  getUserAgent,
+  updateUserAgent,
+  deleteUserAgent,
+} from './userAgents';
 
 const router = express.Router();
 
-// POST generate
+// Enhance prompt
 router.post('/enhance/prompt', authenticateUser, enhancePrompt);
-router.post('/ai-gateway/prompt', authenticateUser, aiGatewayPrompt);
-router.get('/aigateway/models', getAiGatewayModels);
-router.post('/run', authenticateUser, runAgent);
 
-// Conversations API endpoints
-router.post('/conversations', authenticateUser, createConversation);
-router.get('/conversations/:conversation_id', authenticateUser, getConversation);
-router.post('/conversations/:conversation_id', authenticateUser, updateConversation);
-router.delete('/conversations/:conversation_id', authenticateUser, deleteConversation);
+// Agent models
+router.get('/agent-models', listAgentModels);
 
-// Conversation Items endpoints
-router.post('/conversations/:conversation_id/items', authenticateUser, createConversationItems);
-router.get('/conversations/:conversation_id/items', authenticateUser, listConversationItems);
-router.get('/conversations/:conversation_id/items/:item_id', authenticateUser, getConversationItem);
-router.delete('/conversations/:conversation_id/items/:item_id', authenticateUser, deleteConversationItem);
+// User agents CRUD
+router.post('/user-agents', authenticateUser, createUserAgent);
+router.get('/user-agents', authenticateUser, listUserAgents);
+router.get('/user-agents/:agent_id', authenticateUser, getUserAgent);
+router.patch('/user-agents/:agent_id', authenticateUser, updateUserAgent);
+router.delete('/user-agents/:agent_id', authenticateUser, deleteUserAgent);
 
 export default router;

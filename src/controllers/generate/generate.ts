@@ -59,6 +59,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           generation_type: model.generation_type,
           api_id: model.api.id,
           cost: tokensCostXai,
+          usage_amount: tokensCostXai * .005,
         });
         xaiVideoGenerate(userGenerationXai.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationXai });
@@ -76,7 +77,8 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           generation_type: model.generation_type,
           api_id: model.api.id,
           cost: tokensCostWan,
-        });
+          usage_amount: tokensCostWan * .005,
+          });
         alibabaWanVideoGenerate(userGenerationWan.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationWan });
         return;
@@ -97,6 +99,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
       generation_type: model.generation_type,
       api_id: model.api.id,
       cost: tokensCost,
+      usage_amount: tokensCost * .005,
     });
 
     res.status(200).json({ success: true, data: userGeneration });
