@@ -332,7 +332,11 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     console.log('usage', usage);
     const gatewayData = await result.providerMetadata;
     const rawCost = gatewayData?.gateway?.cost ?? 0;
-    const totalCost = Math.ceil(Number(rawCost) * 1.2 * 10000) / 10000;
+    // Profit margin is stored on the selected model's API pricing config as a percent (e.g. 20 => +20%).
+    const modelCostPmRaw = agent.model_name?.api_id?.pricing?.pm ?? 20;
+    const modelCostPm = Number(modelCostPmRaw);
+    const profitMultiplier = Number.isFinite(modelCostPm) ? 1 + modelCostPm / 100 : 1.2;
+    const totalCost = Math.ceil(Number(rawCost) * profitMultiplier * 10000) / 10000;
     if (usage && writeSSE) {
       writeSSE({
         type: 'usage',

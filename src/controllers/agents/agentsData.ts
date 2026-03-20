@@ -54,6 +54,39 @@ export const getAgentModelsData = async () => {
     .order('order', { ascending: true })
     .order('created_at', { ascending: false });
   if (error) return { error: error.message };
+  //need to modify the pricing data before sending to the client
+  const TOKEN_TO_MILLION = 1_000_000;
+
+  const parseNumber = (value: unknown, fallback: number) => {
+    const n = typeof value === "number" ? value : parseFloat(String(value));
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  data.forEach((model) => {
+    const apiId = (model as any).api_id;
+    const apiObj = Array.isArray(apiId) ? apiId[0] : apiId;
+    if (!apiObj?.pricing) return;
+
+    const pricing = apiObj.pricing as Record<string, unknown>;
+    const pm = parseNumber(pricing.pm ?? 20, 20);
+
+    // Stored pricing values are assumed to be per token; we convert them to per 1,000,000 tokens.
+    // We also apply the profit margin (pm%) here so the client always receives final billed rates.
+    const marginMultiplier = 1 + pm / 100;
+
+    const input = parseNumber(pricing.input, 0) * marginMultiplier * TOKEN_TO_MILLION;
+    const output = parseNumber(pricing.output, 0) * marginMultiplier * TOKEN_TO_MILLION;
+    const input_cache_read = parseNumber(pricing["input_cache_read"], 0) * marginMultiplier * TOKEN_TO_MILLION;
+    const input_cache_write = parseNumber(pricing["input_cache_write"], 0) * marginMultiplier * TOKEN_TO_MILLION;
+
+    apiObj.pricing = {
+      pm,
+      input,
+      output,
+      input_cache_read,
+      input_cache_write,
+    };
+  });
   return { data };
 };
 
