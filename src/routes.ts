@@ -9,6 +9,7 @@ import mcpserversRoutes from './controllers/mcpservers/mcpserversRoutes';
 import chatsRoutes from './controllers/chats/chatRoutes';
 import toolsRoutes from './controllers/tools/toolsRoutes';
 import aiModelsRoutes from './controllers/ai-models/aiModelsRoutes';
+import brandsRoutes from './controllers/brands/brandsRoutes';
 const router = express.Router();
 
 // Route definitions
@@ -22,6 +23,7 @@ router.use('/mcpservers', mcpserversRoutes);
 router.use('/chats', chatsRoutes);
 router.use('/tools', toolsRoutes);
 router.use('/ai-models', aiModelsRoutes);
+router.use('/brands', brandsRoutes);
 // Health check route
 router.get('/health', (req: Request, res: Response) => {
     res.status(200).json({
