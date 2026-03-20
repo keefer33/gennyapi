@@ -1,6 +1,13 @@
 import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
 import { Request, Response } from 'express';
 
+function parsePromoDollarAmount(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 export const createUser = async (req: Request, res: Response): Promise<void> => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -12,23 +19,23 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
   const now = new Date().toISOString();
   const { data: promotion } = await supabaseServerClient
     .from('promotions')
-    .select('id, token_amount, dollar_amount, start_date, end_date')
+    .select('id, dollar_amount, start_date, end_date')
     .eq('promo_code', 'NEWUSER')
     .single();
 
-  // Check if promotion exists and is active
-  let tokenBalance = 1000; // Default value
+  // Default signup: usage credits only (no token grants from promos).
+  let tokenBalance = 0;
   let promotionId: string | null = null;
   let usageBalance = 5;
-  if (promotion && promotion.token_amount) {
+  const promoDollars = promotion ? parsePromoDollarAmount(promotion.dollar_amount) : null;
+  if (promotion && promoDollars != null) {
     const isActive =
       (!promotion.start_date || new Date(promotion.start_date) <= new Date(now)) &&
       (!promotion.end_date || new Date(promotion.end_date) >= new Date(now));
 
     if (isActive) {
-      tokenBalance = Number(promotion.token_amount);
       promotionId = promotion.id;
-      usageBalance = Number(promotion.dollar_amount);
+      usageBalance = promoDollars;
     }
   }
 

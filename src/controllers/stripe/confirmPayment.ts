@@ -1,11 +1,15 @@
 import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
-import { TOKEN_PACKAGES } from '../../utils/stripe';
+import { isValidTopUpCents } from '../../utils/stripe';
 import Stripe from 'stripe';
 import { Request, Response } from 'express';
+import {
+  insertUserUsageLog,
+  updateUserProfileUsageAmount,
+  USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT,
+} from '../../utils/utils';
 
 export async function confirmPayment(req: Request, res: Response): Promise<void> {
   try {
-    // Check if Stripe is configured
     const stripe = process.env.STRIPE_SECRET_KEY
       ? new Stripe(process.env.STRIPE_SECRET_KEY, {
           apiVersion: '2025-09-30.clover',
@@ -17,17 +21,14 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       return;
     }
 
-    // User is already authenticated by middleware, get from request
     const user = (req as any).user;
-
     const { paymentIntentId, amount } = req.body;
 
-    if (!paymentIntentId || !amount) {
+    if (!paymentIntentId || amount == null) {
       res.status(400).json({ error: 'Missing payment details' });
       return;
     }
 
-    // Verify the payment intent with Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (!paymentIntent || paymentIntent.status !== 'succeeded') {
@@ -35,32 +36,29 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Verify the payment belongs to this user
     if (paymentIntent.metadata.user_id !== user.id) {
       res.status(403).json({ error: 'Payment does not belong to user' });
       return;
     }
 
-    // Get tokens to add based on amount
-    // Convert amount to number if it's a string
-    const numericAmount = typeof amount === 'string' ? parseInt(amount, 10) : amount;
-
-    // Convert from cents to dollars (Stripe amounts are in cents)
-    const dollarAmount = Math.floor(numericAmount / 100);
-
-    const packageInfo = TOKEN_PACKAGES[dollarAmount as keyof typeof TOKEN_PACKAGES];
-
-    if (!packageInfo) {
-      res
-        .status(400)
-        .json({ error: `Invalid amount: ${amount}. Valid amounts are: ${Object.keys(TOKEN_PACKAGES).join(', ')}` });
+    if (!isValidTopUpCents(paymentIntent.amount)) {
+      res.status(400).json({ error: 'Invalid payment amount' });
       return;
     }
 
-    const tokensToAdd = packageInfo.tokens;
+    const amountDollars = parseFloat((paymentIntent.amount / 100).toFixed(2));
+
+    const metaDollars = paymentIntent.metadata?.amount_dollars;
+    if (metaDollars != null && String(metaDollars).trim() !== '') {
+      const metaNum = Number(metaDollars);
+      if (!Number.isFinite(metaNum) || Math.abs(metaNum - amountDollars) > 0.001) {
+        res.status(400).json({ error: 'Payment metadata mismatch' });
+        return;
+      }
+    }
+
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-    // Check if this payment has already been processed
     const { data: existingTransaction } = await supabaseServerClient
       .from('transactions')
       .select('id, status')
@@ -70,21 +68,19 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
     if (existingTransaction && existingTransaction.status === 'completed') {
       res.status(200).json({
         success: true,
-        tokensAdded: tokensToAdd,
+        usageCredited: amountDollars,
         message: 'Payment already processed',
       });
       return;
     }
 
-    // Create transaction record only when payment succeeds
     const { data: newTransaction, error: transactionError } = await supabaseServerClient
       .from('transactions')
       .insert({
         user_id: user.id,
         stripe_payment_intent_id: paymentIntentId,
         amount_cents: paymentIntent.amount,
-        amount_dollars: parseFloat((paymentIntent.amount / 100).toFixed(2)),
-        tokens_purchased: tokensToAdd,
+        amount_dollars: amountDollars,
         status: 'completed',
         completed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
@@ -100,10 +96,39 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       return;
     }
 
+    try {
+      await insertUserUsageLog({
+        user_id: user.id,
+        usage_amount: amountDollars,
+        generation_id: null,
+        transaction_id: newTransaction?.id ?? null,
+        type_id: Number.isFinite(USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT)
+          ? USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT
+          : 2,
+        meta: {
+          type: 'deposit',
+          usage: {
+            reason_code: 'deposit',
+            amount_dollars: amountDollars,
+            stripe_payment_intent_id: paymentIntentId,
+          },
+        },
+      });
+      await updateUserProfileUsageAmount({
+        user_id: user.id,
+        type: 'credit',
+        amount: amountDollars,
+      });
+    } catch (usageErr) {
+      console.error('[confirmPayment] Usage log / usage_balance update failed:', usageErr);
+      res.status(500).json({ error: 'Payment recorded but failed to apply usage credit' });
+      return;
+    }
+
     res.status(200).json({
       success: true,
-      tokensAdded: tokensToAdd,
-      message: 'Payment confirmed and tokens added successfully',
+      usageCredited: amountDollars,
+      message: 'Payment confirmed and balance updated successfully',
     });
   } catch (error) {
     console.error('Error confirming payment:', error);

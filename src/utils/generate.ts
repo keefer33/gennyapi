@@ -542,14 +542,14 @@ export const ensureThumbnailForUserFile = async (fileId: string): Promise<void> 
   }
 };
 
-export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
-  let tokensCost: number = 0;
+export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
+  let cost: number = 0;
 
   // Recursive helper function for multiFields lookup
   const lookupMultiFields = (config: any, formValues: any): number => {
     // If we've reached a tokens value, return it
-    if (config.tokens !== undefined) {
-      return config.tokens;
+    if (config.cost !== undefined) {
+      return config.cost;
     }
 
     // If we have a field and values, continue the lookup
@@ -580,33 +580,33 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
 
   switch (pricing.type) {
     case "per":
-      tokensCost = pricing.tokens;
+      cost = pricing.cost;
       break;
     case "perMulti":
       if (formValues.num_images || formValues.max_images) {
-        tokensCost = pricing.tokens * (formValues.num_images || formValues.max_images);
+        cost = pricing.cost * (formValues.num_images || formValues.max_images);
       }
       break;
     case "singleField":
-      tokensCost = pricing.tokens[formValues[pricing.field]] || 0;
+      cost = pricing.cost[formValues[pricing.field]] || 0;
       break;
     case "singleFieldMultiplier": {
       // cost = price * fieldValue (e.g. price per unit × duration)
-      const price = Number(pricing.tokens);
+      const price = Number(pricing.cost);
       const fieldValue = formValues[pricing.field];
       const value = fieldValue !== undefined && fieldValue !== null ? Number(fieldValue) : NaN;
-      tokensCost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
+      cost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
       break;
     }
     case "multiFields":
-      if (pricing.tokens) {
-        tokensCost = lookupMultiFields(pricing.tokens, formValues);
+      if (pricing.cost) {
+        cost = lookupMultiFields(pricing.cost, formValues);
       }
       break;
     case "twoFieldLookup": {
       // Check if both fields exist (including false values)
-      const field1Value = formValues[pricing.tokens.field1];
-      const field2Value = formValues[pricing.tokens.field2];
+      const field1Value = formValues[pricing.cost.field1];
+      const field2Value = formValues[pricing.cost.field2];
 
       if (
         field1Value !== undefined &&
@@ -617,31 +617,31 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
         // Convert values to strings for lookup (handles booleans, numbers, and strings)
         const field1Key = String(field1Value);
         const field2Key = String(field2Value);
-        const priceEntry = pricing.tokens.prices[field1Key];
+        const priceEntry = pricing.cost.prices[field1Key];
 
         // Support two shapes:
         // 1) Matrix lookup: prices[field1][field2] => tokens
         // 2) Multiplier lookup: prices[field1] => multiplier, tokens = field2 * multiplier
         if (priceEntry && typeof priceEntry === "object" && !Array.isArray(priceEntry)) {
-          tokensCost = priceEntry[field2Key] || 0;
+          cost = priceEntry[field2Key] || 0;
         } else if (priceEntry !== undefined && priceEntry !== null) {
           const multiplier = Number(priceEntry);
           const perValue = Number(field2Value);
           if (!Number.isNaN(multiplier) && !Number.isNaN(perValue)) {
-            tokensCost = perValue * multiplier;
+            cost = perValue * multiplier;
           } else {
-            tokensCost = 0;
+            cost = 0;
           }
         } else {
-          tokensCost = 0;
+          cost = 0;
         }
       }
       break;
     }
     case "twoFieldMultiplierLookup": {
-      const field1Value = formValues[pricing.tokens.field1];
-      const field2Value = formValues[pricing.tokens.field2];
-      const multiplierValue = formValues[pricing.tokens.multiplier];
+      const field1Value = formValues[pricing.cost.field1];
+      const field2Value = formValues[pricing.cost.field2];
+      const multiplierValue = formValues[pricing.cost.multiplier];
 
       if (
         field1Value !== undefined &&
@@ -653,22 +653,22 @@ export const  calculateTokensUtil = async (formValues: any, pricing: any) => {
       ) {
         const field1Key = String(field1Value);
         const field2Key = String(field2Value);
-        const basePrice = pricing.tokens.prices?.[field1Key]?.[field2Key];
+        const basePrice = pricing.cost.prices?.[field1Key]?.[field2Key];
         const multiplier = Number(multiplierValue);
 
         if (basePrice !== undefined && basePrice !== null && !Number.isNaN(multiplier)) {
-          tokensCost = Number(basePrice) * multiplier;
+            cost = Number(basePrice) * multiplier;
         } else {
-          tokensCost = 0;
+          cost = 0;
         }
       } else {
-        tokensCost = 0;
+        cost = 0;
       }
 
       break;
     }
     default:
-      tokensCost = 0;
+      cost = 0;
   }
-  return tokensCost;
+  return cost;
 };

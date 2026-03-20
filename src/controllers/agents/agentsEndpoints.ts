@@ -1,17 +1,32 @@
 import type { Request, Response } from 'express';
 import {
+  getAgentModelsData,
   handleCreateUserAgent,
   handleListUserAgents,
   handleGetUserAgent,
   handleUpdateUserAgent,
   handleDeleteUserAgent,
-} from './userAgentsData';
+} from './agentsData';
 
 function getUserId(req: Request): string {
   const user = (req as any).user;
   if (!user?.id) throw new Error('Unauthorized');
   return user.id;
 }
+
+export const getAgentModels = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await getAgentModelsData();
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result.data);
+  } catch (err) {
+    console.error('[getAgentModels] Error:', err);
+    res.status(500).json({ error: 'Failed to get Agent models' });
+  }
+};
 
 export const createUserAgent = async (req: Request, res: Response) => {
   const userId = getUserId(req);
@@ -108,4 +123,3 @@ export const deleteUserAgent = async (req: Request, res: Response) => {
   }
   res.status(204).send();
 };
-

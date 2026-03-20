@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { createUserGeneration, getModel } from '../../utils/getSupaData';
 import { createTask } from './createTask';
 import { customApiGenerate } from './customApiGenerate';
-import { calculateTokensUtil } from '../../utils/generate';
+import { calculatePricingUtil } from '../../utils/generate';
 import { xaiVideoGenerate } from './xaiVideoGenerate';
 import { alibabaWanVideoGenerate } from './alibabaWanVideoGenerate';
 import { randomUUID } from 'crypto';
@@ -48,7 +48,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
         };
         break;
       case 'xaiVideoGenerate': {
-        const tokensCostXai = await calculateTokensUtil(body.payload, model?.api?.pricing);
+        const costXai = await calculatePricingUtil(body.payload, model?.api?.pricing);
         const userGenerationXai = await createUserGeneration({
           user_id: user?.id,
           payload: body.payload,
@@ -58,15 +58,15 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           model_id: model.id,
           generation_type: model.generation_type,
           api_id: model.api.id,
-          cost: tokensCostXai,
-          usage_amount: tokensCostXai * .005,
+          cost: costXai,
+          usage_amount: costXai,
         });
         xaiVideoGenerate(userGenerationXai.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationXai });
         return;
       }
       case 'alibabaWanVideoGenerate': {
-        const tokensCostWan = await calculateTokensUtil(body.payload, model?.api?.pricing);
+        const costWan = await calculatePricingUtil(body.payload, model?.api?.pricing);
         const userGenerationWan = await createUserGeneration({
           user_id: user?.id,
           payload: body.payload,
@@ -76,8 +76,8 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           model_id: model.id,
           generation_type: model.generation_type,
           api_id: model.api.id,
-          cost: tokensCostWan,
-          usage_amount: tokensCostWan * .005,
+          cost: costWan,
+          usage_amount: costWan,
           });
         alibabaWanVideoGenerate(userGenerationWan.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationWan });
@@ -87,7 +87,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
         throw new Error('Invalid model');
     }
 
-    const tokensCost = await calculateTokensUtil(body.payload, model?.api?.pricing);
+    const cost = await calculatePricingUtil(body.payload, model?.api?.pricing);
 
     const userGeneration = await createUserGeneration({
       user_id: user?.id,
@@ -98,8 +98,8 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
       model_id: model.id,
       generation_type: model.generation_type,
       api_id: model.api.id,
-      cost: tokensCost,
-      usage_amount: tokensCost * .005,
+      cost,
+      usage_amount: cost,
     });
 
     res.status(200).json({ success: true, data: userGeneration });

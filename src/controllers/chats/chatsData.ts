@@ -2,21 +2,8 @@ import { getServerClient } from '../../utils/supabaseClient';
 
 const CHATS_TABLE = 'user_models_chats';
 const MESSAGES_TABLE = 'user_models_chats_messages';
-const AGENT_MODELS_TABLE = 'agent_models';
 
 // ---------- Data layer (reusable Supabase calls) ----------
-
-/** Get agent model by id (for runChat). */
-export const getAgentModelById = async (model_id: string) => {
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from(AGENT_MODELS_TABLE)
-    .select('id, model_name')
-    .eq('id', model_id)
-    .single();
-  if (error || !data?.model_name) return { error: 'Model not found' };
-  return { data: { model_name: data.model_name } };
-};
 
 /** Insert user + assistant messages after a run (ownership checked). Optional gateway stored. */
 export const saveRunChatMessages = async (

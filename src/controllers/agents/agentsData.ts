@@ -1,5 +1,6 @@
 import { getServerClient } from '../../utils/supabaseClient';
 
+const AI_MODELS_TABLE = 'ai_models';
 const USER_AGENTS_TABLE = 'user_agents';
 
 export interface UserAgentRow {
@@ -41,6 +42,19 @@ export interface AgentModelJoinedRow {
 export type UserAgentWithModel = UserAgentRow & {
   /** Joined ai_models row (with its api), if found. */
   model: AgentModelJoinedRow | null;
+};
+
+export const getAgentModelsData = async () => {
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from(AI_MODELS_TABLE)
+    .select(
+      'id, model_name, description, meta, brand_name(name, logo), order, model_type, api_id(id, pricing, schema, meta, api_type)'
+    )
+    .order('order', { ascending: true })
+    .order('created_at', { ascending: false });
+  if (error) return { error: error.message };
+  return { data };
 };
 
 export const handleCreateUserAgent = async (
@@ -102,7 +116,6 @@ export const handleGetUserAgent = async (userId: string, agent_id: string) => {
     return { error: error?.message || 'Agent not found' };
   }
 
-
   return { data: data };
 };
 
@@ -139,4 +152,3 @@ export const handleDeleteUserAgent = async (userId: string, agent_id: string) =>
   if (error) return { error: error.message };
   return {};
 };
-
