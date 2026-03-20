@@ -3,9 +3,9 @@ import { streamText, createGateway, stepCountIs, type ModelMessage } from 'ai';
 import { Composio } from '@composio/core';
 import { VercelProvider } from '@composio/vercel';
 import { saveAgentGeneratedFile } from '../../utils/generate';
-import { handleListChatMessages, saveRunChatMessages } from '../chats/chatsData';
-import { handleGetUserAgent, type UserAgentWithModel, type AgentModelApiRow } from './agentsData';
-import { messageRowsToModelMessages } from '../chats/chatsUtils';
+import { handleListChatMessages, saveRunChatMessages } from './chatsData';
+import { handleGetUserAgent, type UserAgentWithModel, type AgentModelApiRow } from '../agents/agentsData';
+import { messageRowsToModelMessages } from './chatsUtils';
 import { getUserId, insertUserUsageLog, updateUserProfileUsageAmount } from '../../utils/utils';
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ type StoredPart =
 /** API type from ai_models_apis (endpoint, ai-gateway, mcp). */
 type ApiType = NonNullable<AgentModelApiRow['api_type']>;
 
-export const runAgent = async (req: Request, res: Response): Promise<void> => {
+export const runChat = async (req: Request, res: Response): Promise<void> => {
   let writeSSE: ((data: Record<string, unknown>) => void) | null = null;
   try {
     const userId = getUserId(req);
@@ -370,7 +370,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
           transaction_id: null,
           meta: {
             model_name: agent.model_name?.model_name ?? '',
-            type: "agent",
+            prompt: prompt.trim(),
             usage: usagePayload,
           },
         });

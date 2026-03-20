@@ -4,7 +4,7 @@ import { Composio } from '@composio/core';
 import { VercelProvider } from '@composio/vercel';
 import { saveAgentGeneratedFile } from '../../utils/generate';
 import { handleListChatMessages, saveRunChatMessages } from '../chats/chatsData';
-import { handleGetUserAgent, type UserAgentWithModel, type AgentModelApiRow } from './agentsData';
+import { handleGetUserAgent, type UserAgentWithModel, type AgentModelApiRow } from '../agents/agentsData';
 import { messageRowsToModelMessages } from '../chats/chatsUtils';
 import { getUserId, insertUserUsageLog, updateUserProfileUsageAmount } from '../../utils/utils';
 
@@ -53,52 +53,34 @@ type StoredPart =
 /** API type from ai_models_apis (endpoint, ai-gateway, mcp). */
 type ApiType = NonNullable<AgentModelApiRow['api_type']>;
 
-export const runAgent = async (req: Request, res: Response): Promise<void> => {
+export const runAiGateway = async (model_name: string, payload: any, modelData: any, userId: string, res: Response) => {
   let writeSSE: ((data: Record<string, unknown>) => void) | null = null;
   try {
-    const userId = getUserId(req);
-    const body = (req.body || {}) as RunChatBody;
-    const { chat_id, agent_id, prompt } = body;
-
-    if (!agent_id || typeof agent_id !== 'string') {
+    if (!payload.agent_id || typeof payload.agent_id !== 'string') {
       res.status(400).json({ error: 'agent_id is required' });
-      return;
     }
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+    if (!payload.prompt || typeof payload.prompt !== 'string' || !payload.prompt.trim()) {
       res.status(400).json({ error: 'prompt is required' });
       return;
     }
 
-    const agentResult = await handleGetUserAgent(userId, agent_id);
+    const agentResult = await handleGetUserAgent(userId, payload.agent_id);
     if ('error' in agentResult) {
       res.status(404).json({ error: agentResult.error });
       return;
     }
     const agent = agentResult.data as unknown as UserAgentWithModel;
     const modelId = agent.model_name?.api_id?.schema?.model;
-    const apiType: ApiType | null = agent.model_name?.api_id?.api_type ?? null;
-
-    //TODO: Implement the apiType to allow for different apis to be used in the future
-    switch (apiType) {
-      case 'endpoint':
-        break;
-      case 'ai-gateway':
-        break;
-      case 'mcp':
-        break;
-      default:
-        break;
-    }
 
     let sessionMessages: ChatMessage[] = [];
-    if (chat_id) {
-      const msgResult = await handleListChatMessages(userId, chat_id, { order: 'asc' });
+    if (payload.chat_id) {
+      const msgResult = await handleListChatMessages(userId, payload.chat_id, { order: 'asc' });
       if (!('error' in msgResult)) {
         sessionMessages = messageRowsToModelMessages(msgResult?.data as unknown as MessageRow[]);
       }
     }
 
-    const messages: ChatMessage[] = [...sessionMessages, { role: 'user', content: prompt.trim() }];
+    const messages: ChatMessage[] = [...sessionMessages, { role: 'user', content: payload.prompt.trim() }];
 
     const config = (agent.config ?? null) as AgentConfig | null;
     const settings: AgentSettings = config?.settings ?? {};
@@ -250,7 +232,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
                     : '.bin';
                 const filename = `chat-generated-${Date.now()}-${generatedFileIndex++}${ext}`;
                 const saveResult = await saveAgentGeneratedFile(buffer, filename, userId, {
-                  agent_id: agent_id,
+                  agent_id: payload.agent_id,
                 });
                 if (saveResult?.file_url) {
                   urlToSend = saveResult.file_url;
@@ -344,10 +326,10 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       });
     }
 
-    if (chat_id) {
+    if (payload.chat_id) {
       const userMsg = {
         role: 'user' as const,
-        content: [{ type: 'text' as const, text: prompt.trim() }],
+        content: [{ type: 'text' as const, text: payload.prompt.trim() }],
       };
       const assistantMsg = {
         role: 'assistant' as const,
@@ -358,7 +340,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         (usagePayload as unknown as { total_cost?: number }).total_cost = totalCost;
       }
       try {
-        await saveRunChatMessages(userId, chat_id, userMsg, assistantMsg, {
+        await saveRunChatMessages(userId, payload.chat_id, userMsg, assistantMsg, {
           usage: usagePayload,
           gateway: gatewayData,
         });
@@ -370,7 +352,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
           transaction_id: null,
           meta: {
             model_name: agent.model_name?.model_name ?? '',
-            type: "agent",
+            prompt: payload.prompt.trim(),
             usage: usagePayload,
           },
         });
