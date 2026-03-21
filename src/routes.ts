@@ -8,8 +8,9 @@ import userRoutes from './controllers/user/userRoutes';
 import mcpserversRoutes from './controllers/mcpservers/mcpserversRoutes';
 import chatsRoutes from './controllers/chats/chatRoutes';
 import toolsRoutes from './controllers/tools/toolsRoutes';
-import aiModelsRoutes from './controllers/ai-models/aiModelsRoutes';
 import brandsRoutes from './controllers/brands/brandsRoutes';
+import promotionsRoutes from './controllers/promotions/promotionsRoutes';
+import supportRoutes from './controllers/support/supportRoutes';
 const router = express.Router();
 
 // Route definitions
@@ -22,8 +23,9 @@ router.use('/user', userRoutes);
 router.use('/mcpservers', mcpserversRoutes);
 router.use('/chats', chatsRoutes);
 router.use('/tools', toolsRoutes);
-router.use('/ai-models', aiModelsRoutes);
 router.use('/brands', brandsRoutes);
+router.use('/promotions', promotionsRoutes);
+router.use('/support', supportRoutes);
 // Health check route
 router.get('/health', (req: Request, res: Response) => {
     res.status(200).json({
