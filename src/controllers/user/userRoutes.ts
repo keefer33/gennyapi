@@ -2,6 +2,7 @@ import express from 'express';
 import { createUser } from './createUser';
 import { createToken } from './createToken';
 import { getUserProfile } from './getUserProfile';
+import { patchUserProfile } from './patchUserProfile';
 import { updateApiKey } from './updateApiKey';
 import { listTransactions } from './listTransactions';
 import { listUserUsageLog } from './listUserUsageLog';
@@ -12,6 +13,7 @@ import { authenticateUser } from '../../middlewares/auth';
 const router = express.Router();
 
 router.get('/profile', getUserProfile);
+router.patch('/profile', authenticateUser, patchUserProfile);
 router.post('/create-user', createUser);
 router.post('/create-token', createToken);
 router.post('/api-key', updateApiKey);
