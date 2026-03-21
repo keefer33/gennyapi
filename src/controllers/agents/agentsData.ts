@@ -1,6 +1,6 @@
 import { getServerClient } from '../../utils/supabaseClient';
 
-const AI_MODELS_TABLE = 'ai_models';
+const AGENT_MODELS_TABLE = 'agent_models';
 const USER_AGENTS_TABLE = 'user_agents';
 
 export interface UserAgentRow {
@@ -47,7 +47,7 @@ export type UserAgentWithModel = UserAgentRow & {
 export const getAgentModelsData = async () => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
-    .from(AI_MODELS_TABLE)
+    .from(AGENT_MODELS_TABLE)
     .select(
       'id, model_name, description, meta, brand_name(name, logo), order, model_type, api_id(id, pricing, schema, meta, api_type)'
     )
