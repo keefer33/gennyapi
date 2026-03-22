@@ -91,10 +91,7 @@ export function normalizeAspectRatio(ar: unknown): string {
 }
 
 /** Map payload resolution (720p | 1080p) + aspectRatio to Wan-style resolution string (e.g. 1280x720). */
-export function toWanResolution(
-  resolution: unknown,
-  aspectRatio: unknown
-): `${number}*${number}` {
+export function toWanResolution(resolution: unknown, aspectRatio: unknown): `${number}*${number}` {
   const tier = String(resolution ?? '720p')
     .trim()
     .toLowerCase();
@@ -198,7 +195,6 @@ export const saveFileFromUrl = async (
   pollingFileData: any,
   pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
-
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   try {
     // Validate URL
@@ -354,7 +350,9 @@ export const saveFileFromBuffer = async (
       callback_data: callbackData,
     };
 
-    const fakeUrlForType = filename.toLowerCase().endsWith('.mp4') ? 'https://temp/video.mp4' : 'https://temp/image.jpg';
+    const fakeUrlForType = filename.toLowerCase().endsWith('.mp4')
+      ? 'https://temp/video.mp4'
+      : 'https://temp/image.jpg';
     let thumbnailUrl: string | undefined;
     if (isImageUrl(fakeUrlForType) || isVideoUrl(fakeUrlForType)) {
       const thumbnailBuffer = await generateThumbnail(buffer, fakeUrlForType);
@@ -526,71 +524,48 @@ export const ensureThumbnailForUserFile = async (fileId: string): Promise<void> 
     const originalFilename = fileUrl.split('/').pop()?.split('?')[0] || 'file';
     const filenameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '');
     const thumbnailFilename = `${filenameWithoutExt}_thumb.jpg`;
-    const thumbRes = await uploadFileToZipline(
-      thumbnailBuffer,
-      thumbnailFilename,
-      userProfile.zipline.token
-    );
+    const thumbRes = await uploadFileToZipline(thumbnailBuffer, thumbnailFilename, userProfile.zipline.token);
     if (!thumbRes.files?.[0]?.url) return;
 
-    await supabaseServerClient
-      .from('user_files')
-      .update({ thumbnail_url: thumbRes.files[0].url })
-      .eq('id', fileId);
+    await supabaseServerClient.from('user_files').update({ thumbnail_url: thumbRes.files[0].url }).eq('id', fileId);
   } catch (err: any) {
     console.error('[ensureThumbnailForUserFile]', fileId, err?.message ?? err);
   }
 };
 
-export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
+export const calculatePricingUtil = async (formValues: any, pricing: any) => {
   let cost: number = 0;
 
-  // Recursive helper function for multiFields lookup
   const lookupMultiFields = (config: any, formValues: any): number => {
-    // If we've reached a tokens value, return it
-    if (config.cost !== undefined) {
-      return config.cost;
+    const data = config?.values?.[formValues[config.field]] || config;
+    if (Number(data)) {
+      return Number(data);
     }
 
-    // If we have a field and values, continue the lookup
-    if (config.field && config.values) {
-      const fieldValue = formValues[config.field];
-
-      // Handle undefined, null, or missing values
-      if (fieldValue === undefined || fieldValue === null) {
-        return 0;
-      }
-
-      // Convert value to string for lookup (handles booleans, numbers, and strings)
-      const fieldKey = String(fieldValue);
-      const nextConfig = config.values[fieldKey];
-
-      // If no matching value found, return 0
-      if (!nextConfig) {
-        return 0;
-      }
-
-      // Recursively continue the lookup
-      return lookupMultiFields(nextConfig, formValues);
+    if (data?.type === 'multi') {
+      return Number(data.cost) * Number(formValues[data.field]);
     }
 
-    // If structure is invalid, return 0
+    if (data?.field) {
+      return lookupMultiFields(data, formValues);
+    }
+
     return 0;
   };
 
   switch (pricing.type) {
-    case "per":
+    case 'per':
       cost = pricing.cost;
       break;
-    case "perMulti":
+    case 'perMulti':
       if (formValues.num_images || formValues.max_images) {
         cost = pricing.cost * (formValues.num_images || formValues.max_images);
       }
       break;
-    case "singleField":
+    case 'singleField':
       cost = pricing.cost[formValues[pricing.field]] || 0;
       break;
-    case "singleFieldMultiplier": {
+    case 'singleFieldMultiplier': {
       // cost = price * fieldValue (e.g. price per unit × duration)
       const price = Number(pricing.cost);
       const fieldValue = formValues[pricing.field];
@@ -598,22 +573,17 @@ export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
       cost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
       break;
     }
-    case "multiFields":
+    case 'multiFields':
       if (pricing.cost) {
         cost = lookupMultiFields(pricing.cost, formValues);
       }
       break;
-    case "twoFieldLookup": {
+    case 'twoFieldLookup': {
       // Check if both fields exist (including false values)
       const field1Value = formValues[pricing.cost.field1];
       const field2Value = formValues[pricing.cost.field2];
 
-      if (
-        field1Value !== undefined &&
-        field1Value !== null &&
-        field2Value !== undefined &&
-        field2Value !== null
-      ) {
+      if (field1Value !== undefined && field1Value !== null && field2Value !== undefined && field2Value !== null) {
         // Convert values to strings for lookup (handles booleans, numbers, and strings)
         const field1Key = String(field1Value);
         const field2Key = String(field2Value);
@@ -622,7 +592,7 @@ export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
         // Support two shapes:
         // 1) Matrix lookup: prices[field1][field2] => tokens
         // 2) Multiplier lookup: prices[field1] => multiplier, tokens = field2 * multiplier
-        if (priceEntry && typeof priceEntry === "object" && !Array.isArray(priceEntry)) {
+        if (priceEntry && typeof priceEntry === 'object' && !Array.isArray(priceEntry)) {
           cost = priceEntry[field2Key] || 0;
         } else if (priceEntry !== undefined && priceEntry !== null) {
           const multiplier = Number(priceEntry);
@@ -638,7 +608,7 @@ export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
       }
       break;
     }
-    case "twoFieldMultiplierLookup": {
+    case 'twoFieldMultiplierLookup': {
       const field1Value = formValues[pricing.cost.field1];
       const field2Value = formValues[pricing.cost.field2];
       const multiplierValue = formValues[pricing.cost.multiplier];
@@ -657,7 +627,7 @@ export const  calculatePricingUtil = async (formValues: any, pricing: any) => {
         const multiplier = Number(multiplierValue);
 
         if (basePrice !== undefined && basePrice !== null && !Number.isNaN(multiplier)) {
-            cost = Number(basePrice) * multiplier;
+          cost = Number(basePrice) * multiplier;
         } else {
           cost = 0;
         }

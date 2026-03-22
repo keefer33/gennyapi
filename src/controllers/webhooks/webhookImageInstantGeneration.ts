@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import { createUserGenerationFile, updateUserGeneration } from '../../utils/getSupaData';
+import { createUserGenerationFile, updateUserGeneration } from '../generate/generateData';
 import { saveFileFromUrl } from '../../utils/generate';
 import { removeEmptyValues } from '../../utils/payloadUtils';
 

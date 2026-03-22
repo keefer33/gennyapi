@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getUserGeneration, getGenerationFileIds, updateUserGeneration } from '../../utils/getSupaData';
+import { getUserGeneration, getGenerationFileIds, updateUserGeneration } from '../generate/generateData';
 import { ensureThumbnailForUserFile } from '../../utils/generate';
 import { webhookCreateTask } from './webhookCreateTask';
 import { webhookCheckStatus } from './webhooksCheckStatus';

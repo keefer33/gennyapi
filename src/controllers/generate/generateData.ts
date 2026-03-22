@@ -1,10 +1,10 @@
-import { getServerClient, SupabaseServerClients } from './supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
 import {
   insertUserUsageLog,
   updateUserProfileUsageAmount,
   USAGE_LOG_TYPE_GENERATION_DEBIT,
   USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT,
-} from './utils';
+} from '../../utils/utils';
 
 /** Debit amount from inserted row: prefers usage_amount, then cost. */
 function generationDebitAmount(row: Record<string, unknown>): number {
@@ -53,9 +53,7 @@ async function applyGenerationUsageDebit(data: Record<string, unknown> | null | 
       usage_amount: amount,
       generation_id,
       transaction_id: null,
-      type_id: Number.isFinite(USAGE_LOG_TYPE_GENERATION_DEBIT)
-        ? USAGE_LOG_TYPE_GENERATION_DEBIT
-        : null,
+      type_id: Number.isFinite(USAGE_LOG_TYPE_GENERATION_DEBIT) ? USAGE_LOG_TYPE_GENERATION_DEBIT : null,
       meta,
     });
     await updateUserProfileUsageAmount({ user_id, type: 'debit', amount });
@@ -70,7 +68,7 @@ async function applyGenerationUsageDebit(data: Record<string, unknown> | null | 
  */
 async function applyGenerationErrorRefundIfNeeded(
   prior: Record<string, unknown> | null | undefined,
-  updated: Record<string, unknown> | null | undefined,
+  updated: Record<string, unknown> | null | undefined
 ): Promise<void> {
   if (!prior || !updated) return;
   if (updated.status !== 'error') return;
@@ -153,7 +151,7 @@ export const getModel = async (modelId: string) => {
 export const createUserGeneration = async (userGeneration: any) => {
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   //check if user has enough balance
-  const userBalance = await getUserTokens(userGeneration.user_id);
+  const userBalance = await getUserUsageBalance(userGeneration.user_id);
   if (userBalance < userGeneration.cost) {
     throw new Error('Insufficient balance');
   }
@@ -227,21 +225,21 @@ export const getGenerationFileIds = async (generationId: string): Promise<string
   return (data ?? []).map((r: { file_id: string }) => r.file_id).filter(Boolean);
 };
 
-export const getUserTokens = async (userId: string): Promise<number> => {
+export const getUserUsageBalance = async (userId: string): Promise<number> => {
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   const { data, error } = await supabaseServerClient
-  .from("user_profiles")
-  .select("token_balance")
-  .eq("user_id", userId)
-  .limit(1)
-  .single();
+    .from('user_profiles')
+    .select('usage_balance')
+    .eq('user_id', userId)
+    .limit(1)
+    .single();
 
   if (error) {
     console.error('Error getting user tokens:', error);
     throw new Error(error.message || 'Failed to get user tokens');
   }
 
-  return data?.token_balance ?? 0;
+  return data?.usage_balance ?? 0;
 };
 
 export const createNewUserGeneration = async (userGeneration: any) => {
@@ -261,21 +259,4 @@ export const createNewUserGeneration = async (userGeneration: any) => {
   await applyGenerationUsageDebit(data);
 
   return data;
-};
-
-export const getUserUsageBalance = async (userId: string): Promise<number> => {
-  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-  const { data, error } = await supabaseServerClient
-  .from("user_profiles")
-  .select("usage_balance")
-  .eq("user_id", userId)
-  .limit(1)
-  .single();
-
-  if (error) {
-    console.error('Error getting user usage balance:', error);
-    throw new Error(error.message || 'Failed to get user tokens');
-  }
-
-  return data?.usage_balance ?? 0;
 };
