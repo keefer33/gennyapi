@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { createUserGeneration, getModel } from '../../utils/getSupaData';
+import { createUserGeneration, getModel } from './generateData';
 import { createTask } from './createTask';
 import { customApiGenerate } from './customApiGenerate';
 import { calculatePricingUtil } from '../../utils/generate';
@@ -78,7 +78,7 @@ export const generate = async (req: Request, res: Response): Promise<void> => {
           api_id: model.api.id,
           cost: costWan,
           usage_amount: costWan,
-          });
+        });
         alibabaWanVideoGenerate(userGenerationWan.id, taskObject);
         res.status(200).json({ success: true, data: userGenerationWan });
         return;

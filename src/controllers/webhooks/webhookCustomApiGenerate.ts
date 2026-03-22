@@ -1,5 +1,5 @@
 import { saveFileFromUrl } from '../../utils/generate';
-import { createUserGenerationFile, updateUserGeneration } from '../../utils/getSupaData';
+import { createUserGenerationFile, updateUserGeneration } from '../generate/generateData';
 
 // Veo record info processing function (placeholder)
 const recordInfoProcess = async (pollingFileResponse: any, pollingFileData: any) => {

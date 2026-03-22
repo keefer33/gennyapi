@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from '../../utils/getSupaData';
+import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from '../generate/generateData';
 import { saveFileFromBuffer } from '../../utils/generate';
 
 /** LTX API keeps connection open until video is ready; allow long wait in background. */

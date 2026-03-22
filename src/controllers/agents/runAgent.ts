@@ -373,7 +373,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
           generation_id: null,
           transaction_id: null,
           meta: {
-            model_name: agent.model_name?.model_name ?? '',
+            model_name: agent.model_name?.meta?.name ?? agent.model_name?.model_name ?? '',
             type: "agent",
             usage: usagePayload,
           },

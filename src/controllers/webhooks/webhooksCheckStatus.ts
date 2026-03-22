@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { updateUserGeneration } from '../../utils/getSupaData';
+import { updateUserGeneration } from '../generate/generateData';
 import { klingCreateJWT } from '../../utils/klingCreateJWT';
 
 export const webhookCheckStatus = async (pollingFileData: any) => {
@@ -52,25 +52,27 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
       endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
     }
   }
-  const response = await axios.get(endpoint, {
-    headers: headers,
-    validateStatus: () => true,
-  }).catch(async (error) => {
-    console.log('error', JSON.stringify(error));
-    await updateUserGeneration({
-      id: pollingFileData.id,
-      status: 'error',
-      polling_response: error?.response?.data,
+  const response = await axios
+    .get(endpoint, {
+      headers: headers,
+      validateStatus: () => true,
+    })
+    .catch(async error => {
+      console.log('error', JSON.stringify(error));
+      await updateUserGeneration({
+        id: pollingFileData.id,
+        status: 'error',
+        polling_response: error?.response?.data,
+      });
+      throw new Error(error.response?.data?.message || error.message || 'Failed to generate');
     });
-    throw new Error(error.response?.data?.message || error.message || 'Failed to generate');
-  });
 
   if (response.status < 200 || response.status >= 300) {
     console.error('Error in videoGenerationsEndpoint:', response.statusText);
     status = 'error';
     pollingFileResponse = {
       code: response.status,
-      msg: response.statusText
+      msg: response.statusText,
     };
     await updateUserGeneration({
       id: pollingFileData.id,

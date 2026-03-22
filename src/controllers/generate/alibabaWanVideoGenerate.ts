@@ -1,5 +1,5 @@
 import { createGateway, experimental_generateVideo as generateVideo } from 'ai';
-import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from '../../utils/getSupaData';
+import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from './generateData';
 import { saveFileFromBuffer, normalizeAspectRatio, toWanResolution } from '../../utils/generate';
 
 /** Optional extended-timeout fetch for long-running video (requires optional dependency `undici`). */

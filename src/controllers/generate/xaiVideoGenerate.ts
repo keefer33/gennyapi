@@ -1,9 +1,5 @@
 import { createGateway, experimental_generateVideo as generateVideo } from 'ai';
-import {
-  getUserGeneration,
-  updateUserGeneration,
-  createUserGenerationFile,
-} from '../../utils/getSupaData';
+import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from './generateData';
 import { saveFileFromBuffer } from '../../utils/generate';
 
 /** Optional extended-timeout fetch for long-running video (requires optional dependency `undici`). */
@@ -34,21 +30,16 @@ function createGatewayWithOptionalExtendedTimeout(apiKey: string) {
 const XAI_VIDEO_MODEL_ID = 'xai/grok-imagine-video';
 
 /** Standard resolution format for generateVideo; xAI maps 1280x720→720p, 854x480→480p. */
-const resolution = (r: unknown): '1280x720' | '854x480' =>
-  r === '720p' ? '1280x720' : '854x480';
+const resolution = (r: unknown): '1280x720' | '854x480' => (r === '720p' ? '1280x720' : '854x480');
 
-export const xaiVideoGenerate = async (
-  generationId: string,
-  taskObject: any
-): Promise<void> => {
+export const xaiVideoGenerate = async (generationId: string, taskObject: any): Promise<void> => {
   try {
     console.log('[xaiVideoGenerate] start', { generationId, payloadKeys: Object.keys(taskObject.payload || {}) });
 
     const pollingFileData = await getUserGeneration(generationId);
     const payload = taskObject.payload || {};
 
-    const gatewayApiKey =
-      taskObject.api?.key?.key ?? process.env.AI_GATEWAY_API_KEY;
+    const gatewayApiKey = taskObject.api?.key?.key ?? process.env.AI_GATEWAY_API_KEY;
     if (!gatewayApiKey) {
       await updateUserGeneration({
         id: generationId,
@@ -81,9 +72,7 @@ export const xaiVideoGenerate = async (
 
     const aspectRatio = (payload.aspectRatio ?? '16:9') as string;
     const duration =
-      typeof payload.duration === 'number' && payload.duration >= 1 && payload.duration <= 15
-        ? payload.duration
-        : 5;
+      typeof payload.duration === 'number' && payload.duration >= 1 && payload.duration <= 15 ? payload.duration : 5;
     const resolutionVal = resolution(payload.resolution);
 
     const result = await generateVideo({
@@ -105,15 +94,8 @@ export const xaiVideoGenerate = async (
       return;
     }
 
-    const buffer = Buffer.from(
-      firstVideo.uint8Array ?? Buffer.from(firstVideo.base64 ?? '', 'base64')
-    );
-    const savedFile = await saveFileFromBuffer(
-      buffer,
-      'generated.mp4',
-      pollingFileData,
-      { source: 'xai' }
-    );
+    const buffer = Buffer.from(firstVideo.uint8Array ?? Buffer.from(firstVideo.base64 ?? '', 'base64'));
+    const savedFile = await saveFileFromBuffer(buffer, 'generated.mp4', pollingFileData, { source: 'xai' });
 
     await createUserGenerationFile({
       generation_id: generationId,
