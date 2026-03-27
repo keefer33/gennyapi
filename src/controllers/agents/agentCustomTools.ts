@@ -41,6 +41,7 @@ async function agentCalculateCostRequest(
     let data: AgentCalculateCostResponse | null = null;
     try {
       data = (await result.json()) as AgentCalculateCostResponse;
+      console.log("data", data);
     } catch {
       data = null;
     }
@@ -57,7 +58,8 @@ async function agentCalculateCostRequest(
       };
     }
 
-    const payload = data?.data;
+    const payload = data?.data; 
+    console.log("payload", payload);
     return {
       success: true,
       cost: payload?.cost ?? 0,
@@ -270,10 +272,12 @@ export default async function getAgentCustomTools(authToken: string) {
     const toolDescription = String(
       model?.api?.schema?.description ?? `Generate content using ${toolName} model.`
     );
+    const costHelperText = `Use ${toolName} as the toolName when calculating model costs.`;
+    const toolDescriptionWithCostHint = `${toolDescription} ${costHelperText}`;
     toolPromptMeta.push({
       slug: toolSlug,
       name: toolName,
-      description: toolDescription,
+      description: toolDescriptionWithCostHint,
     });
 
     // Composio requires `inputParams` be a `z.object(...)` schema.
@@ -282,7 +286,7 @@ export default async function getAgentCustomTools(authToken: string) {
     return [
       experimental_createTool(toolSlug, {
         name: model.name,
-        description: model?.api?.schema?.description,
+        description: toolDescriptionWithCostHint,
         inputParams,
         execute: async (input) => {
           return createGenerationRequest(authToken, model.id, input as Record<string, unknown>);
@@ -299,23 +303,40 @@ export default async function getAgentCustomTools(authToken: string) {
       experimental_createTool('CALCULATE_MODEL_COST', {
         name: 'Calculate Model Cost',
         description:
-          'Estimate the usage cost for a generation before running it or if asked for pricing estimate. toolName should be the schema name of the tool, not the function name. form_values should match the fields used for pricing (same shape as the generation tool inputs).',
+          'Estimate the usage cost for a generation before running it or if asked for pricing estimate.  If no values are provided then use default values for the tool. toolName should schema name of the tool. Pass form_values_json as a JSON string of key/value fields (same shape as the generation tool inputs), e.g. {"resolution":"1080p","duration":5}.',
         inputParams: z.object({
           toolName: z
             .string()
             .describe('toolName should be the schema name of the tool, not the function name.'),
-          form_values: z
-            .record(z.string(), z.unknown())
-            .describe('Key/value form fields used to compute cost (e.g. resolution, duration, num_images)'),
+          // Composio rejects z.record() (object with only additionalProperties). Use JSON string instead.
+          form_values_json: z
+            .string()
+            .describe(
+              'JSON object string of pricing fields, e.g. {"resolution":"1080p","duration":5} — same keys as the generation tool inputs'
+            ),
         }),
         execute: async ({
           toolName,
-          form_values,
+          form_values_json,
         }: {
           toolName: string;
-          form_values: Record<string, unknown>;
+          form_values_json: string;
         }): Promise<Record<string, unknown>> => {
-          return agentCalculateCostRequest(authToken, toolName, form_values);
+          let formValues: Record<string, unknown> = {};
+          try {
+            const parsed = JSON.parse(form_values_json) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              formValues = parsed as Record<string, unknown>;
+            } else {
+              return {
+                success: false,
+                message: 'form_values_json must parse to a JSON object',
+              };
+            }
+          } catch {
+            return { success: false, message: 'Invalid JSON in form_values_json' };
+          }
+          return agentCalculateCostRequest(authToken, toolName, formValues);
         },
       }),
       experimental_createTool('GET_GENERATION_STATUS', {
@@ -358,7 +379,7 @@ export default async function getAgentCustomTools(authToken: string) {
       slug: 'CALCULATE_MODEL_COST',
       name: 'Calculate Model Cost',
       description:
-        'Estimate cost from form_values and toolName (exact models.name) before starting a generation.',
+        'Estimate cost from toolName (schema name of the tool) and form_values_json (JSON string of tools input fields) before starting a generation.',
     },
     {
       slug: 'GET_GENERATION_STATUS',

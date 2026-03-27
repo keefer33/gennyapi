@@ -536,18 +536,44 @@ export const ensureThumbnailForUserFile = async (fileId: string): Promise<void> 
 export const calculatePricingUtil = async (formValues: any, pricing: any) => {
   let cost: number = 0;
 
-  const lookupMultiFields = (config: any, formValues: any): number => {
-    const data = config?.values?.[formValues[config.field]] || config;
-    if (Number(data)) {
-      return Number(data);
-    }
+  const lookupMultiFields = (config: any, formValuesInput: any): number => {
+    const safeFormValues = formValuesInput && typeof formValuesInput === 'object' ? formValuesInput : {};
+    let current = config;
+    let depth = 0;
+    const maxDepth = 25;
+    const seen = new Set<any>();
 
-    if (data?.type === 'multi') {
-      return Number(data.cost) * Number(formValues[data.field]);
-    }
+    while (current && depth < maxDepth) {
+      // Protect against circular references / self-referential config.
+      if (typeof current === 'object') {
+        if (seen.has(current)) return 0;
+        seen.add(current);
+      }
 
-    if (data?.field) {
-      return lookupMultiFields(data, formValues);
+      const field = typeof current?.field === 'string' ? current.field : undefined;
+      const selectedValue = field ? safeFormValues[field] : undefined;
+      const next = selectedValue !== undefined ? current?.values?.[selectedValue] : undefined;
+      const data = next ?? current;
+
+      const numeric = Number(data);
+      if (Number.isFinite(numeric) && numeric !== 0) {
+        return numeric;
+      }
+
+      if (data?.type === 'multi') {
+        const unitCost = Number(data.cost);
+        const multiplier = Number(safeFormValues[data.field]);
+        if (!Number.isFinite(unitCost) || !Number.isFinite(multiplier)) return 0;
+        return unitCost * multiplier;
+      }
+
+      // No deeper branch available or malformed branch: stop safely.
+      if (!data || typeof data !== 'object' || !data.field) {
+        return 0;
+      }
+
+      current = data;
+      depth += 1;
     }
 
     return 0;
