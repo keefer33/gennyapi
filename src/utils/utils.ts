@@ -31,18 +31,14 @@ export type UpdateUsageAmountInput = {
 };
 
 /** `usage_log_types.id` for generation / AI usage debits (seed: debit / ai_modal_usage). */
-export const USAGE_LOG_TYPE_GENERATION_DEBIT = Number(
-  process.env.USAGE_LOG_TYPE_GENERATION_DEBIT ?? 3,
-);
+export const USAGE_LOG_TYPE_GENERATION_DEBIT = Number(process.env.USAGE_LOG_TYPE_GENERATION_DEBIT ?? 3);
 
 /** `usage_log_types.id` for Stripe deposit credits (seed: credit / deposit, id 2). */
-export const USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT = Number(
-  process.env.USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT ?? 2,
-);
+export const USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT = Number(process.env.USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT ?? 2);
 
 /** `usage_log_types.id` for refund credit when a generation moves to `error` (replaces DB trigger; default id 4). */
 export const USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT = Number(
-  process.env.USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT ?? 4,
+  process.env.USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT ?? 4
 );
 
 export function getUserId(req: Request): string {

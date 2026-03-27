@@ -19,15 +19,11 @@ function getUserId(req: Request): string {
 
 // ---------- Route handlers ----------
 
-/** POST /chats – create a new chat. Body: { agent_id, metadata? } */
+/** POST /chats – create a new chat. Body: { chat_name? } */
 export const createChat = async (req: Request, res: Response) => {
   const userId = getUserId(req);
-  const { agent_id, metadata } = req.body as { agent_id?: string; metadata?: Record<string, unknown> };
-  if (!agent_id || typeof agent_id !== 'string') {
-    res.status(400).json({ error: 'agent_id is required' });
-    return;
-  }
-  const result = await handleCreateChat(userId, agent_id, metadata ?? {});
+  const { chat_name } = req.body as { chat_name?: string };
+  const result = await handleCreateChat(userId, chat_name);
   if (result.error) {
     res.status(400).json({ error: result.error });
     return;
@@ -35,11 +31,10 @@ export const createChat = async (req: Request, res: Response) => {
   res.json(result.data ?? []);
 };
 
-/** GET /chats – list chats for the user. Query: agent_id? */
+/** GET /chats – list chats for the user. */
 export const listChats = async (req: Request, res: Response) => {
   const userId = getUserId(req);
-  const agent_id = req.query.agent_id as string | undefined;
-  const result = await handleListChats(userId, agent_id);
+  const result = await handleListChats(userId);
   if (result.error) {
     res.status(400).json({ error: result.error });
     return;
@@ -63,16 +58,16 @@ export const getChat = async (req: Request, res: Response) => {
   res.json(result.data);
 };
 
-/** PATCH /chats/:chat_id – update chat metadata */
+/** PATCH /chats/:chat_id – update chat_name */
 export const updateChat = async (req: Request, res: Response) => {
   const userId = getUserId(req);
   const { chat_id } = req.params;
-  const { metadata } = req.body as { metadata?: Record<string, unknown> };
+  const { chat_name } = req.body as { chat_name?: string };
   if (!chat_id) {
     res.status(400).json({ error: 'chat_id is required' });
     return;
   }
-  const result = await handleUpdateChat(userId, chat_id, metadata ?? {});
+  const result = await handleUpdateChat(userId, chat_id, chat_name ?? '');
   if (result.error) {
     const status = result.error === 'Chat not found' ? 404 : 400;
     res.status(status).json({ error: result.error });
