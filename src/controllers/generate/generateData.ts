@@ -260,3 +260,96 @@ export const createNewUserGeneration = async (userGeneration: any) => {
 
   return data;
 };
+
+export interface GenerationModel {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  slug: string;
+  generation_type: string;
+  meta?: { tags?: string[] };
+  config: {
+    api: string;
+    cost_per_generation?: number;
+    pricing?: any;
+  };
+  schema: any;
+  brands?: {
+    id: string;
+    name: string;
+    logo: string;
+  };
+  api?: any;
+}
+
+/**
+ * Shared DB call for generation models listing.
+ * Used by `/generate/models` and can be reused by other controllers.
+ */
+export const fetchGenerationModelsFromDb = async (): Promise<GenerationModel[]> => {
+  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('models')
+    .select(`
+      *,
+      brands (
+        id,
+        name,
+        logo
+      ),
+      api(schema,pricing)
+    `)
+    .neq('status', false)
+    .order('order', { ascending: true, nullsFirst: false });
+
+  if (error) {
+    console.error('Error fetching generation models:', error);
+    throw new Error(error.message || 'Error fetching generation models');
+  }
+
+  const validModels = (data || []).filter(
+    (model: any) => model && model.id && model.name && model.generation_type
+  );
+
+  return validModels
+    .sort((a: any, b: any) => {
+      const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+      const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    })
+    .map((m: any) => m as GenerationModel);
+};
+
+/** Look up a single generation model by its `models.name` (for agent tool cost preview). */
+export const fetchGenerationModelByName = async (name: string): Promise<GenerationModel | null> => {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) return null;
+
+  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('models')
+    .select(
+      `
+      *,
+      brands (
+        id,
+        name,
+        logo
+      ),
+      api(schema,pricing)
+    `
+    )
+    .eq('name', trimmed)
+    .neq('status', false)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[fetchGenerationModelByName]', error);
+    return null;
+  }
+  if (!data || !(data as { name?: string }).name) return null;
+  return data as GenerationModel;
+};

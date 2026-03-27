@@ -43,7 +43,7 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    (req as any).user = { id: userId };
+    (req as any).user = { id: userId, authToken: userToken };
     next();
   } catch (error) {
     console.error('[auth] Error:', error);

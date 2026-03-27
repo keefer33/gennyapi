@@ -1,6 +1,7 @@
 import express from 'express';
 import { generate } from './generate';
 import { calculateCost } from './calculateCost';
+import { agentCalculateCost } from './agentCalculateCost';
 import { authenticateUser } from '../../middlewares/auth';
 import { getGenerationModels } from './generationsModels';
 import { listUserGenerations } from './listUserGenerations';
@@ -13,6 +14,7 @@ const router = express.Router();
 router.get('/models', getGenerationModels);
 router.post('/generate', authenticateUser, generate);
 router.post('/calculate-cost', authenticateUser, calculateCost);
+router.post('/agent-calulate-cost', authenticateUser, agentCalculateCost);
 router.get('/list', authenticateUser, listUserGenerations);
 router.get('/by-field', authenticateUser, getUserGenerationByField);
 router.get('/:generationId', authenticateUser, getUserGeneration);

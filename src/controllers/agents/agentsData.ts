@@ -152,6 +152,22 @@ export const handleGetUserAgent = async (userId: string, agent_id: string) => {
   return { data: data };
 };
 
+/** Resolve a model (and nested api config) directly by ai_models.model_name. */
+export const handleGetAgentModelByName = async (model_name: string) => {
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from(AGENT_MODELS_TABLE)
+    .select('id, model_name, meta, api_id(*)')
+    .eq('model_name', model_name)
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message || 'Model not found' };
+  }
+
+  return { data };
+};
+
 export const handleUpdateUserAgent = async (
   userId: string,
   agent_id: string,

@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { streamText, createGateway, stepCountIs, type ModelMessage } from 'ai';
-import { Composio } from '@composio/core';
-import { VercelProvider } from '@composio/vercel';
 import { saveAgentGeneratedFile } from '../../utils/generate';
 import { handleListChatMessages, saveRunChatMessages } from '../chats/chatsData';
-import { handleGetUserAgent, type UserAgentWithModel, type AgentModelApiRow } from './agentsData';
+import { handleGetAgentModelByName, type AgentModelApiRow } from './agentsData';
 import { messageRowsToModelMessages } from '../chats/chatsUtils';
 import { getUserId, insertUserUsageLog, updateUserProfileUsageAmount } from '../../utils/utils';
+import { Composio } from '@composio/core';
+import { VercelProvider } from '@composio/vercel';
+import getAgentCustomTools from './agentCustomTools';
 
 // ---------------------------------------------------------------------------
 // Types (reused across runChat)
@@ -15,26 +16,36 @@ import { getUserId, insertUserUsageLog, updateUserProfileUsageAmount } from '../
 /** Request body for POST run-chat. */
 interface RunChatBody {
   chat_id?: string | null;
-  agent_id?: string;
+  model_name?: string;
+  settings?: {
+    systemPrompt?: string;
+  };
   prompt?: string;
+  attachments?: Array<{
+    url?: string;
+    type?: string;
+    name?: string;
+    thumbnail_url?: string | null;
+  }>;
 }
 
-/** Agent config.settings shape (tools, systemPrompt, etc.). */
-interface AgentSettings {
-  tools?: string[] | Record<string, string[]>;
-  mcpServerIds?: string[];
-  systemPrompt?: string;
-}
+type ChatAttachmentInput = {
+  url: string;
+  type?: string;
+  name?: string;
+  thumbnail_url?: string | null;
+};
 
-/** Agent config shape. */
-interface AgentConfig {
-  settings?: AgentSettings;
-}
-
-/** One message in the conversation (user or assistant). */
+/** User message content part aligned with AI SDK user image parts: `{ type: 'image', image: url }`. */
 export type ChatMessage = {
-  role: 'user' | 'assistant';
-  content: Array<{ type?: string; text?: string }> | string;
+  role: 'user' | 'assistant' | 'system';
+  content:
+    | Array<
+        | { type: 'text'; text: string }
+        | { type: 'image'; image: string }
+        | { type: string; text?: string; image?: string }
+      >
+    | string;
 };
 
 /** Message row shape returned from handleListChatMessages. */
@@ -58,10 +69,10 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getUserId(req);
     const body = (req.body || {}) as RunChatBody;
-    const { chat_id, agent_id, prompt } = body;
+    const { chat_id, model_name, settings, prompt, attachments } = body;
 
-    if (!agent_id || typeof agent_id !== 'string') {
-      res.status(400).json({ error: 'agent_id is required' });
+    if (!model_name || typeof model_name !== 'string') {
+      res.status(400).json({ error: 'model_name is required' });
       return;
     }
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -69,14 +80,21 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const agentResult = await handleGetUserAgent(userId, agent_id);
-    if ('error' in agentResult) {
-      res.status(404).json({ error: agentResult.error });
+    const modelResult = await handleGetAgentModelByName(model_name);
+    if ('error' in modelResult) {
+      res.status(404).json({ error: modelResult.error });
       return;
     }
-    const agent = agentResult.data as unknown as UserAgentWithModel;
-    const modelId = agent.model_name?.api_id?.schema?.model;
-    const apiType: ApiType | null = agent.model_name?.api_id?.api_type ?? null;
+    const modelRow = modelResult.data as {
+      model_name: string;
+      api_id?: { schema?: Record<string, unknown>; api_type?: string | null; pricing?: Record<string, unknown> } | null;
+    };
+    const modelId = modelRow.api_id?.schema?.model as string | undefined;
+    if (!modelId) {
+      res.status(400).json({ error: 'Selected model has no gateway model configured' });
+      return;
+    }
+    const apiType: ApiType | null = (modelRow.api_id?.api_type as ApiType | null) ?? null;
 
     //TODO: Implement the apiType to allow for different apis to be used in the future
     switch (apiType) {
@@ -90,6 +108,30 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         break;
     }
 
+    //leave this here, it connects users to the composio tools
+    const { gennyBotAigenTools, systemPrompt: gennyBotSystemPrompt } = await getAgentCustomTools(
+      (req as any).user.authToken
+    );
+    let allTools: Record<string, unknown> = {};
+    if (process.env.COMPOSIO_API_KEY) {
+      try {
+        const composio = new Composio({
+          apiKey: process.env.COMPOSIO_API_KEY,
+          provider: new VercelProvider(),
+        });
+        const session = await composio.create(userId, {
+          experimental: {
+            customToolkits: [gennyBotAigenTools],
+          },
+        });
+        const composioTools = await session.tools();
+        allTools = (composioTools ?? {}) as Record<string, unknown>;
+      } catch (composioErr) {
+        console.error('[runChat] Composio session/tools error:', composioErr);
+      }
+    }
+    const hasTools = Object.keys(allTools).length > 0;
+
     let sessionMessages: ChatMessage[] = [];
     if (chat_id) {
       const msgResult = await handleListChatMessages(userId, chat_id, { order: 'asc' });
@@ -98,37 +140,23 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const messages: ChatMessage[] = [...sessionMessages, { role: 'user', content: prompt.trim() }];
+    type NormalizedAttachment = ChatAttachmentInput;
+    const normalizedAttachments = (attachments ?? []).filter(
+      (a): a is NormalizedAttachment => typeof a?.url === 'string' && a.url.trim().length > 0
+    );
+    const attachmentLines = normalizedAttachments.map(a => `- ${String(a.type ?? 'file')} - ${a.url}`);
+    const attachmentText = attachmentLines.length > 0 ? `\n\nAttached files:\n${attachmentLines.join('\n')}` : '';
+    const messages: ChatMessage[] = [...sessionMessages];
+    messages.push({ role: 'user', content: [{ type: 'text', text: `${prompt.trim()}${attachmentText}` }] });
 
-    const config = (agent.config ?? null) as AgentConfig | null;
-    const settings: AgentSettings = config?.settings ?? {};
-    const toolsConfig = settings.tools;
-    const systemPrompt =
+    const baseSystemPrompt =
       typeof settings.systemPrompt === 'string' && settings.systemPrompt.trim()
         ? settings.systemPrompt.trim()
         : 'You are a helpful assistant.';
+    const systemPrompt = `${baseSystemPrompt}\n\n${gennyBotSystemPrompt}`;
 
     const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
     const model = gateway(modelId as string);
-
-    let allTools: Record<string, unknown> = {};
-
-    if (toolsConfig) {
-      if (process.env.COMPOSIO_API_KEY) {
-        try {
-          const composio = new Composio({
-            apiKey: process.env.COMPOSIO_API_KEY,
-            provider: new VercelProvider(),
-          });
-          const session = await composio.create(userId, { tools: toolsConfig as Record<string, string[]> });
-          const composioTools = await session.tools();
-          allTools = (composioTools ?? {}) as Record<string, unknown>;
-        } catch (composioErr) {
-          console.error('[runChat] Composio session/tools error:', composioErr);
-        }
-      }
-    }
-    const hasTools = Object.keys(allTools).length > 0;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -145,13 +173,13 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         console.error('[runChat] writeSSE:', e);
       }
     };
-    console.log('messages', messages);
+
     const result = streamText({
       model,
       system: systemPrompt,
       messages: messages as ModelMessage[],
-      ...(hasTools ? { tools: allTools as Parameters<typeof streamText>[0]['tools'] } : {}),
-      ...(hasTools ? { stopWhen: stepCountIs(5) } : {}),
+      tools: hasTools ? (allTools as Parameters<typeof streamText>[0]['tools']) : {},
+      stopWhen: stepCountIs(50),
       onError({ error }) {
         if (writeSSE) writeSSE({ type: 'error', error: (error as Error).message ?? 'Streaming error' });
       },
@@ -175,14 +203,15 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     }
     function flushReasoning() {
       if (currentReasoning.length > 0) {
-        collectedParts.push({ type: 'reasoning', text: currentReasoning });
+        //turning off saving reasoning for now
+        //collectedParts.push({ type: 'reasoning', text: currentReasoning });
         currentReasoning = '';
       }
     }
 
     try {
       for await (const part of result.fullStream) {
-        //console.log('[runChat] Part:', part);
+        console.log('[runChat] Part:', part.type);
         switch (part.type) {
           case 'start':
             if (writeSSE) writeSSE({ type: 'stream_status', status: 'start' });
@@ -191,26 +220,29 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
             if (writeSSE) writeSSE({ type: 'stream_status', status: 'finish' });
             break;
           case 'reasoning-start':
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'reasoning' });
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'reasoning-start' });
             break;
           case 'reasoning-end':
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'reasoning_end' });
+            flushReasoning();
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'reasoning-end' });
             break;
           case 'tool-input-start': {
             const toolName = (part as { toolName?: string }).toolName;
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'tool_input', tool_name: toolName ?? '' });
+            if (writeSSE)
+              writeSSE({ type: 'stream_status', status: 'tool-input-start', tool_name: toolName ?? '' });
             break;
           }
           case 'tool-input-end': {
             const toolName = (part as { toolName?: string }).toolName;
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'tool_input_end', tool_name: toolName ?? '' });
+            if (writeSSE)
+              writeSSE({ type: 'stream_status', status: 'tool-input-end', tool_name: toolName ?? '' });
             break;
           }
           case 'start-step':
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'step_start' });
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'start-step' });
             break;
           case 'finish-step':
-            if (writeSSE) writeSSE({ type: 'stream_status', status: 'step_finish' });
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'finish-step' });
             break;
           case 'text-delta':
             if (part.text) {
@@ -224,7 +256,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
             if (text) {
               flushText();
               currentReasoning += text;
-              if (writeSSE) writeSSE({ type: 'text', content: text });
+              if (writeSSE) writeSSE({ type: 'reasoning', content: text });
             }
             break;
           }
@@ -250,7 +282,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
                     : '.bin';
                 const filename = `chat-generated-${Date.now()}-${generatedFileIndex++}${ext}`;
                 const saveResult = await saveAgentGeneratedFile(buffer, filename, userId, {
-                  agent_id: agent_id,
+                  agent_id: model_name,
                 });
                 if (saveResult?.file_url) {
                   urlToSend = saveResult.file_url;
@@ -269,6 +301,11 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
             const tc = part as { toolCallId?: string; toolName?: string; input?: unknown };
             if (tc.toolName) {
               if (writeSSE) {
+                writeSSE({
+                  type: 'stream_status',
+                  status: 'tool-call',
+                  tool_name: tc.toolName,
+                });
                 writeSSE({
                   type: 'tool_call',
                   tool_name: tc.toolName,
@@ -293,6 +330,11 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
               isError?: boolean;
             };
             if (writeSSE) {
+              writeSSE({
+                type: 'stream_status',
+                status: 'tool-result',
+                tool_name: tr.toolName ?? '',
+              });
               writeSSE({
                 type: 'tool_result',
                 tool_name: tr.toolName,
@@ -329,11 +371,10 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     }
 
     const usage = await result.usage;
-    console.log('usage', usage);
     const gatewayData = await result.providerMetadata;
     const rawCost = gatewayData?.gateway?.cost ?? 0;
     // Profit margin is stored on the selected model's API pricing config as a percent (e.g. 20 => +20%).
-    const modelCostPmRaw = agent.model_name?.api_id?.pricing?.pm ?? 20;
+    const modelCostPmRaw = modelRow.api_id?.pricing?.pm ?? 20;
     const modelCostPm = Number(modelCostPmRaw);
     const profitMultiplier = Number.isFinite(modelCostPm) ? 1 + modelCostPm / 100 : 1.2;
     const totalCost = Math.ceil(Number(rawCost) * profitMultiplier * 10000) / 10000;
@@ -351,7 +392,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     if (chat_id) {
       const userMsg = {
         role: 'user' as const,
-        content: [{ type: 'text' as const, text: prompt.trim() }],
+        content: [{ type: 'text' as const, text: prompt.trim() }, ...normalizedAttachments],
       };
       const assistantMsg = {
         role: 'assistant' as const,
@@ -373,8 +414,8 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
           generation_id: null,
           transaction_id: null,
           meta: {
-            model_name: agent.model_name?.meta?.name ?? agent.model_name?.model_name ?? '',
-            type: "agent",
+            model_name: modelRow.model_name ?? '',
+            type: 'agent',
             usage: usagePayload,
           },
         });
