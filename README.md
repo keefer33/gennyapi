@@ -1,189 +1,223 @@
 # GennyAPI
 
-Backend API for [Genny.bot](https://genny.bot) - An AI-powered content generation platform.
+## 🛠️ Overview
 
-GennyAPI provides a comprehensive REST API for handling AI content generation, payment processing, file management, and user authentication.
+GennyAPI is the backend for [Genny.bot](https://genny.bot). It exposes a REST API for AI generation, Stripe payments, file handling (Zipline), agents, chats, tools (Composio-style integrations), support tickets, and user profiles.
 
 ## 🌐 Website
 
-Visit [https://genny.bot](https://genny.bot) to use the application.
+[https://genny.bot](https://genny.bot)
 
-## 🚀 Setup
+## ⭐ Features
 
-### Prerequisites
+- 🎨 **Generations** — Model listing, cost calculation, create/list/delete user generations, async status via webhooks
+- 💳 **Stripe** — Payment intents and confirmation
+- 🤖 **Agents** — Prompt enhancement, model listing, CRUD for user agents, agent runs
+- 💬 **Chats** — Chat CRUD, messages, streaming runs
+- 🧰 **Tools** — Toolkit catalog, per-tool metadata, OAuth connection helpers
+- 👤 **User** — Profile, API key, transactions, usage log, files, tags
+- 🎫 **Support** — Tickets and replies
+- 📎 **Zipline** — Registration, upload, user file delete, user get/update
 
-- Node.js (v18 or higher)
-- npm or yarn
-- PostgreSQL database (via Supabase)
-- Stripe account (for payments)
-- OpenAI API key (for prompt enhancement)
-- **ffmpeg** (optional, for video thumbnail generation): Install and add to PATH so video outputs get a thumbnail in the UI. Without it, video thumbnails are skipped and the app still runs.
-  - **Windows:** `winget install ffmpeg` or [download](https://ffmpeg.org/download.html) and add the `bin` folder to PATH.
-  - **macOS:** `brew install ffmpeg`
-  - **Linux:** `apt install ffmpeg` / `yum install ffmpeg` (or your distro’s package manager).
-
-### Installation
-
-1. Clone the repository:
-
-```bash
-git clone <repository-url>
-cd gennyapi
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Create a `.env` file in the root directory:
-
-```env
-PORT=3000
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-STRIPE_SECRET_KEY=your_stripe_secret_key
-OPENAI_API_KEY=your_openai_api_key
-```
-
-4. Run in development mode:
-
-```bash
-npm run dev
-```
-
-5. Build for production:
-
-```bash
-npm run build
-npm start
-```
-
-## 📚 API Endpoints
-
-### Health Check
-
-- `GET /health` - Health check endpoint
-  - Returns server status and timestamp
-
-### Stripe (Payment Processing)
-
-- `POST /stripe/create-payment-intent` - Create a payment intent
-  - Requires authentication
-  - Body: `{ amount: number }`
-- `POST /stripe/confirm-payment` - Confirm payment and add tokens
-  - Requires authentication
-  - Body: `{ paymentIntentId: string, amount: number }`
-
-### Generations (AI Content Generation)
-
-- `POST /generations/generate` - Generate AI content (images/videos)
-  - Requires authentication
-  - Body: `{ model_id: string, payload: object, tokensCost: number }`
-
-### Webhooks
-
-- `POST /webhooks/polling` - Webhook polling endpoint
-  - Handles status updates for async operations
-
-### Zipline (File Management)
-
-- `POST /zipline/auth/register` - Register a new Zipline user
-  - Body: `{ email: string, password: string, username: string }`
-
-- `POST /zipline/upload` - Upload a file
-  - Requires authentication
-  - Multipart form data
-
-- `POST /zipline/user/files/delete` - Delete a user file
-  - Requires authentication
-  - Body: `{ fileId: string }`
-
-- `GET /zipline/user/get` - Get user information
-  - Requires authentication
-
-- `PATCH /zipline/user/update` - Update user information
-  - Requires authentication
-  - Body: `{ ...userFields }`
-
-### Agents (AI Prompt Enhancement)
-
-- `POST /agents/enhance/prompt` - Enhance a prompt using AI
-  - Requires authentication
-  - Body: `{ prompt: string, generationType: 'image' | 'video' }`
-  - Returns: Streaming text response with enhanced prompt
-  - Supports `prompt: 'random'` for random prompt generation
-
-### User Management
-
-- `POST /user/create-user` - Create a new user profile
-  - Body: `{ user_id: string, zipline: object, username: string, email: string }`
-  - Automatically applies NEWUSER promotion if available
-
-## 🛠️ Development
-
-### Available Scripts
-
-- `npm run dev` - Start development server with auto-reload (nodemon)
-- `npm run dev:watch` - Same as `dev` (alias)
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm start` - Run compiled JavaScript (production)
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors automatically
-- `npm run format` - Format code with Prettier
-- `npm run format:check` - Check code formatting
-- `npm run type-check` - Type check without emitting files
-
-### Project Structure
+## 📁 Project structure
 
 ```
 src/
-├── controllers/        # Route handlers organized by feature
-│   ├── agents/        # AI prompt enhancement
-│   ├── generate/      # Content generation
-│   ├── stripe/        # Payment processing
-│   ├── user/          # User management
-│   ├── webhooks/      # Webhook handlers
-│   └── zipline/       # File management
-├── middlewares/       # Express middlewares (auth, etc.)
-├── utils/             # Utility functions
-├── routes.ts          # Main router configuration
-└── index.ts           # Application entry point
+├── controllers/
+│   ├── agents/
+│   ├── generate/
+│   ├── stripe/
+│   ├── user/
+│   ├── chats/
+│   ├── tools/
+│   ├── webhooks/
+│   ├── zipline/
+│   ├── brands/
+│   ├── promotions/
+│   └── support/
+├── middlewares/
+├── utils/
+├── routes.ts
+└── index.ts
 ```
 
 ## 🔐 Authentication
 
-Most endpoints require authentication via the `authenticateUser` middleware. The authentication token should be included in the request headers:
+Most routes use `authenticateUser`. Send:
 
-```
+```http
 Authorization: Bearer <token>
 ```
 
-## 🌍 Environment Variables
+## 📡 Endpoints
 
-| Variable                    | Description               | Required           |
-| --------------------------- | ------------------------- | ------------------ |
-| `PORT`                      | Server port               | No (default: 3000) |
-| `SUPABASE_URL`              | Supabase project URL      | Yes                |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes                |
-| `STRIPE_SECRET_KEY`         | Stripe secret API key     | Yes                |
-| `OPENAI_API_KEY`            | OpenAI API key            | Yes                |
+Base path is the API root (e.g. `https://<host>`). All paths below are appended to that root.
 
-## 📦 Dependencies
+### ✅ Health
 
-### Core
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/health` | No | Health check |
 
-- **express** - Web framework
-- **typescript** - Type safety
-- **@supabase/supabase-js** - Database and auth
-- **stripe** - Payment processing
-- **openai** - AI prompt enhancement
+### 💳 Stripe
 
-### Utilities
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/stripe/create-payment-intent` | Yes | Create payment intent |
+| `POST` | `/stripe/confirm-payment` | Yes | Confirm payment and credit tokens |
 
-- **axios** - HTTP client
-- **multer** - File upload handling
-- **fluent-ffmpeg** - Video processing
-- **sharp** - Image processing
-- **cors** - Cross-origin resource sharing
+### 🪝 Webhooks
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/webhooks/polling` | No | Polling / status updates for async jobs |
+
+### 🎨 Generations
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/generations/models` | No | List generation models |
+| `POST` | `/generations/generate` | Yes | Start a generation |
+| `POST` | `/generations/calculate-cost` | Yes | Estimate token cost |
+| `POST` | `/generations/agent-calulate-cost` | Yes | Agent-specific cost estimate |
+| `GET` | `/generations/list` | Yes | List user generations |
+| `GET` | `/generations/by-field` | Yes | Filter generations by field |
+| `GET` | `/generations/:generationId` | Yes | Get one generation |
+| `DELETE` | `/generations/:generationId` | Yes | Delete a generation |
+
+### 📎 Zipline
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/zipline/auth/register` | No | Register Zipline user |
+| `POST` | `/zipline/upload` | Yes | Multipart upload |
+| `POST` | `/zipline/user/files/delete` | Yes | Delete a user file |
+| `GET` | `/zipline/user/get` | Yes | Get Zipline user |
+| `PATCH` | `/zipline/user/update` | Yes | Update Zipline user |
+
+### 🤖 Agents
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/agents` | No | List agent models |
+| `POST` | `/agents/enhance/prompt` | Yes | Stream prompt enhancement |
+| `POST` | `/agents/run` | Yes | Run an agent |
+| `POST` | `/agents/user-agents` | Yes | Create user agent |
+| `GET` | `/agents/user-agents` | Yes | List user agents |
+| `GET` | `/agents/user-agents/:agent_id` | Yes | Get user agent |
+| `PATCH` | `/agents/user-agents/:agent_id` | Yes | Update user agent |
+| `DELETE` | `/agents/user-agents/:agent_id` | Yes | Delete user agent |
+
+### 💬 Chats
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/chats` | Yes | List chats |
+| `POST` | `/chats` | Yes | Create chat |
+| `POST` | `/chats/run` | Yes | Run chat (streaming) |
+| `GET` | `/chats/chat/:chat_id` | Yes | Get chat |
+| `PATCH` | `/chats/chat/:chat_id` | Yes | Update chat |
+| `DELETE` | `/chats/chat/:chat_id` | Yes | Delete chat |
+| `GET` | `/chats/chat/:chat_id/messages` | Yes | List messages |
+| `POST` | `/chats/chat/:chat_id/messages` | Yes | Create message |
+| `GET` | `/chats/chat/:chat_id/messages/:message_id` | Yes | Get message |
+| `DELETE` | `/chats/chat/:chat_id/messages/:message_id` | Yes | Delete message |
+
+### 🧰 Tools (integrations catalog)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/tools/auth-configs` | Yes | OAuth / auth configs |
+| `GET` | `/tools/connected-accounts` | Yes | List connected accounts |
+| `POST` | `/tools/connected-accounts/link` | Yes | Create connect link |
+| `DELETE` | `/tools/connected-accounts/:id` | Yes | Remove connected account |
+| `GET` | `/tools/tools` | Yes | List tools |
+| `GET` | `/tools/tools/:tool_slug` | Yes | Tool by slug |
+| `GET` | `/tools/toolkits` | Yes | List toolkits |
+| `GET` | `/tools/toolkits/categories` | Yes | Toolkit categories |
+| `GET` | `/tools/toolkits/:slug` | Yes | Toolkit by slug |
+
+### 👤 User
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/user/profile` | Yes | Profile row (`Authorization: Bearer` Supabase access token) |
+| `PATCH` | `/user/profile` | Yes | Update profile (app JWT from `create-token`) |
+| `POST` | `/user/create-user` | No | Create `user_profiles` row (e.g. after signup) |
+| `POST` | `/user/create-token` | Yes | Mint app JWT (`Authorization: Bearer` Supabase access token) |
+| `POST` | `/user/api-key` | Yes | Persist app JWT on profile (Supabase access token) |
+| `GET` | `/user/transactions` | Yes | List transactions |
+| `GET` | `/user/usage-log` | Yes | Usage log |
+
+#### 📄 User files (`/user/files`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/user/files/by-path` | Yes | File by path |
+| `GET` | `/user/files/` | Yes | List files |
+| `POST` | `/user/files/upload` | Yes | Upload |
+| `POST` | `/user/files/` | Yes | Create file record |
+| `DELETE` | `/user/files/:fileId` | Yes | Delete file |
+| `PATCH` | `/user/files/:fileId` | Yes | Update file |
+
+#### 🏷️ User tags (`/user/tags`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/user/tags/files/:fileId` | Yes | Tags for file |
+| `POST` | `/user/tags/file-links` | Yes | Add tag to file |
+| `DELETE` | `/user/tags/file-links` | Yes | Remove tag from file |
+| `GET` | `/user/tags/` | Yes | List tags |
+| `POST` | `/user/tags/` | Yes | Create tag |
+| `PATCH` | `/user/tags/:tagId` | Yes | Update tag |
+| `DELETE` | `/user/tags/:tagId` | Yes | Delete tag |
+
+### Brands & promotions
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/brands/` | No | List brands |
+| `GET` | `/promotions/` | No | Active promotions |
+
+### 🎫 Support
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/support/` | Yes | List tickets |
+| `POST` | `/support/` | Yes | Create ticket |
+| `GET` | `/support/:ticketId` | Yes | Ticket detail |
+| `POST` | `/support/:ticketId/replies` | Yes | Reply to ticket |
+
+## 🔗 Integrations
+
+| Integration | Role |
+|-------------|------|
+| 🖥️ [Coolify](https://coolify.io/) | Server management, deployments, CI/CD |
+| 🔗 [Composio](https://composio.dev/) | Tooling and connectors for agents |
+| ▲ [Vercel AI Gateway](https://vercel.com/ai-gateway) | Model routing for agents |
+| 🗄️ [Supabase](https://supabase.com/) | Database and authentication |
+| 💳 [Stripe](https://stripe.com/) | Payments |
+
+## Tech stack
+
+- 🟢 **Node.js** — Runtime
+- 🚂 **Express** — HTTP API
+- 🔷 **TypeScript**
+- 🗄️ **Supabase** — Database and auth client
+- 💳 **Stripe** — Payments
+- 🤖 **OpenAI** — Prompt enhancement and related flows
+- 📦 **axios**, **multer**, **fluent-ffmpeg**, **sharp**, **cors** — HTTP, uploads, media
+
+## 📜 Scripts
+
+| Command | Purpose |
+|--------|---------|
+| `npm run dev` | ⚡ Dev server with nodemon |
+| `npm run dev:watch` | 🔁 Alias of `dev` |
+| `npm run build` | 📦 Compile TypeScript |
+| `npm start` | 🚀 Run compiled output |
+| `npm run lint` | 🔍 ESLint |
+| `npm run lint:fix` | ✨ ESLint with fixes |
+| `npm run format` | 📝 Prettier write |
+| `npm run format:check` | ✔️ Prettier check |
+| `npm run type-check` | 🔷 `tsc --noEmit` |
