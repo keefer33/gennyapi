@@ -1,67 +1,13 @@
 import axios from 'axios';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
-import { getServerClient, SupabaseServerClients } from './supabaseClient';
-import { uploadFileToZipline, getZipData } from './ziplineApi';
-import { isImageUrl, isVideoUrl } from './fileUtils';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { uploadFileToZipline, getZipData } from '../../shared/ziplineApi';
+import { isImageUrl, isVideoUrl } from '../../shared/fileUtils';
 import { writeFile, unlink, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-
-// Type definitions
-export interface ToolResponse {
-  success?: boolean;
-  error?: string;
-  message?: string;
-  result?: any;
-  usage?: any;
-}
-
-export interface ToolData {
-  id: string;
-  schema: any;
-  user_id: string;
-  is_pipedream: boolean;
-  pipedream?: any;
-  is_sloot: boolean;
-  sloot?: {
-    id?: string;
-    api?: string;
-    type?: string;
-    brand?: string;
-    config?: any;
-    pricing: any;
-    category?: string;
-    poll?: string;
-  } | null;
-  user_connect_api?: {
-    api_url?: string;
-    auth_token?: string;
-  } | null;
-}
-
-export interface FinalResponse {
-  result: any;
-  usage: any[] | null;
-}
-
-export interface SlootToolResponse {
-  result: any;
-  usage: any[];
-}
-
-export interface FileMetadata {
-  user_id: string;
-  file_name: string;
-  file_path: string;
-  file_size: number;
-  file_type: string;
-  zip_data?: any;
-  model_id?: string;
-  agent_id?: string;
-  generated_info?: any;
-  thumbnail_url?: string;
-}
+import { FileMetadata } from './generateTypes';
 
 /** 720P: resolution string by aspect ratio (e.g. Wan/Alibaba). */
 export const RES_720: Record<string, string> = {
@@ -535,7 +481,6 @@ export const ensureThumbnailForUserFile = async (fileId: string): Promise<void> 
 
 export const calculatePricingUtil = async (formValues: any, pricing: any) => {
   let cost: number = 0;
-
   const lookupMultiFields = (config: any, formValuesInput: any): number => {
     const safeFormValues = formValuesInput && typeof formValuesInput === 'object' ? formValuesInput : {};
     let current = config;

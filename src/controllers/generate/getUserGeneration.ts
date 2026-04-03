@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 import { USER_GENERATION_SELECT } from './generationSelect';
 
 /**
@@ -7,16 +10,11 @@ import { USER_GENERATION_SELECT } from './generationSelect';
  */
 export async function getUserGeneration(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const generationId = req.params.generationId;
     if (!generationId) {
-      res.status(400).json({ success: false, error: 'Missing generation id' });
-      return;
+      throw badRequest('Missing generation id');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -25,19 +23,21 @@ export async function getUserGeneration(req: Request, res: Response): Promise<vo
       .from('user_generations')
       .select(USER_GENERATION_SELECT)
       .eq('id', generationId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (error) {
-      const status = error.code === 'PGRST116' ? 404 : 500;
-      res.status(status).json({ success: false, error: error.message });
-      return;
+      if (error.code === 'PGRST116') {
+        throw notFound(error.message);
+      }
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'generation_get_failed',
+      });
     }
 
-    res.status(200).json({ success: true, data: data });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getUserGeneration]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, data);
+  } catch (error) {
+    sendError(res, error);
   }
 }

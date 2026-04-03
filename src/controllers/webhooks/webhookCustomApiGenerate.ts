@@ -1,4 +1,4 @@
-import { saveFileFromUrl } from '../../utils/generate';
+import { saveFileFromUrl } from '../generate/generateUtils';
 import { createUserGenerationFile, updateUserGeneration } from '../generate/generateData';
 
 // Veo record info processing function (placeholder)

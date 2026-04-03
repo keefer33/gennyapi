@@ -1,5 +1,7 @@
 import { streamText } from 'ai';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { badRequest, sendError } from '../../app/response';
 
 const MEDIA_URL_KEYS = new Set([
   'file_path',
@@ -97,23 +99,18 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
     console.log(`[enhancePrompt] ${requestId} request: model=${modelId}, generationType=${generationType}`);
 
     if (!message || typeof message !== 'string' || !message.trim()) {
-      res.status(400).json({ error: 'message is required and must be a non-empty string' });
-      return;
+      throw badRequest('message is required and must be a non-empty string');
     }
 
     if (!modelId || typeof modelId !== 'string' || !ALLOWED_MODELS.has(modelId.trim())) {
-      res.status(400).json({
-        error: `model must be one of: ${[...ALLOWED_MODELS].join(', ')}`,
-      });
-      return;
+      throw badRequest(`model must be one of: ${[...ALLOWED_MODELS].join(', ')}`);
     }
 
     const normalizedType = String(generationType || 'image')
       .toLowerCase()
       .trim();
     if (normalizedType !== 'image' && normalizedType !== 'video') {
-      res.status(400).json({ error: "generationType must be 'image' or 'video'" });
-      return;
+      throw badRequest("generationType must be 'image' or 'video'");
     }
 
     const promptMaxLength =
@@ -205,12 +202,26 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
       (error as { cause?: { statusCode?: number } })?.cause?.statusCode;
     if (!res.headersSent) {
       if (statusCode === 412) {
-        res.status(412).json({
-          error:
+        sendError(
+          res,
+          new AppError(
             'This model rejected the request (Precondition Failed). Try another model (e.g. Claude or Gemini) for prompt enhancement, or try without reference images.',
-        });
+            {
+              statusCode: 412,
+              code: 'precondition_failed',
+            }
+          )
+        );
       } else {
-        res.status(500).json({ error: 'Failed to enhance prompt' });
+        sendError(
+          res,
+          error instanceof AppError
+            ? error
+            : new AppError('Failed to enhance prompt', {
+                statusCode: 500,
+                code: 'enhance_prompt_failed',
+              })
+        );
       }
     } else if (!res.writableEnded) {
       if (statusCode === 412) {

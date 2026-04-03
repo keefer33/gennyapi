@@ -11,12 +11,8 @@ import {
   getChatMessage,
   deleteChatMessage,
 } from './chats';
-import { runChat } from './runChat';
 
 const router = express.Router();
-
-// Stream chat completion (SSE, runAgent-style); must be before /chats/:chat_id
-router.post('/run', authenticateUser, runChat);
 
 // Supabase-backed chats (user_models_chats, user_models_chats_messages)
 router.get('/', authenticateUser, listChats);

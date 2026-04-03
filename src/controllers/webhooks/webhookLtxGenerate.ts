@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from '../generate/generateData';
-import { saveFileFromBuffer } from '../../utils/generate';
+import { saveFileFromBuffer } from '../generate/generateUtils';
 
 /** LTX API keeps connection open until video is ready; allow long wait in background. */
 const LTX_BACKGROUND_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes

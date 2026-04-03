@@ -1,20 +1,18 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 /** DELETE /user/tags/file-links — body: { file_id: string, tag_id: string } */
 export async function removeTagFromFile(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const file_id = typeof req.body?.file_id === 'string' ? req.body.file_id : '';
     const tag_id = typeof req.body?.tag_id === 'string' ? req.body.tag_id : '';
     if (!file_id || !tag_id) {
-      res.status(400).json({ success: false, error: 'file_id and tag_id are required' });
-      return;
+      throw badRequest('file_id and tag_id are required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -23,16 +21,17 @@ export async function removeTagFromFile(req: Request, res: Response): Promise<vo
       .from('user_files')
       .select('id')
       .eq('id', file_id)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (fileErr) {
-      res.status(500).json({ success: false, error: fileErr.message });
-      return;
+      throw new AppError(fileErr.message, {
+        statusCode: 500,
+        code: 'user_file_lookup_failed',
+      });
     }
     if (!fileRow) {
-      res.status(404).json({ success: false, error: 'File not found' });
-      return;
+      throw notFound('File not found');
     }
 
     const { error } = await supabaseServerClient
@@ -42,15 +41,14 @@ export async function removeTagFromFile(req: Request, res: Response): Promise<vo
       .eq('tag_id', tag_id);
 
     if (error) {
-      console.error('[removeTagFromFile]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_file_tag_link_remove_failed',
+      });
     }
 
-    res.status(200).json({ success: true });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[removeTagFromFile]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, true);
+  } catch (error) {
+    sendError(res, error);
   }
 }

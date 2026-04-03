@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
+import { getAuthUserId } from '../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 
 /**
  * POST /support
@@ -7,53 +10,50 @@ import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClie
  */
 export async function createSupportTicket(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!message) {
-      res.status(400).json({ success: false, error: 'Message is required' });
-      return;
+      throw badRequest('Message is required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
     const { data: ticket, error: ticketError } = await supabaseServerClient
       .from('user_support_tickets')
-      .insert({ user_id: user.id })
+      .insert({ user_id: userId })
       .select('id')
       .single();
 
     if (ticketError) {
-      console.error('[createSupportTicket] ticket:', ticketError.message);
-      res.status(500).json({ success: false, error: ticketError.message });
-      return;
+      throw new AppError(ticketError.message, {
+        statusCode: 500,
+        code: 'support_ticket_create_failed',
+      });
     }
 
     if (!ticket?.id) {
-      res.status(500).json({ success: false, error: 'No ticket id returned' });
-      return;
+      throw new AppError('No ticket id returned', {
+        statusCode: 500,
+        code: 'support_ticket_id_missing',
+      });
     }
 
     const { error: threadError } = await supabaseServerClient.from('user_support_tickets_threads').insert({
       ticket_id: ticket.id,
-      user_id: user.id,
+      user_id: userId,
       message,
     });
 
     if (threadError) {
-      console.error('[createSupportTicket] thread:', threadError.message);
-      res.status(500).json({ success: false, error: threadError.message });
-      return;
+      throw new AppError(threadError.message, {
+        statusCode: 500,
+        code: 'support_ticket_thread_create_failed',
+      });
     }
 
-    res.status(201).json({ success: true, data: { ticketId: ticket.id } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[createSupportTicket]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { ticketId: ticket.id }, 201);
+  } catch (error) {
+    sendError(res, error);
   }
 }

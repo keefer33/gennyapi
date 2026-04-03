@@ -1,12 +1,15 @@
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
-import { isValidTopUpCents } from '../../utils/stripe';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { isValidTopUpCents } from '../../shared/stripe';
 import Stripe from 'stripe';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
 import {
   insertUserUsageLog,
   updateUserProfileUsageAmount,
   USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT,
-} from '../../utils/utils';
+} from '../../shared/usageUtils';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 export async function confirmPayment(req: Request, res: Response): Promise<void> {
   try {
@@ -17,33 +20,35 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       : null;
 
     if (!stripe) {
-      res.status(500).json({ error: 'Stripe not configured' });
-      return;
+      throw new AppError('Stripe not configured', {
+        statusCode: 500,
+        code: 'stripe_not_configured',
+        expose: false,
+      });
     }
 
-    const user = (req as any).user;
+    const userId = getAuthUserId(req);
     const { paymentIntentId, amount } = req.body;
 
     if (!paymentIntentId || amount == null) {
-      res.status(400).json({ error: 'Missing payment details' });
-      return;
+      throw badRequest('Missing payment details');
     }
 
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (!paymentIntent || paymentIntent.status !== 'succeeded') {
-      res.status(400).json({ error: 'Payment not successful' });
-      return;
+      throw badRequest('Payment not successful');
     }
 
-    if (paymentIntent.metadata.user_id !== user.id) {
-      res.status(403).json({ error: 'Payment does not belong to user' });
-      return;
+    if (paymentIntent.metadata.user_id !== userId) {
+      throw new AppError('Payment does not belong to user', {
+        statusCode: 403,
+        code: 'stripe_payment_user_mismatch',
+      });
     }
 
     if (!isValidTopUpCents(paymentIntent.amount)) {
-      res.status(400).json({ error: 'Invalid payment amount' });
-      return;
+      throw badRequest('Invalid payment amount');
     }
 
     const amountDollars = parseFloat((paymentIntent.amount / 100).toFixed(2));
@@ -52,8 +57,7 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
     if (metaDollars != null && String(metaDollars).trim() !== '') {
       const metaNum = Number(metaDollars);
       if (!Number.isFinite(metaNum) || Math.abs(metaNum - amountDollars) > 0.001) {
-        res.status(400).json({ error: 'Payment metadata mismatch' });
-        return;
+        throw badRequest('Payment metadata mismatch');
       }
     }
 
@@ -66,8 +70,7 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       .single();
 
     if (existingTransaction && existingTransaction.status === 'completed') {
-      res.status(200).json({
-        success: true,
+      sendOk(res, {
         usageCredited: amountDollars,
         message: 'Payment already processed',
       });
@@ -77,7 +80,7 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
     const { data: newTransaction, error: transactionError } = await supabaseServerClient
       .from('transactions')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         stripe_payment_intent_id: paymentIntentId,
         amount_cents: paymentIntent.amount,
         amount_dollars: amountDollars,
@@ -91,20 +94,20 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       .single();
 
     if (transactionError) {
-      console.error('Error updating transaction:', transactionError);
-      res.status(500).json({ error: 'Failed to update transaction' });
-      return;
+      throw new AppError('Failed to update transaction', {
+        statusCode: 500,
+        code: 'stripe_transaction_update_failed',
+        details: transactionError,
+      });
     }
 
     try {
       await insertUserUsageLog({
-        user_id: user.id,
+        user_id: userId,
         usage_amount: amountDollars,
         generation_id: null,
         transaction_id: newTransaction?.id ?? null,
-        type_id: Number.isFinite(USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT)
-          ? USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT
-          : 2,
+        type_id: Number.isFinite(USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT) ? USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT : 2,
         meta: {
           type: 'deposit',
           usage: {
@@ -115,23 +118,23 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
         },
       });
       await updateUserProfileUsageAmount({
-        user_id: user.id,
+        user_id: userId,
         type: 'credit',
         amount: amountDollars,
       });
     } catch (usageErr) {
-      console.error('[confirmPayment] Usage log / usage_balance update failed:', usageErr);
-      res.status(500).json({ error: 'Payment recorded but failed to apply usage credit' });
-      return;
+      throw new AppError('Payment recorded but failed to apply usage credit', {
+        statusCode: 500,
+        code: 'stripe_usage_credit_apply_failed',
+        details: usageErr,
+      });
     }
 
-    res.status(200).json({
-      success: true,
+    sendOk(res, {
       usageCredited: amountDollars,
       message: 'Payment confirmed and balance updated successfully',
     });
   } catch (error) {
-    console.error('Error confirming payment:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, error);
   }
 }

@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 /**
  * GET /user/transactions?page=1&limit=10
@@ -7,11 +10,7 @@ import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClie
  */
 export async function listTransactions(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized', message: 'User not found' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '10'), 10) || 10));
@@ -22,51 +21,38 @@ export async function listTransactions(req: Request, res: Response): Promise<voi
     const { count, error: countError } = await supabaseServerClient
       .from('transactions')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (countError) {
-      console.error('[listTransactions] count:', countError.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch transactions',
-        message: countError.message,
+      throw new AppError('Failed to fetch transactions', {
+        statusCode: 500,
+        code: 'transactions_count_failed',
+        details: countError,
       });
-      return;
     }
 
     const { data: transactions, error: transactionsError } = await supabaseServerClient
       .from('transactions')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (transactionsError) {
-      console.error('[listTransactions] select:', transactionsError.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch transactions',
-        message: transactionsError.message,
+      throw new AppError('Failed to fetch transactions', {
+        statusCode: 500,
+        code: 'transactions_select_failed',
+        details: transactionsError,
       });
-      return;
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        transactions: transactions ?? [],
-        total: count ?? 0,
-        page,
-        limit,
-      },
+    sendOk(res, {
+      transactions: transactions ?? [],
+      total: count ?? 0,
+      page,
+      limit,
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[listTransactions]', message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch transactions',
-      message,
-    });
+  } catch (error) {
+    sendError(res, error);
   }
 }

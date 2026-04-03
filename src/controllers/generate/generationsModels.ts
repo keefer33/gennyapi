@@ -1,18 +1,20 @@
 import { Request, Response } from 'express';
-import { fetchGenerationModelsFromDb, type GenerationModel } from './generateData';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { fetchGenerationModelsFromDb } from './generateData';
+import { GenerationModel } from './generateTypes';
 
 export const getGenerationModels = async (req: Request, res: Response): Promise<void> => {
   try {
     const models = (await fetchGenerationModelsFromDb()) as GenerationModel[];
-    res.status(200).json({
-      success: true,
-      data: models,
-    });
+    sendOk(res, models);
   } catch (error) {
-    console.error('Error fetching models:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error fetching models',
-    });
+    sendError(
+      res,
+      new AppError('Error fetching models', {
+        statusCode: 500,
+        code: 'generation_models_fetch_failed',
+      })
+    );
   }
 };

@@ -7,14 +7,6 @@ import axios from 'axios';
 /**
  * Extract file extension from a URL
  * Handles both simple URLs and complex URLs with query parameters
- *
- * @param url - The URL to extract extension from
- * @returns The file extension (without the dot) or null if not found
- *
- * @example
- * getFileExtension('https://example.com/image.jpg') // 'jpg'
- * getFileExtension('https://delivery-us1.bfl.ai/results/2c/8383718ff6fca1/8ff6fca14ee54092a05264e168d6d113/sample.jpeg?se=2025-10-07T10%3A20%3A38Z&sp=r&sv=2024-11-04&sr=b&rsct=image/jpeg&sig=05a5IMFwXThvMr43v2aaOZ6RHB1fTBDifSZb74Sv4Vk%3D') // 'jpeg'
- * getFileExtension('https://example.com/file') // null
  */
 export const getFileExtension = (url: string): string | null => {
   try {
@@ -63,12 +55,6 @@ export const getFileExtension = (url: string): string | null => {
 /**
  * Extract file extension from a URL with the dot included
  *
- * @param url - The URL to extract extension from
- * @returns The file extension (with the dot) or null if not found
- *
- * @example
- * getFileExtensionWithDot('https://example.com/image.jpg') // '.jpg'
- * getFileExtensionWithDot('https://example.com/file') // null
  */
 export const getFileExtensionWithDot = (url: string): string | null => {
   const extension = getFileExtension(url);
@@ -77,114 +63,42 @@ export const getFileExtensionWithDot = (url: string): string | null => {
 
 /**
  * Check if a URL has a specific file extension
- *
- * @param url - The URL to check
- * @param extension - The extension to check for (with or without dot)
- * @returns True if the URL has the specified extension
- *
- * @example
- * hasFileExtension('https://example.com/image.jpg', 'jpg') // true
- * hasFileExtension('https://example.com/image.jpg', '.jpg') // true
- * hasFileExtension('https://example.com/image.png', 'jpg') // false
  */
 export const hasFileExtension = (url: string, extension: string): boolean => {
   const urlExtension = getFileExtension(url);
-  const normalizedExtension = extension.startsWith('.')
-    ? extension.substring(1)
-    : extension;
+  const normalizedExtension = extension.startsWith('.') ? extension.substring(1) : extension;
   return urlExtension === normalizedExtension.toLowerCase();
 };
 
 /**
  * Check if a URL is an image based on its extension
- *
- * @param url - The URL to check
- * @returns True if the URL appears to be an image
- *
- * @example
- * isImageUrl('https://example.com/image.jpg') // true
- * isImageUrl('https://example.com/document.pdf') // false
  */
 export const isImageUrl = (url: string): boolean => {
-  const imageExtensions = [
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'bmp',
-    'webp',
-    'svg',
-    'ico',
-    'tiff',
-    'tif',
-  ];
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'];
   const extension = getFileExtension(url);
   return extension ? imageExtensions.includes(extension) : false;
 };
 
 /**
  * Check if a URL is a video based on its extension
- *
- * @param url - The URL to check
- * @returns True if the URL appears to be a video
- *
- * @example
- * isVideoUrl('https://example.com/video.mp4') // true
- * isVideoUrl('https://example.com/audio.mp3') // false
  */
 export const isVideoUrl = (url: string): boolean => {
-  const videoExtensions = [
-    'mp4',
-    'avi',
-    'mov',
-    'wmv',
-    'flv',
-    'webm',
-    'mkv',
-    'm4v',
-    '3gp',
-    'ogv',
-  ];
+  const videoExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v', '3gp', 'ogv'];
   const extension = getFileExtension(url);
   return extension ? videoExtensions.includes(extension) : false;
 };
 
 /**
  * Check if a URL is an audio file based on its extension
- *
- * @param url - The URL to check
- * @returns True if the URL appears to be an audio file
- *
- * @example
- * isAudioUrl('https://example.com/audio.mp3') // true
- * isAudioUrl('https://example.com/video.mp4') // false
  */
 export const isAudioUrl = (url: string): boolean => {
-  const audioExtensions = [
-    'mp3',
-    'wav',
-    'flac',
-    'aac',
-    'ogg',
-    'wma',
-    'm4a',
-    'opus',
-    'aiff',
-    'au',
-  ];
+  const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'au'];
   const extension = getFileExtension(url);
   return extension ? audioExtensions.includes(extension) : false;
 };
 
 /**
  * Get the MIME type based on file extension
- *
- * @param url - The URL to get MIME type for
- * @returns The MIME type or 'application/octet-stream' if unknown
- *
- * @example
- * getMimeType('https://example.com/image.jpg') // 'image/jpeg'
- * getMimeType('https://example.com/document.pdf') // 'application/pdf'
  */
 export const getMimeType = (url: string): string => {
   const extension = getFileExtension(url);
@@ -268,13 +182,6 @@ export const getMimeType = (url: string): string => {
 
 /**
  * Get filename from URL without extension
- *
- * @param url - The URL to extract filename from
- * @returns The filename without extension or null if not found
- *
- * @example
- * getFilenameWithoutExtension('https://example.com/image.jpg') // 'image'
- * getFilenameWithoutExtension('https://example.com/path/to/file.png') // 'file'
  */
 export const getFilenameWithoutExtension = (url: string): string | null => {
   try {
@@ -306,13 +213,6 @@ export const getFilenameWithoutExtension = (url: string): string | null => {
 
 /**
  * Get complete filename from URL
- *
- * @param url - The URL to extract filename from
- * @returns The complete filename or null if not found
- *
- * @example
- * getFilename('https://example.com/image.jpg') // 'image.jpg'
- * getFilename('https://example.com/path/to/file.png') // 'file.png'
  */
 export const getFilename = (url: string): string | null => {
   try {
@@ -333,19 +233,8 @@ export const getFilename = (url: string): string | null => {
 /**
  * Convert URL to base64 data URL
  * Supports images, PDFs, and other file types
- *
- * @param url - The URL to convert
- * @param mimeType - Optional MIME type. If not provided, will be auto-detected
- * @returns Promise<string | null> - Base64 data URL or null if conversion fails
- *
- * @example
- * convertUrlToBase64('https://example.com/image.jpg') // 'data:image/jpeg;base64,/9j/4AAQ...'
- * convertUrlToBase64('https://example.com/doc.pdf', 'application/pdf') // 'data:application/pdf;base64,JVBERi0x...'
  */
-export const convertUrlToBase64 = async (
-  url: string,
-  mimeType?: string
-): Promise<string | null> => {
+export const convertUrlToBase64 = async (url: string, mimeType?: string): Promise<string | null> => {
   try {
     // Validate URL
     if (!url || !url.startsWith('http')) {
@@ -358,13 +247,9 @@ export const convertUrlToBase64 = async (
       responseType: 'arraybuffer',
       validateStatus: () => true,
     });
-    
+
     if (response.status < 200 || response.status >= 300) {
-      console.error(
-        'Failed to fetch file:',
-        response.status,
-        response.statusText
-      );
+      console.error('Failed to fetch file:', response.status, response.statusText);
       return null;
     }
 
@@ -401,16 +286,8 @@ export const convertUrlToBase64 = async (
 
 /**
  * Convert image URL to base64 data URL (convenience function)
- *
- * @param imageUrl - The URL of the image to convert
- * @returns Promise<string | null> - Base64 data URL or null if conversion fails
- *
- * @example
- * convertImageUrlToBase64('https://example.com/image.jpg') // 'data:image/jpeg;base64,/9j/4AAQ...'
  */
-export const convertImageUrlToBase64 = async (
-  imageUrl: string
-): Promise<string | null> => {
+export const convertImageUrlToBase64 = async (imageUrl: string): Promise<string | null> => {
   // Validate that it's an image URL
   if (!isImageUrl(imageUrl)) {
     console.error('Invalid image URL:', imageUrl);
@@ -422,9 +299,6 @@ export const convertImageUrlToBase64 = async (
 
 /**
  * Check if a MIME type is supported for base64 conversion
- *
- * @param mimeType - The MIME type to check
- * @returns True if the MIME type is supported
  */
 const isSupportedFileType = (mimeType: string): boolean => {
   const supportedTypes = [

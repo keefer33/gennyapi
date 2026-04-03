@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { updateUserGeneration } from '../generate/generateData';
-import { klingCreateJWT } from '../../utils/klingCreateJWT';
+import { klingCreateJWT } from '../../shared/klingCreateJWT';
 
 export const webhookCheckStatus = async (pollingFileData: any) => {
   let api = pollingFileData?.api_id;

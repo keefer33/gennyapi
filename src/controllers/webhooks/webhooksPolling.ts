@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
 import { getUserGeneration, getGenerationFileIds, updateUserGeneration } from '../generate/generateData';
-import { ensureThumbnailForUserFile } from '../../utils/generate';
+import { ensureThumbnailForUserFile } from '../generate/generateUtils';
 import { webhookCreateTask } from './webhookCreateTask';
 import { webhookCheckStatus } from './webhooksCheckStatus';
 import { webhookImageInstantGeneration } from './webhookImageInstantGeneration';
@@ -11,18 +13,19 @@ import { webhookAlibabaWanVideoGenerate } from './webhookAlibabaWanVideoGenerate
 
 export const webhooksPolling = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('Polling webhook received:', req.body);
     const { id } = req.body;
-    // Validate request body has required id
     if (!id) {
-      console.error('Missing required id in request body');
-      throw new Error('Missing required id in request body');
+      throw badRequest('Missing required id in request body');
     }
 
     const pollingFileData = await getUserGeneration(id);
+    if (!pollingFileData) {
+      throw new AppError('Generation not found', {
+        statusCode: 404,
+        code: 'generation_not_found',
+      });
+    }
 
-    // Process based on model API type
-    console.log('data', pollingFileData);
     let status = 'pending';
     let pollingFileResponse: any = {};
     switch (pollingFileData.api_id.api_type) {
@@ -107,23 +110,12 @@ export const webhooksPolling = async (req: Request, res: Response): Promise<void
       duration: duration,
     });
 
-    console.log('Generation Status:', status);
-    console.log('Generation Response:', pollingFileResponse);
-    console.log('Generation Duration:', duration);
-
-    // Return immediate success response to Supabase function
-    res.status(200).json({
-      success: true,
+    sendOk(res, {
       message: 'Polling webhook received and processing started',
       timestamp: new Date().toISOString(),
-      data: { id: req.body.id },
+      id: req.body.id,
     });
   } catch (error) {
-    console.error('Error processing polling webhook:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      timestamp: new Date().toISOString(),
-    });
+    sendError(res, error);
   }
 };

@@ -1,39 +1,32 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 /** DELETE /user/tags/:tagId */
 export async function deleteUserTag(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const tagId = req.params.tagId;
     if (!tagId) {
-      res.status(400).json({ success: false, error: 'Missing tag id' });
-      return;
+      throw badRequest('Missing tag id');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-    const { error } = await supabaseServerClient
-      .from('user_tags')
-      .delete()
-      .eq('id', tagId)
-      .eq('user_id', user.id);
+    const { error } = await supabaseServerClient.from('user_tags').delete().eq('id', tagId).eq('user_id', userId);
 
     if (error) {
-      console.error('[deleteUserTag]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_tag_delete_failed',
+      });
     }
 
-    res.status(200).json({ success: true });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[deleteUserTag]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, true);
+  } catch (error) {
+    sendError(res, error);
   }
 }

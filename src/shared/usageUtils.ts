@@ -1,34 +1,5 @@
 import { getServerClient, SupabaseServerClients } from './supabaseClient';
-import { Request } from 'express';
-
-export type UserUsageLogInsertInput = {
-  user_id?: string;
-  usage_amount?: number | string;
-  generation_id?: string | null;
-  transaction_id?: string | null;
-  type_id?: number | null;
-  promotion_id?: string | null;
-  meta?: Record<string, unknown> | null;
-};
-
-export type UserUsageLogRow = {
-  id: string;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-  usage_amount: number;
-  generation_id: string | null;
-  transaction_id: string | null;
-  type_id: number | null;
-  promotion_id: string | null;
-  meta: Record<string, unknown> | null;
-};
-
-export type UpdateUsageAmountInput = {
-  user_id?: string;
-  type?: 'credit' | 'debit';
-  amount?: number | string;
-};
+import { UserUsageLogInsertInput, UserUsageLogRow, UpdateUsageAmountInput } from './types';
 
 /** `usage_log_types.id` for generation / AI usage debits (seed: debit / ai_modal_usage). */
 export const USAGE_LOG_TYPE_GENERATION_DEBIT = Number(process.env.USAGE_LOG_TYPE_GENERATION_DEBIT ?? 3);
@@ -40,12 +11,6 @@ export const USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT = Number(process.env.USAGE_LOG
 export const USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT = Number(
   process.env.USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT ?? 4
 );
-
-export function getUserId(req: Request): string {
-  const user = (req as { user?: { id?: string } }).user;
-  if (!user?.id) throw new Error('Unauthorized');
-  return user.id;
-}
 
 export async function insertUserUsageLog(input: UserUsageLogInsertInput): Promise<UserUsageLogRow> {
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();

@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 import { USER_GENERATION_SELECT } from './generationSelect';
 
 /** Columns allowed for lookup (must match schema `displayFieldValue` usage). */
@@ -11,40 +14,26 @@ const ALLOWED_LOOKUP_FIELDS = new Set(['id', 'model_id', 'task_id', 'generation_
  */
 export async function getUserGenerationByField(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const field = typeof req.query.field === 'string' ? req.query.field.trim() : '';
     const valueRaw = req.query.value;
     const value = typeof valueRaw === 'string' ? valueRaw : valueRaw != null ? String(valueRaw) : '';
 
     const statusParam =
-      typeof req.query.status === 'string' && req.query.status.trim() !== ''
-        ? req.query.status.trim()
-        : 'completed';
+      typeof req.query.status === 'string' && req.query.status.trim() !== '' ? req.query.status.trim() : 'completed';
 
     if (!field || !ALLOWED_LOOKUP_FIELDS.has(field)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid or missing field. Allowed: ${[...ALLOWED_LOOKUP_FIELDS].join(', ')}`,
-      });
-      return;
+      throw badRequest(`Invalid or missing field. Allowed: ${[...ALLOWED_LOOKUP_FIELDS].join(', ')}`);
     }
 
     if (!value) {
-      res.status(400).json({ success: false, error: 'Missing value query parameter' });
-      return;
+      throw badRequest('Missing value query parameter');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-    let query = supabaseServerClient
-      .from('user_generations')
-      .select(USER_GENERATION_SELECT)
-      .eq('user_id', user.id);
+    let query = supabaseServerClient.from('user_generations').select(USER_GENERATION_SELECT).eq('user_id', userId);
 
     switch (field) {
       case 'id':
@@ -60,8 +49,7 @@ export async function getUserGenerationByField(req: Request, res: Response): Pro
         query = query.eq('generation_type', value);
         break;
       default:
-        res.status(400).json({ success: false, error: 'Invalid field' });
-        return;
+        throw badRequest('Invalid field');
     }
 
     const { data, error } = await query
@@ -71,20 +59,18 @@ export async function getUserGenerationByField(req: Request, res: Response): Pro
       .maybeSingle();
 
     if (error) {
-      console.error('[getUserGenerationByField]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'generation_get_by_field_failed',
+      });
     }
 
     if (!data) {
-      res.status(404).json({ success: false, error: 'Generation not found' });
-      return;
+      throw notFound('Generation not found');
     }
 
-    res.status(200).json({ success: true, data });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getUserGenerationByField]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, data);
+  } catch (error) {
+    sendError(res, error);
   }
 }

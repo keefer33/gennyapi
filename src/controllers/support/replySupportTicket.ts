@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../app/response';
+import { getAuthUserId } from '../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 
 /**
  * POST /support/:ticketId/replies
@@ -7,22 +10,16 @@ import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClie
  */
 export async function replySupportTicket(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const ticketId = req.params.ticketId;
     if (!ticketId) {
-      res.status(400).json({ success: false, error: 'Missing ticket id' });
-      return;
+      throw badRequest('Missing ticket id');
     }
 
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!message) {
-      res.status(400).json({ success: false, error: 'Message is required' });
-      return;
+      throw badRequest('Message is required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -31,34 +28,32 @@ export async function replySupportTicket(req: Request, res: Response): Promise<v
       .from('user_support_tickets')
       .select('id')
       .eq('id', ticketId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (findError || !existing) {
-      res.status(404).json({ success: false, error: 'Ticket not found' });
-      return;
+      throw notFound('Ticket not found');
     }
 
     const { data, error } = await supabaseServerClient
       .from('user_support_tickets_threads')
       .insert({
         ticket_id: ticketId,
-        user_id: user.id,
+        user_id: userId,
         message,
       })
       .select('id, created_at, ticket_id, user_id, message')
       .single();
 
     if (error) {
-      console.error('[replySupportTicket]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'support_ticket_reply_failed',
+      });
     }
 
-    res.status(201).json({ success: true, data: { thread: data } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[replySupportTicket]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { thread: data }, 201);
+  } catch (error) {
+    sendError(res, error);
   }
 }

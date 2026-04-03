@@ -1,5 +1,7 @@
-import type { Request, Response } from "express";
-import { getServerClient } from "../../utils/supabaseClient";
+import type { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { getServerClient } from '../../shared/supabaseClient';
 
 export type BrandRow = {
   id: string;
@@ -13,22 +15,20 @@ export async function getBrands(req: Request, res: Response): Promise<void> {
     const { supabaseServerClient } = await getServerClient();
 
     const { data, error } = await supabaseServerClient
-      .from("brands")
-      .select("id, name, slug, logo")
-      .neq("name", "Genny.bot")
-      .order("name", { ascending: true });
+      .from('brands')
+      .select('id, name, slug, logo')
+      .neq('name', 'Genny.bot')
+      .order('name', { ascending: true });
 
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'brands_fetch_failed',
+      });
     }
 
-    res.status(200).json({ success: true, data: (data ?? []) as BrandRow[] });
+    sendOk(res, (data ?? []) as BrandRow[]);
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to fetch brands",
-    });
+    sendError(res, err);
   }
 }
-

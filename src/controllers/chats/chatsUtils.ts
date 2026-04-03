@@ -1,13 +1,8 @@
 
+import { MessageRow } from './chatsTypes';
+
 /** Build { role, content }[] from message rows for streamText (text + reasoning only). */
-export function messageRowsToModelMessages(
-    rows: {
-      message: {
-        role: string;
-      content?: Array<Record<string, unknown>>;
-    };
-    }[]
-  ) {
+export function messageRowsToModelMessages(rows: MessageRow[]) {
     return rows
       .map(row => {
         const contentArray = (row.message?.content ?? []) as Array<Record<string, unknown>>;

@@ -1,7 +1,8 @@
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
-import routes from './routes';
+import appRouter from './app/router';
+import { notFound, sendError } from './app/response';
 
 // Load environment variables from .env file
 config();
@@ -20,7 +21,17 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // Mount the routes
-app.use('/', routes);
+app.use('/', appRouter);
+
+// Not-found handler (for routes not matched above)
+app.use((req: Request, res: Response) => {
+  sendError(res, notFound(`Route ${req.originalUrl} not found`));
+});
+
+// Centralized error handler
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  sendError(res, err);
+});
 
 // Start server
 app.listen(PORT, () => {
