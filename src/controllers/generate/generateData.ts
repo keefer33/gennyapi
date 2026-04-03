@@ -1,10 +1,11 @@
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 import {
   insertUserUsageLog,
   updateUserProfileUsageAmount,
   USAGE_LOG_TYPE_GENERATION_DEBIT,
   USAGE_LOG_TYPE_GENERATION_ERROR_REFUND_CREDIT,
-} from '../../utils/utils';
+} from '../../shared/usageUtils';
+import { GenerationModel } from './generateTypes';
 
 /** Debit amount from inserted row: prefers usage_amount, then cost. */
 function generationDebitAmount(row: Record<string, unknown>): number {
@@ -261,29 +262,6 @@ export const createNewUserGeneration = async (userGeneration: any) => {
   return data;
 };
 
-export interface GenerationModel {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  tags: string[];
-  slug: string;
-  generation_type: string;
-  meta?: { tags?: string[] };
-  config: {
-    api: string;
-    cost_per_generation?: number;
-    pricing?: any;
-  };
-  schema: any;
-  brands?: {
-    id: string;
-    name: string;
-    logo: string;
-  };
-  api?: any;
-}
-
 /**
  * Shared DB call for generation models listing.
  * Used by `/generate/models` and can be reused by other controllers.
@@ -292,7 +270,8 @@ export const fetchGenerationModelsFromDb = async (): Promise<GenerationModel[]> 
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from('models')
-    .select(`
+    .select(
+      `
       *,
       brands (
         id,
@@ -300,7 +279,8 @@ export const fetchGenerationModelsFromDb = async (): Promise<GenerationModel[]> 
         logo
       ),
       api(schema,pricing)
-    `)
+    `
+    )
     .neq('status', false)
     .order('order', { ascending: true, nullsFirst: false });
 
@@ -309,9 +289,7 @@ export const fetchGenerationModelsFromDb = async (): Promise<GenerationModel[]> 
     throw new Error(error.message || 'Error fetching generation models');
   }
 
-  const validModels = (data || []).filter(
-    (model: any) => model && model.id && model.name && model.generation_type
-  );
+  const validModels = (data || []).filter((model: any) => model && model.id && model.name && model.generation_type);
 
   return validModels
     .sort((a: any, b: any) => {

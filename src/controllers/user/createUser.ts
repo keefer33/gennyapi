@@ -1,5 +1,7 @@
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
 
 function parsePromoDollarAmount(value: unknown): number | null {
   if (value == null || value === '') return null;
@@ -9,73 +11,79 @@ function parsePromoDollarAmount(value: unknown): number | null {
 }
 
 export const createUser = async (req: Request, res: Response): Promise<void> => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-  // Query promotions table for NEWUSER promo code
-  const now = new Date().toISOString();
-  const { data: promotion } = await supabaseServerClient
-    .from('promotions')
-    .select('id, dollar_amount, start_date, end_date')
-    .eq('promo_code', 'NEWUSER')
-    .single();
-
-  // Default signup: usage credits only (no token grants from promos).
-  let tokenBalance = 0;
-  let promotionId: string | null = null;
-  let usageBalance = 5;
-  const promoDollars = promotion ? parsePromoDollarAmount(promotion.dollar_amount) : null;
-  if (promotion && promoDollars != null) {
-    const isActive =
-      (!promotion.start_date || new Date(promotion.start_date) <= new Date(now)) &&
-      (!promotion.end_date || new Date(promotion.end_date) >= new Date(now));
-
-    if (isActive) {
-      promotionId = promotion.id;
-      usageBalance = promoDollars;
+  try {
+    if (req.method !== 'POST') {
+      throw new AppError('Method not allowed', {
+        statusCode: 405,
+        code: 'method_not_allowed',
+      });
     }
-  }
 
-  const { data, error } = await supabaseServerClient
-    .from('user_profiles')
-    .insert({
-      user_id: req.body.user_id,
-      zipline: req.body.zipline,
-      username: req.body.username,
-      email: req.body.email,
-      token_balance: tokenBalance,
-      usage_balance: usageBalance,
-    })
-    .select()
-    .single();
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
+    const { user_id, zipline, username, email } = req.body ?? {};
+    if (!user_id || !username || !email) {
+      throw badRequest('user_id, username, and email are required');
+    }
 
-  // Insert into user_tokens_log table
-  const { error: tokensLogError } = await supabaseServerClient.from('user_tokens_log').insert({
-    user_id: req.body.user_id,
-    token_amount: tokenBalance,
-    promotion_id: promotionId,
-    type_id: 1,
-    generation_id: null,
-    transaction_id: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
+    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-  if (tokensLogError) {
-    console.error('Error inserting into user_tokens_log:', tokensLogError);
-    // Don't fail the user creation if logging fails, but log the error
-  }
+    const now = new Date().toISOString();
+    const { data: promotion } = await supabaseServerClient
+      .from('promotions')
+      .select('id, dollar_amount, start_date, end_date')
+      .eq('promo_code', 'NEWUSER')
+      .single();
 
-    // Insert into user_usage_log table
+    let tokenBalance = 0;
+    let promotionId: string | null = null;
+    let usageBalance = 5;
+    const promoDollars = promotion ? parsePromoDollarAmount(promotion.dollar_amount) : null;
+    if (promotion && promoDollars != null) {
+      const isActive =
+        (!promotion.start_date || new Date(promotion.start_date) <= new Date(now)) &&
+        (!promotion.end_date || new Date(promotion.end_date) >= new Date(now));
+
+      if (isActive) {
+        promotionId = promotion.id;
+        usageBalance = promoDollars;
+      }
+    }
+
+    const { data, error } = await supabaseServerClient
+      .from('user_profiles')
+      .insert({
+        user_id,
+        zipline,
+        username,
+        email,
+        token_balance: tokenBalance,
+        usage_balance: usageBalance,
+      })
+      .select()
+      .single();
+    if (error) {
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_create_failed',
+      });
+    }
+
+    const { error: tokensLogError } = await supabaseServerClient.from('user_tokens_log').insert({
+      user_id,
+      token_amount: tokenBalance,
+      promotion_id: promotionId,
+      type_id: 1,
+      generation_id: null,
+      transaction_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (tokensLogError) {
+      console.error('Error inserting into user_tokens_log:', tokensLogError);
+    }
+
     const { error: usageLogError } = await supabaseServerClient.from('user_usage_log').insert({
-      user_id: req.body.user_id,
+      user_id,
       usage_amount: usageBalance,
       promotion_id: promotionId,
       type_id: 1,
@@ -86,9 +94,10 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
     });
     if (usageLogError) {
       console.error('Error inserting into user_usage_log:', usageLogError);
-      // Don't fail the user creation if logging fails, but log the error
     }
 
-
-  res.status(200).json({ success: true, data: data });
+    sendOk(res, data);
+  } catch (error) {
+    sendError(res, error);
+  }
 };

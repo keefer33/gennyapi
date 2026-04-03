@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
+import { RequestWithUser } from '../shared/types';
 /**
  * Authenticate using the API key (JWT from createToken / authApiKey).
  * The frontend Supabase token is only used for login; after createToken,
@@ -43,7 +43,7 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    (req as any).user = { id: userId, authToken: userToken };
+    (req as RequestWithUser).user = { id: userId, authToken: userToken };
     next();
   } catch (error) {
     console.error('[auth] Error:', error);

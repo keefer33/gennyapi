@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
-import { getServerClient } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { getServerClient } from '../../shared/supabaseClient';
 
 /**
  * GET /promotions
@@ -17,9 +19,10 @@ export async function listActivePromotions(req: Request, res: Response): Promise
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[listActivePromotions]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'promotions_list_failed',
+      });
     }
 
     const now = new Date().toISOString();
@@ -35,12 +38,8 @@ export async function listActivePromotions(req: Request, res: Response): Promise
       return isStarted && isNotEnded;
     });
 
-    res.status(200).json({ success: true, data: { promotions: activePromotions } });
+    sendOk(res, { promotions: activePromotions });
   } catch (err) {
-    console.error('[listActivePromotions]', err);
-    res.status(500).json({
-      success: false,
-      error: err instanceof Error ? err.message : 'Failed to fetch promotions',
-    });
+    sendError(res, err);
   }
 }

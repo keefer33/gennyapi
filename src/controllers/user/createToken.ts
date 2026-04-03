@@ -1,22 +1,17 @@
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { unauthorized, sendError, sendOk } from '../../app/response';
 
 export const createToken = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Extract Bearer token from Authorization header
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        success: false,
-        error: 'No valid authorization header',
-        message: 'Bearer token is required',
-      });
-      return;
+      throw unauthorized('Bearer token is required');
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const token = authHeader.substring(7);
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
@@ -27,51 +22,30 @@ export const createToken = async (req: Request, res: Response): Promise<void> =>
     } = await supabaseServerClient.auth.getUser(token);
 
     if (userError) {
-      res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-        message: userError.message,
-      });
-      return;
+      throw unauthorized(userError.message);
     }
 
     if (!userData?.id) {
-      res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-        message: 'User data missing',
-      });
-      return;
+      throw unauthorized('User data missing');
     }
 
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
-      console.error('[createToken] JWT_SECRET is not set');
-      res.status(500).json({
-        success: false,
-        error: 'Server configuration error',
-        message: 'Token generation unavailable',
+      throw new AppError('Token generation unavailable', {
+        statusCode: 500,
+        code: 'jwt_secret_missing',
+        expose: false,
       });
-      return;
     }
 
     const permanentToken = jwt.sign({ u: userData.id }, jwtSecret);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        user: userData.id,
-        token: permanentToken,
-        expiresIn: 'never',
-      },
-      message: 'User authenticated successfully',
+    sendOk(res, {
+      user: userData.id,
+      token: permanentToken,
+      expiresIn: 'never',
     });
-  } catch (error: any) {
-    console.error('[createToken] Error:', error?.message ?? error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create token',
-      message: error?.message ?? 'Internal server error',
-    });
+  } catch (error) {
+    sendError(res, error);
   }
 };

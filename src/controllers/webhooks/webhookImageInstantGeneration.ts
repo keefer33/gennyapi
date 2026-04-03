@@ -1,7 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import { createUserGenerationFile, updateUserGeneration } from '../generate/generateData';
-import { saveFileFromUrl } from '../../utils/generate';
-import { removeEmptyValues } from '../../utils/payloadUtils';
+import { saveFileFromUrl } from '../generate/generateUtils';
+import { removeEmptyValues } from '../../shared/payloadUtils';
 
 export const webhookImageInstantGeneration = async (pollingFileData: any) => {
   try {

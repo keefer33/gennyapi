@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 const USAGE_LOG_SELECT = `
   *,
@@ -30,11 +33,7 @@ const USAGE_LOG_SELECT = `
  */
 export async function listUserUsageLog(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized', message: 'User not found' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '10'), 10) || 10));
@@ -45,51 +44,38 @@ export async function listUserUsageLog(req: Request, res: Response): Promise<voi
     const { count, error: countError } = await supabaseServerClient
       .from('user_usage_log')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (countError) {
-      console.error('[listUserUsageLog] count:', countError.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch usage log',
-        message: countError.message,
+      throw new AppError('Failed to fetch usage log', {
+        statusCode: 500,
+        code: 'usage_log_count_failed',
+        details: countError,
       });
-      return;
     }
 
     const { data: logs, error: logsError } = await supabaseServerClient
       .from('user_usage_log')
       .select(USAGE_LOG_SELECT)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (logsError) {
-      console.error('[listUserUsageLog] select:', logsError.message);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch usage log',
-        message: logsError.message,
+      throw new AppError('Failed to fetch usage log', {
+        statusCode: 500,
+        code: 'usage_log_select_failed',
+        details: logsError,
       });
-      return;
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        logs: logs ?? [],
-        total: count ?? 0,
-        page,
-        limit,
-      },
+    sendOk(res, {
+      logs: logs ?? [],
+      total: count ?? 0,
+      page,
+      limit,
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[listUserUsageLog]', message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch usage log',
-      message,
-    });
+  } catch (error) {
+    sendError(res, error);
   }
 }

@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 const FILE_TAG_SELECT = `
   file_id,
@@ -11,16 +14,11 @@ const FILE_TAG_SELECT = `
 /** GET /user/tags/files/:fileId */
 export async function getFileTags(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const fileId = req.params.fileId;
     if (!fileId) {
-      res.status(400).json({ success: false, error: 'Missing file id' });
-      return;
+      throw badRequest('Missing file id');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -29,18 +27,18 @@ export async function getFileTags(req: Request, res: Response): Promise<void> {
       .from('user_files')
       .select('id')
       .eq('id', fileId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (fileErr) {
-      console.error('[getFileTags] file:', fileErr.message);
-      res.status(500).json({ success: false, error: fileErr.message });
-      return;
+      throw new AppError(fileErr.message, {
+        statusCode: 500,
+        code: 'user_file_lookup_failed',
+      });
     }
 
     if (!fileRow) {
-      res.status(404).json({ success: false, error: 'File not found' });
-      return;
+      throw notFound('File not found');
     }
 
     const { data, error } = await supabaseServerClient
@@ -49,15 +47,14 @@ export async function getFileTags(req: Request, res: Response): Promise<void> {
       .eq('file_id', fileId);
 
     if (error) {
-      console.error('[getFileTags]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_file_tags_fetch_failed',
+      });
     }
 
-    res.status(200).json({ success: true, data: { tags: data ?? [] } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getFileTags]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { tags: data ?? [] });
+  } catch (error) {
+    sendError(res, error);
   }
 }

@@ -1,21 +1,19 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../app/response';
+import { getAuthUserId } from '../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
 
 /**
  * GET /support/:ticketId
  */
 export async function getSupportTicketDetail(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const ticketId = req.params.ticketId;
     if (!ticketId) {
-      res.status(400).json({ success: false, error: 'Missing ticket id' });
-      return;
+      throw badRequest('Missing ticket id');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -24,12 +22,11 @@ export async function getSupportTicketDetail(req: Request, res: Response): Promi
       .from('user_support_tickets')
       .select('id, created_at, user_id, status')
       .eq('id', ticketId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (ticketError || !ticketData) {
-      res.status(404).json({ success: false, error: 'Ticket not found', notFound: true });
-      return;
+      throw notFound('Ticket not found');
     }
 
     const { data: threadData, error: threadError } = await supabaseServerClient
@@ -39,21 +36,17 @@ export async function getSupportTicketDetail(req: Request, res: Response): Promi
       .order('created_at', { ascending: true });
 
     if (threadError) {
-      console.error('[getSupportTicketDetail] threads:', threadError.message);
-      res.status(500).json({ success: false, error: threadError.message });
-      return;
+      throw new AppError(threadError.message, {
+        statusCode: 500,
+        code: 'support_ticket_threads_list_failed',
+      });
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        ticket: ticketData,
-        threads: threadData ?? [],
-      },
+    sendOk(res, {
+      ticket: ticketData,
+      threads: threadData ?? [],
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getSupportTicketDetail]', message);
-    res.status(500).json({ success: false, error: message });
+  } catch (error) {
+    sendError(res, error);
   }
 }

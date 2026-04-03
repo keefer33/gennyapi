@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 const PROFILE_COLUMNS =
   'id, user_id, first_name, last_name, bio, created_at, updated_at, email, username, token_balance, usage_balance, api_key, meta';
@@ -13,11 +16,7 @@ const PROFILE_COLUMNS =
  */
 export async function patchUserProfile(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const body = req.body ?? {};
     const first_name = typeof body.first_name === 'string' ? body.first_name : '';
@@ -26,8 +25,7 @@ export async function patchUserProfile(req: Request, res: Response): Promise<voi
     const usernameRaw = typeof body.username === 'string' ? body.username.trim() : '';
 
     if (!usernameRaw) {
-      res.status(400).json({ success: false, error: 'Username is required' });
-      return;
+      throw badRequest('Username is required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -35,13 +33,15 @@ export async function patchUserProfile(req: Request, res: Response): Promise<voi
     const { data: existing, error: existingErr } = await supabaseServerClient
       .from('user_profiles')
       .select('id, username')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (existingErr) {
-      console.error('[patchUserProfile] load:', existingErr.message);
-      res.status(500).json({ success: false, error: 'Failed to load profile' });
-      return;
+      throw new AppError('Failed to load profile', {
+        statusCode: 500,
+        code: 'user_profile_load_failed',
+        details: existingErr,
+      });
     }
 
     const currentUsername = (existing?.username ?? '').trim();
@@ -50,16 +50,20 @@ export async function patchUserProfile(req: Request, res: Response): Promise<voi
         .from('user_profiles')
         .select('id', { count: 'exact', head: true })
         .eq('username', usernameRaw)
-        .neq('user_id', user.id);
+        .neq('user_id', userId);
 
       if (countError) {
-        console.error('[patchUserProfile] username check:', countError.message);
-        res.status(500).json({ success: false, error: 'Failed to validate username' });
-        return;
+        throw new AppError('Failed to validate username', {
+          statusCode: 500,
+          code: 'user_profile_username_validation_failed',
+          details: countError,
+        });
       }
       if ((count ?? 0) > 0) {
-        res.status(409).json({ success: false, error: 'Username is already taken' });
-        return;
+        throw new AppError('Username is already taken', {
+          statusCode: 409,
+          code: 'username_conflict',
+        });
       }
     }
 
@@ -79,13 +83,15 @@ export async function patchUserProfile(req: Request, res: Response): Promise<voi
         .eq('id', existing.id);
 
       if (updateErr) {
-        console.error('[patchUserProfile] update:', updateErr.message);
-        res.status(500).json({ success: false, error: 'Failed to update profile information' });
-        return;
+        throw new AppError('Failed to update profile information', {
+          statusCode: 500,
+          code: 'user_profile_update_failed',
+          details: updateErr,
+        });
       }
     } else {
       const { error: insertErr } = await supabaseServerClient.from('user_profiles').insert({
-        user_id: user.id,
+        user_id: userId,
         first_name,
         last_name,
         bio,
@@ -93,28 +99,27 @@ export async function patchUserProfile(req: Request, res: Response): Promise<voi
       });
 
       if (insertErr) {
-        console.error('[patchUserProfile] insert:', insertErr.message);
-        res.status(500).json({ success: false, error: 'Failed to create profile information' });
-        return;
+        throw new AppError('Failed to create profile information', {
+          statusCode: 500,
+          code: 'user_profile_create_failed',
+          details: insertErr,
+        });
       }
     }
 
     const { data: profile, error: fetchErr } = await supabaseServerClient
       .from('user_profiles')
       .select(PROFILE_COLUMNS)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (fetchErr || !profile) {
-      console.error('[patchUserProfile] refetch:', fetchErr?.message);
-      res.status(200).json({ success: true, data: { profile: null } });
+      sendOk(res, { profile: null });
       return;
     }
 
-    res.status(200).json({ success: true, data: { profile } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[patchUserProfile]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { profile });
+  } catch (error) {
+    sendError(res, error);
   }
 }

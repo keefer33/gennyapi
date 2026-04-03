@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 /**
  * POST /user/files
@@ -8,11 +11,7 @@ import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseC
  */
 export async function createUserFile(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const { file_name, file_path, file_size, file_type, upload_type } = req.body ?? {};
 
@@ -22,12 +21,7 @@ export async function createUserFile(req: Request, res: Response): Promise<void>
       typeof file_size !== 'number' ||
       typeof file_type !== 'string'
     ) {
-      res.status(400).json({
-        success: false,
-        error: 'Bad request',
-        message: 'file_name, file_path, file_size, and file_type are required',
-      });
-      return;
+      throw badRequest('file_name, file_path, file_size, and file_type are required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -35,7 +29,7 @@ export async function createUserFile(req: Request, res: Response): Promise<void>
     const { data, error } = await supabaseServerClient
       .from('user_files')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         file_name,
         file_path,
         file_size,
@@ -47,15 +41,14 @@ export async function createUserFile(req: Request, res: Response): Promise<void>
       .single();
 
     if (error) {
-      console.error('[createUserFile]', error.message);
-      res.status(500).json({ success: false, error: 'Database error', message: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_file_create_failed',
+      });
     }
 
-    res.status(201).json({ success: true, data });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[createUserFile]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, data, 201);
+  } catch (error) {
+    sendError(res, error);
   }
 }

@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../utils/supabaseClient';
+import { AppError } from '../../app/error';
+import { badRequest, sendError, sendOk } from '../../app/response';
+import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 import { USER_GENERATION_SELECT } from './generationSelect';
 
 /**
@@ -7,11 +10,7 @@ import { USER_GENERATION_SELECT } from './generationSelect';
  */
 export async function listUserGenerations(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '9'), 10) || 9));
@@ -19,17 +18,14 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
     const to = from + limit - 1;
 
     const modelId =
-      typeof req.query.modelId === 'string' && req.query.modelId.trim() !== ''
-        ? req.query.modelId.trim()
-        : null;
+      typeof req.query.modelId === 'string' && req.query.modelId.trim() !== '' ? req.query.modelId.trim() : null;
 
-    const fileTypeFilter =
-      typeof req.query.fileTypeFilter === 'string' ? req.query.fileTypeFilter.trim() : 'all';
+    const fileTypeFilter = typeof req.query.fileTypeFilter === 'string' ? req.query.fileTypeFilter.trim() : 'all';
 
     const tagsParam = typeof req.query.tags === 'string' ? req.query.tags : '';
     const selectedTags = tagsParam
       .split(',')
-      .map((s) => s.trim())
+      .map(s => s.trim())
       .filter(Boolean);
 
     const statusFilter = typeof req.query.status === 'string' ? req.query.status.trim() : null;
@@ -37,7 +33,7 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
     const filterValuesParam = typeof req.query.filterValues === 'string' ? req.query.filterValues : '';
     const filterValuesForPicker = filterValuesParam
       .split(',')
-      .map((s) => s.trim())
+      .map(s => s.trim())
       .filter(Boolean);
     const ALLOWED_FILTER_FIELDS = new Set(['model_id', 'task_id', 'generation_type', 'id']);
 
@@ -68,7 +64,7 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
       let fileTypeQuery = supabase
         .from('user_files')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'active')
         .eq('upload_type', 'generation');
 
@@ -81,14 +77,15 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
       const { data: matchingFiles, error: fileError } = await fileTypeQuery;
 
       if (fileError) {
-        console.error('[listUserGenerations] files filter:', fileError.message);
-        res.status(500).json({ success: false, error: fileError.message });
-        return;
+        throw new AppError(fileError.message, {
+          statusCode: 500,
+          code: 'generation_list_file_filter_failed',
+        });
       }
 
       if (!matchingFiles || matchingFiles.length === 0) {
         const e = emptyPagination();
-        res.status(200).json({ success: true, data: e });
+        sendOk(res, e);
         return;
       }
 
@@ -100,14 +97,15 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
         .in('file_id', matchingFileIds);
 
       if (genFileError) {
-        console.error('[listUserGenerations] gen files:', genFileError.message);
-        res.status(500).json({ success: false, error: genFileError.message });
-        return;
+        throw new AppError(genFileError.message, {
+          statusCode: 500,
+          code: 'generation_list_generation_files_failed',
+        });
       }
 
       if (!generationFiles || generationFiles.length === 0) {
         const e = emptyPagination();
-        res.status(200).json({ success: true, data: e });
+        sendOk(res, e);
         return;
       }
 
@@ -120,11 +118,11 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
           .in('tag_id', selectedTags);
 
         const taggedFileIds = taggedFiles?.map((ft: { file_id: string }) => ft.file_id) || [];
-        const intersection = matchingFileIds.filter((id) => taggedFileIds.includes(id));
+        const intersection = matchingFileIds.filter(id => taggedFileIds.includes(id));
 
         if (intersection.length === 0) {
           const e = emptyPagination();
-          res.status(200).json({ success: true, data: e });
+          sendOk(res, e);
           return;
         }
 
@@ -139,61 +137,28 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
 
         if (filteredGenIds.length === 0) {
           const e = emptyPagination();
-          res.status(200).json({ success: true, data: e });
+          sendOk(res, e);
           return;
         }
 
         let query = supabase
           .from('user_generations')
           .select(USER_GENERATION_SELECT, { count: 'exact' })
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .in('id', filteredGenIds);
 
         const { data, error, count } = await runQuery(query);
 
         if (error) {
-          console.error('[listUserGenerations]', error.message);
-          res.status(500).json({ success: false, error: error.message });
-          return;
+          throw new AppError(error.message, {
+            statusCode: 500,
+            code: 'generation_list_failed',
+          });
         }
 
         const total = count ?? 0;
         const totalPages = Math.ceil(total / limit);
-        res.status(200).json({
-          success: true,
-          data: {
-            generations: data ?? [],
-            pagination: {
-              currentPage: page,
-              totalPages,
-              hasNextPage: page < totalPages,
-              hasPrevPage: page > 1,
-              total,
-            },
-          },
-        });
-        return;
-      }
-
-      let query = supabase
-        .from('user_generations')
-        .select(USER_GENERATION_SELECT, { count: 'exact' })
-        .eq('user_id', user.id)
-        .in('id', generationIds);
-
-      const { data, error, count } = await runQuery(query);
-
-      if (error) {
-        console.error('[listUserGenerations]', error.message);
-        res.status(500).json({ success: false, error: error.message });
-        return;
-      }
-
-      const total = count ?? 0;
-      const totalPages = Math.ceil(total / limit);
-      res.status(200).json({
-        success: true,
-        data: {
+        sendOk(res, {
           generations: data ?? [],
           pagination: {
             currentPage: page,
@@ -202,6 +167,35 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
             hasPrevPage: page > 1,
             total,
           },
+        });
+        return;
+      }
+
+      let query = supabase
+        .from('user_generations')
+        .select(USER_GENERATION_SELECT, { count: 'exact' })
+        .eq('user_id', userId)
+        .in('id', generationIds);
+
+      const { data, error, count } = await runQuery(query);
+
+      if (error) {
+        throw new AppError(error.message, {
+          statusCode: 500,
+          code: 'generation_list_failed',
+        });
+      }
+
+      const total = count ?? 0;
+      const totalPages = Math.ceil(total / limit);
+      sendOk(res, {
+        generations: data ?? [],
+        pagination: {
+          currentPage: page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          total,
         },
       });
       return;
@@ -209,16 +203,13 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
 
     // --- Tags only (no file type filter) ---
     if (selectedTags.length > 0) {
-      const { data: taggedFiles } = await supabase
-        .from('user_file_tags')
-        .select('file_id')
-        .in('tag_id', selectedTags);
+      const { data: taggedFiles } = await supabase.from('user_file_tags').select('file_id').in('tag_id', selectedTags);
 
       const taggedFileIds = taggedFiles?.map((ft: { file_id: string }) => ft.file_id) || [];
 
       if (taggedFileIds.length === 0) {
         const e = emptyPagination();
-        res.status(200).json({ success: true, data: e });
+        sendOk(res, e);
         return;
       }
 
@@ -233,37 +224,35 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
 
       if (generationIds.length === 0) {
         const e = emptyPagination();
-        res.status(200).json({ success: true, data: e });
+        sendOk(res, e);
         return;
       }
 
       let query = supabase
         .from('user_generations')
         .select(USER_GENERATION_SELECT, { count: 'exact' })
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('id', generationIds);
 
       const { data, error, count } = await runQuery(query);
 
       if (error) {
-        console.error('[listUserGenerations]', error.message);
-        res.status(500).json({ success: false, error: error.message });
-        return;
+        throw new AppError(error.message, {
+          statusCode: 500,
+          code: 'generation_list_failed',
+        });
       }
 
       const total = count ?? 0;
       const totalPages = Math.ceil(total / limit);
-      res.status(200).json({
-        success: true,
-        data: {
-          generations: data ?? [],
-          pagination: {
-            currentPage: page,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPrevPage: page > 1,
-            total,
-          },
+      sendOk(res, {
+        generations: data ?? [],
+        pagination: {
+          currentPage: page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          total,
         },
       });
       return;
@@ -273,15 +262,14 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
     let query = supabase
       .from('user_generations')
       .select(USER_GENERATION_SELECT, { count: 'exact' })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (statusFilter) {
       query = query.eq('status', statusFilter);
     }
     if (filterFieldRaw && filterValuesForPicker.length > 0) {
       if (!ALLOWED_FILTER_FIELDS.has(filterFieldRaw)) {
-        res.status(400).json({ success: false, error: 'Invalid filterField' });
-        return;
+        throw badRequest('Invalid filterField');
       }
       query = query.in(filterFieldRaw, filterValuesForPicker);
     }
@@ -289,29 +277,25 @@ export async function listUserGenerations(req: Request, res: Response): Promise<
     const { data, error, count } = await runQuery(query);
 
     if (error) {
-      console.error('[listUserGenerations]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'generation_list_failed',
+      });
     }
 
     const total = count ?? 0;
     const totalPages = Math.ceil(total / limit);
-    res.status(200).json({
-      success: true,
-      data: {
-        generations: data ?? [],
-        pagination: {
-          currentPage: page,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-          total,
-        },
+    sendOk(res, {
+      generations: data ?? [],
+      pagination: {
+        currentPage: page,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+        total,
       },
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[listUserGenerations]', message);
-    res.status(500).json({ success: false, error: message });
+  } catch (error) {
+    sendError(res, error);
   }
 }

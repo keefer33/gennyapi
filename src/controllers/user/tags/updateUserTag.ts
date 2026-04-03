@@ -1,20 +1,18 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 /** PATCH /user/tags/:tagId — body: { tag_name: string } */
 export async function updateUserTag(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const tagId = req.params.tagId;
     const tagName = typeof req.body?.tag_name === 'string' ? req.body.tag_name.trim() : '';
     if (!tagId || !tagName) {
-      res.status(400).json({ success: false, error: 'tagId and tag_name are required' });
-      return;
+      throw badRequest('tagId and tag_name are required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -23,25 +21,23 @@ export async function updateUserTag(req: Request, res: Response): Promise<void> 
       .from('user_tags')
       .update({ tag_name: tagName })
       .eq('id', tagId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .select()
       .single();
 
     if (error) {
-      console.error('[updateUserTag]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_tag_update_failed',
+      });
     }
 
     if (!data) {
-      res.status(404).json({ success: false, error: 'Tag not found' });
-      return;
+      throw notFound('Tag not found');
     }
 
-    res.status(200).json({ success: true, data: { tag: data } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[updateUserTag]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { tag: data });
+  } catch (error) {
+    sendError(res, error);
   }
 }

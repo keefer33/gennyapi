@@ -1,4 +1,4 @@
-import { saveFileFromUrl } from '../../utils/generate';
+import { saveFileFromUrl } from '../generate/generateUtils';
 import { createUserGenerationFile, updateUserGeneration } from '../generate/generateData';
 
 /** Shared: save a file from URL and return { status, files } for webhook processing. */
@@ -35,8 +35,29 @@ const kieProcessResponse = async (pollingFileResponse: any, pollingFileData: any
   if (isSuccess && pollingFileResponse.data?.resultJson) {
     const resultJson = JSON.parse(pollingFileResponse.data.resultJson);
     if (resultJson.resultUrls && Array.isArray(resultJson.resultUrls)) {
-      fileUrl = resultJson.resultUrls[0] || null;
-    } else if (resultJson.resultUrls && typeof resultJson.resultUrls === 'string') {
+      const allFiles: any[] = [];
+      for (let index = 0; index < resultJson.resultUrls.length; index++) {
+        const url = resultJson.resultUrls[index];
+        if (typeof url === 'string' && url.trim()) {
+          const responseWithFileIndex = {
+            ...pollingFileResponse,
+            data: {
+              ...(pollingFileResponse.data ?? {}),
+              fileIndex: index,
+            },
+          };
+          const r = await processResponseWithFileUrl(
+            isSuccess,
+            url.trim(),
+            pollingFileData,
+            responseWithFileIndex
+          );
+          allFiles.push(...r.files);
+        }
+      }
+      return { status: isSuccess ? 'completed' : 'pending', files: allFiles };
+    }
+    if (resultJson.resultUrls && typeof resultJson.resultUrls === 'string') {
       fileUrl = resultJson.resultUrls;
     }
   }
@@ -44,7 +65,16 @@ const kieProcessResponse = async (pollingFileResponse: any, pollingFileData: any
 };
 
 const wanProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
-  const isSuccess = pollingFileResponse.output?.task_status === 'SUCCEEDED';
+  const status = pollingFileResponse.output?.task_status;
+  const isSuccess = status === 'SUCCEEDED';
+  if (status === 'FAILED') {
+    await updateUserGeneration({
+      id: pollingFileData.id,
+      status: 'error',
+      polling_response: pollingFileResponse,
+    });
+    throw new Error(`API error: ${pollingFileResponse?.err_code ?? 'unknown'}`);
+  }
   const fileUrl = isSuccess ? (pollingFileResponse.output?.video_url ?? null) : null;
   return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
 };

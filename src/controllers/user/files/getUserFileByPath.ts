@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { getServerClient, SupabaseServerClients } from '../../../utils/supabaseClient';
+import { AppError } from '../../../app/error';
+import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
+import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
 
 const FILE_SELECT = `
   *,
@@ -16,17 +19,12 @@ const FILE_SELECT = `
  */
 export async function getUserFileByPath(req: Request, res: Response): Promise<void> {
   try {
-    const user = (req as Request & { user?: { id: string } }).user;
-    if (!user?.id) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+    const userId = getAuthUserId(req);
 
     const raw = req.query.file_path;
     const filePath = typeof raw === 'string' ? raw.trim() : '';
     if (!filePath) {
-      res.status(400).json({ success: false, error: 'file_path query parameter is required' });
-      return;
+      throw badRequest('file_path query parameter is required');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -34,26 +32,24 @@ export async function getUserFileByPath(req: Request, res: Response): Promise<vo
     const { data, error } = await supabaseServerClient
       .from('user_files')
       .select(FILE_SELECT)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('file_path', filePath)
       .eq('status', 'active')
       .maybeSingle();
 
     if (error) {
-      console.error('[getUserFileByPath]', error.message);
-      res.status(500).json({ success: false, error: error.message });
-      return;
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_file_by_path_fetch_failed',
+      });
     }
 
     if (!data) {
-      res.status(404).json({ success: false, error: 'File not found' });
-      return;
+      throw notFound('File not found');
     }
 
-    res.status(200).json({ success: true, data: { file: data } });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getUserFileByPath]', message);
-    res.status(500).json({ success: false, error: message });
+    sendOk(res, { file: data });
+  } catch (error) {
+    sendError(res, error);
   }
 }

@@ -1,5 +1,7 @@
-import { getServerClient } from '../../utils/supabaseClient';
+import { getServerClient } from '../../shared/supabaseClient';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { unauthorized, notFound, sendError, sendOk } from '../../app/response';
 
 const PROFILE_COLUMNS =
   'id, user_id, first_name, last_name, bio, created_at, updated_at, email, username, token_balance, usage_balance, api_key, meta';
@@ -13,12 +15,7 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-        message: 'Bearer token is required',
-      });
-      return;
+      throw unauthorized('Bearer token is required');
     }
 
     const token = authHeader.substring(7);
@@ -30,12 +27,7 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
     } = await supabaseServerClient.auth.getUser(token);
 
     if (userError || !userData?.id) {
-      res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-        message: userError?.message ?? 'User could not be verified',
-      });
-      return;
+      throw unauthorized(userError?.message ?? 'User could not be verified');
     }
 
     const { data, error } = await supabaseServerClient
@@ -45,26 +37,17 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
       .single();
 
     if (error) {
-      const status = error.code === 'PGRST116' ? 404 : 500;
-      res.status(status).json({
-        success: false,
-        error: status === 404 ? 'Profile not found' : 'Database error',
-        message: error.message,
+      if (error.code === 'PGRST116') {
+        throw notFound('Profile not found');
+      }
+      throw new AppError(error.message, {
+        statusCode: 500,
+        code: 'user_profile_fetch_failed',
       });
-      return;
     }
 
-    res.status(200).json({
-      success: true,
-      data,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[getUserProfile]', message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to load profile',
-      message,
-    });
+    sendOk(res, data);
+  } catch (error) {
+    sendError(res, error);
   }
 };

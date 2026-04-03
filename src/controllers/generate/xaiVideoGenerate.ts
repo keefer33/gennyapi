@@ -1,6 +1,6 @@
 import { createGateway, experimental_generateVideo as generateVideo } from 'ai';
 import { getUserGeneration, updateUserGeneration, createUserGenerationFile } from './generateData';
-import { saveFileFromBuffer } from '../../utils/generate';
+import { saveFileFromBuffer } from './generateUtils';
 
 /** Optional extended-timeout fetch for long-running video (requires optional dependency `undici`). */
 function createGatewayWithOptionalExtendedTimeout(apiKey: string) {

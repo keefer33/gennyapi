@@ -1,4 +1,5 @@
-import { getServerClient } from '../../utils/supabaseClient';
+import { getServerClient } from '../../shared/supabaseClient';
+import { ListChatMessagesOptions } from './chatsTypes';
 
 const CHATS_TABLE = 'user_models_chats';
 const MESSAGES_TABLE = 'user_models_chats_messages';
@@ -98,11 +99,7 @@ async function checkChatOwnership(
   return null;
 }
 
-export const handleListChatMessages = async (
-  userId: string,
-  chat_id: string,
-  options?: { limit?: number; order?: 'asc' | 'desc' }
-) => {
+export const handleListChatMessages = async (userId: string, chat_id: string, options?: ListChatMessagesOptions) => {
   const { supabaseServerClient } = await getServerClient();
   const ownership = await checkChatOwnership(supabaseServerClient, chat_id, userId);
   if (ownership) return ownership;

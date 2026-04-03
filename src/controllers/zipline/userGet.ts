@@ -1,37 +1,20 @@
-import axios from "axios";
-import { getServerClient, SupabaseServerClients } from "../../utils/supabaseClient";
+import axios from 'axios';
 import { Request, Response } from 'express';
+import { AppError } from '../../app/error';
+import { sendError, sendOk } from '../../app/response';
+import { getAuthUserId } from '../../shared/getAuthUserId';
+import { getZiplineBaseUrl, getZiplineTokenForUser } from './ziplineUtils';
 
 export const userGet = async (req: Request, res: Response): Promise<void> => {
-  const user = (req as any).user;
-  if (!user?.id) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const baseUrl = process.env.ZIPLINE_URL;
-  if (!baseUrl) {
-    res.status(500).json({ error: "Zipline URL not configured" });
-    return;
-  }
-
-  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-  const { data: userProfile, error: profileError } = await supabaseServerClient
-    .from('user_profiles')
-    .select('zipline')
-    .eq('user_id', user.id)
-    .single();
-  if (profileError) {
-    res.status(500).json({ error: profileError?.message || "Failed to get user profile" });
-    return;
-  }
-
   try {
+    const userId = getAuthUserId(req);
+    const baseUrl = getZiplineBaseUrl();
+    const token = await getZiplineTokenForUser(userId);
+
     const response = await axios.get(`${baseUrl}/api/user`, {
       headers: {
-        "Content-Type": "application/json",
-        Authorization: userProfile?.zipline?.token,
+        'Content-Type': 'application/json',
+        Authorization: token,
       },
       validateStatus: () => true,
     });
@@ -39,15 +22,15 @@ export const userGet = async (req: Request, res: Response): Promise<void> => {
     const data = response.data;
 
     if (response.status < 200 || response.status >= 300) {
-      res.status(response.status).json({ error: data?.message || "Failed to fetch user", details: data });
-      return;
+      throw new AppError(data?.message || 'Failed to fetch user', {
+        statusCode: response.status,
+        code: 'zipline_user_get_failed',
+        details: data,
+      });
     }
 
-    res.status(200).json({ success: true, data: data });
-    return;
+    sendOk(res, data);
   } catch (error) {
-    console.error("Zipline user GET error:", error);
-    res.status(500).json({ error: "Internal server error" });
-    return;
+    sendError(res, error);
   }
-}
+};

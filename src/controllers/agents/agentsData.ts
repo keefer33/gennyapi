@@ -1,50 +1,11 @@
-import { getServerClient } from '../../utils/supabaseClient';
+import { getServerClient } from '../../shared/supabaseClient';
+import { UserAgentRow } from './agentsTypes';
+import { ServiceResult } from '../../shared/types';
 
 const AGENT_MODELS_TABLE = 'agent_models';
 const USER_AGENTS_TABLE = 'user_agents';
 
-export interface UserAgentRow {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-  name: string;
-  /** Foreign key to ai_models.model_name */
-  model_name: AgentModelJoinedRow;
-  config: Record<string, unknown> | null;
-}
-
-/** API configuration row from ai_models_apis. */
-export interface AgentModelApiRow {
-  id: string;
-  created_at: string;
-  model_name: string;
-  pricing: Record<string, unknown>;
-  schema: Record<string, unknown> | null;
-  meta: Record<string, unknown>;
-  api_type: string | null;
-  vendor_key: string | null;
-}
-
-/** Model row joined from ai_models, including its api relation. */
-export interface AgentModelJoinedRow {
-  id: string;
-  model_name: string;
-  meta: Record<string, unknown>;
-  brand_name: string | null;
-  created_at: string;
-  updated_at: string;
-  description: string | null;
-  api_id: AgentModelApiRow | null;
-}
-
-/** User agent with its linked ai_models (and nested ai_models_apis) record. */
-export type UserAgentWithModel = UserAgentRow & {
-  /** Joined ai_models row (with its api), if found. */
-  model: AgentModelJoinedRow | null;
-};
-
-export const getAgentModelsData = async () => {
+export const getAgentModelsData = async (): Promise<ServiceResult<unknown>> => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(AGENT_MODELS_TABLE)
@@ -58,11 +19,11 @@ export const getAgentModelsData = async () => {
   const TOKEN_TO_MILLION = 1_000_000;
 
   const parseNumber = (value: unknown, fallback: number) => {
-    const n = typeof value === "number" ? value : parseFloat(String(value));
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
     return Number.isFinite(n) ? n : fallback;
   };
 
-  data.forEach((model) => {
+  data.forEach(model => {
     const apiId = (model as any).api_id;
     const apiObj = Array.isArray(apiId) ? apiId[0] : apiId;
     if (!apiObj?.pricing) return;
@@ -76,8 +37,8 @@ export const getAgentModelsData = async () => {
 
     const input = parseNumber(pricing.input, 0) * marginMultiplier * TOKEN_TO_MILLION;
     const output = parseNumber(pricing.output, 0) * marginMultiplier * TOKEN_TO_MILLION;
-    const input_cache_read = parseNumber(pricing["input_cache_read"], 0) * marginMultiplier * TOKEN_TO_MILLION;
-    const input_cache_write = parseNumber(pricing["input_cache_write"], 0) * marginMultiplier * TOKEN_TO_MILLION;
+    const input_cache_read = parseNumber(pricing['input_cache_read'], 0) * marginMultiplier * TOKEN_TO_MILLION;
+    const input_cache_write = parseNumber(pricing['input_cache_write'], 0) * marginMultiplier * TOKEN_TO_MILLION;
 
     apiObj.pricing = {
       pm,
@@ -93,7 +54,7 @@ export const getAgentModelsData = async () => {
 export const handleCreateUserAgent = async (
   userId: string,
   payload: { name: string; model_name: string; config?: Record<string, unknown> | null }
-) => {
+): Promise<ServiceResult<UserAgentRow>> => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_AGENTS_TABLE)
@@ -109,7 +70,7 @@ export const handleCreateUserAgent = async (
   return { data: data as UserAgentRow };
 };
 
-export const handleListUserAgents = async (userId: string) => {
+export const handleListUserAgents = async (userId: string): Promise<ServiceResult<UserAgentRow[]>> => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_AGENTS_TABLE)
@@ -120,7 +81,7 @@ export const handleListUserAgents = async (userId: string) => {
   return { data: (data ?? []) as UserAgentRow[] };
 };
 
-export const handleGetUserAgent = async (userId: string, agent_id: string) => {
+export const handleGetUserAgent = async (userId: string, agent_id: string): Promise<ServiceResult<unknown>> => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_AGENTS_TABLE)
@@ -153,7 +114,7 @@ export const handleGetUserAgent = async (userId: string, agent_id: string) => {
 };
 
 /** Resolve a model (and nested api config) directly by ai_models.model_name. */
-export const handleGetAgentModelByName = async (model_name: string) => {
+export const handleGetAgentModelByName = async (model_name: string): Promise<ServiceResult<unknown>> => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(AGENT_MODELS_TABLE)
@@ -172,7 +133,7 @@ export const handleUpdateUserAgent = async (
   userId: string,
   agent_id: string,
   payload: { name?: string; model_name?: string; config?: Record<string, unknown> | null }
-) => {
+): Promise<ServiceResult<UserAgentRow>> => {
   const { supabaseServerClient } = await getServerClient();
   const update: Record<string, unknown> = {};
   if (typeof payload.name === 'string') update.name = payload.name;
@@ -191,7 +152,7 @@ export const handleUpdateUserAgent = async (
   return { data: data as UserAgentRow };
 };
 
-export const handleDeleteUserAgent = async (userId: string, agent_id: string) => {
+export const handleDeleteUserAgent = async (userId: string, agent_id: string): Promise<{ error?: string }> => {
   const { supabaseServerClient } = await getServerClient();
   const { error } = await supabaseServerClient
     .from(USER_AGENTS_TABLE)

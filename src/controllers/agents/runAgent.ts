@@ -1,99 +1,31 @@
 import { Request, Response } from 'express';
 import { streamText, createGateway, stepCountIs, type ModelMessage } from 'ai';
-import { saveAgentGeneratedFile } from '../../utils/generate';
+import { isAppError } from '../../app/error';
+import { saveAgentGeneratedFile } from '../generate/generateUtils';
 import { handleListChatMessages, saveRunChatMessages } from '../chats/chatsData';
-import { handleGetAgentModelByName, type AgentModelApiRow } from './agentsData';
 import { messageRowsToModelMessages } from '../chats/chatsUtils';
-import { getUserId, insertUserUsageLog, updateUserProfileUsageAmount } from '../../utils/utils';
-import { Composio } from '@composio/core';
-import { VercelProvider } from '@composio/vercel';
+import { MessageRow } from '../chats/chatsTypes';
+import { insertUserUsageLog, updateUserProfileUsageAmount } from '../../shared/usageUtils';
 import getAgentCustomTools from './agentCustomTools';
-
-// ---------------------------------------------------------------------------
-// Types (reused across runChat)
-// ---------------------------------------------------------------------------
-
-/** Request body for POST run-chat. */
-interface RunChatBody {
-  chat_id?: string | null;
-  model_name?: string;
-  settings?: {
-    systemPrompt?: string;
-  };
-  prompt?: string;
-  attachments?: Array<{
-    url?: string;
-    type?: string;
-    name?: string;
-    thumbnail_url?: string | null;
-  }>;
-}
-
-type ChatAttachmentInput = {
-  url: string;
-  type?: string;
-  name?: string;
-  thumbnail_url?: string | null;
-};
-
-/** User message content part aligned with AI SDK user image parts: `{ type: 'image', image: url }`. */
-export type ChatMessage = {
-  role: 'user' | 'assistant' | 'system';
-  content:
-    | Array<
-        | { type: 'text'; text: string }
-        | { type: 'image'; image: string }
-        | { type: string; text?: string; image?: string }
-      >
-    | string;
-};
-
-/** Message row shape returned from handleListChatMessages. */
-interface MessageRow {
-  message: { role: string; content?: Array<{ type?: string; text?: string }> };
-}
-
-/** Stored assistant message part (matches AI SDK content part types + our image). */
-type StoredPart =
-  | { type: 'text'; text: string }
-  | { type: 'reasoning'; text: string }
-  | { type: 'image'; imageUrl: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
-  | { type: 'tool-result'; toolCallId: string; toolName: string; result: unknown; isError?: boolean };
-
-/** API type from ai_models_apis (endpoint, ai-gateway, mcp). */
-type ApiType = NonNullable<AgentModelApiRow['api_type']>;
+import { getAuthUserId } from '../../shared/getAuthUserId';
+import { RunAgentHttpError, SSEWriter, ApiType, ChatMessage, StoredPart, RunAgentBody } from './agentsTypes';
+import {
+  loadComposioTools,
+  parseRunAgentInput,
+  createSSEWriter,
+  sendRunAgentError,
+  getSelectedModelRow,
+  normalizeAttachments,
+} from './agentUtils';
 
 export const runAgent = async (req: Request, res: Response): Promise<void> => {
-  let writeSSE: ((data: Record<string, unknown>) => void) | null = null;
+  let writeSSE: SSEWriter | null = null;
   try {
-    const userId = getUserId(req);
-    const body = (req.body || {}) as RunChatBody;
-    const { chat_id, model_name, settings, prompt, attachments } = body;
-
-    if (!model_name || typeof model_name !== 'string') {
-      res.status(400).json({ error: 'model_name is required' });
-      return;
-    }
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      res.status(400).json({ error: 'prompt is required' });
-      return;
-    }
-
-    const modelResult = await handleGetAgentModelByName(model_name);
-    if ('error' in modelResult) {
-      res.status(404).json({ error: modelResult.error });
-      return;
-    }
-    const modelRow = modelResult.data as {
-      model_name: string;
-      api_id?: { schema?: Record<string, unknown>; api_type?: string | null; pricing?: Record<string, unknown> } | null;
-    };
-    const modelId = modelRow.api_id?.schema?.model as string | undefined;
-    if (!modelId) {
-      res.status(400).json({ error: 'Selected model has no gateway model configured' });
-      return;
-    }
+    const userId = getAuthUserId(req);
+    const input = parseRunAgentInput((req.body || {}) as RunAgentBody);
+    const { chat_id, model_name, settings, prompt, attachments } = input;
+    const modelRow = await getSelectedModelRow(model_name);
+    const modelId = modelRow.api_id?.schema?.model as string;
     const apiType: ApiType | null = (modelRow.api_id?.api_type as ApiType | null) ?? null;
 
     //TODO: Implement the apiType to allow for different apis to be used in the future
@@ -112,24 +44,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     const { gennyBotAigenTools, systemPrompt: gennyBotSystemPrompt } = await getAgentCustomTools(
       (req as any).user.authToken
     );
-    let allTools: Record<string, unknown> = {};
-    if (process.env.COMPOSIO_API_KEY) {
-      try {
-        const composio = new Composio({
-          apiKey: process.env.COMPOSIO_API_KEY,
-          provider: new VercelProvider(),
-        });
-        const session = await composio.create(userId, {
-          experimental: {
-            customToolkits: [gennyBotAigenTools],
-          },
-        });
-        const composioTools = await session.tools();
-        allTools = (composioTools ?? {}) as Record<string, unknown>;
-      } catch (composioErr) {
-        console.error('[runChat] Composio session/tools error:', composioErr);
-      }
-    }
+    const allTools = await loadComposioTools(userId, gennyBotAigenTools);
     const hasTools = Object.keys(allTools).length > 0;
 
     let sessionMessages: ChatMessage[] = [];
@@ -140,17 +55,14 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    type NormalizedAttachment = ChatAttachmentInput;
-    const normalizedAttachments = (attachments ?? []).filter(
-      (a): a is NormalizedAttachment => typeof a?.url === 'string' && a.url.trim().length > 0
-    );
+    const normalizedAttachments = normalizeAttachments(attachments);
     const attachmentLines = normalizedAttachments.map(a => `- ${String(a.type ?? 'file')} - ${a.url}`);
     const attachmentText = attachmentLines.length > 0 ? `\n\nAttached files:\n${attachmentLines.join('\n')}` : '';
     const messages: ChatMessage[] = [...sessionMessages];
-    messages.push({ role: 'user', content: [{ type: 'text', text: `${prompt.trim()}${attachmentText}` }] });
+    messages.push({ role: 'user', content: [{ type: 'text', text: `${prompt}${attachmentText}` }] });
 
     const baseSystemPrompt =
-      typeof settings.systemPrompt === 'string' && settings.systemPrompt.trim()
+      typeof settings?.systemPrompt === 'string' && settings.systemPrompt.trim()
         ? settings.systemPrompt.trim()
         : 'You are a helpful assistant.';
     const systemPrompt = `${baseSystemPrompt}\n\n${gennyBotSystemPrompt}`;
@@ -164,15 +76,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    writeSSE = (data: Record<string, unknown>) => {
-      try {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-        const resWithFlush = res as Response & { flush?: () => void };
-        if (typeof resWithFlush.flush === 'function') resWithFlush.flush();
-      } catch (e) {
-        console.error('[runChat] writeSSE:', e);
-      }
-    };
+    writeSSE = createSSEWriter(res);
 
     const result = streamText({
       model,
@@ -211,7 +115,6 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
 
     try {
       for await (const part of result.fullStream) {
-        console.log('[runChat] Part:', part.type);
         switch (part.type) {
           case 'start':
             if (writeSSE) writeSSE({ type: 'stream_status', status: 'start' });
@@ -228,14 +131,12 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
             break;
           case 'tool-input-start': {
             const toolName = (part as { toolName?: string }).toolName;
-            if (writeSSE)
-              writeSSE({ type: 'stream_status', status: 'tool-input-start', tool_name: toolName ?? '' });
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'tool-input-start', tool_name: toolName ?? '' });
             break;
           }
           case 'tool-input-end': {
             const toolName = (part as { toolName?: string }).toolName;
-            if (writeSSE)
-              writeSSE({ type: 'stream_status', status: 'tool-input-end', tool_name: toolName ?? '' });
+            if (writeSSE) writeSSE({ type: 'stream_status', status: 'tool-input-end', tool_name: toolName ?? '' });
             break;
           }
           case 'start-step':
@@ -427,22 +328,19 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
 
     res.end();
   } catch (e: unknown) {
+    if (e instanceof RunAgentHttpError) {
+      sendRunAgentError(res, writeSSE, e.statusCode, e.message);
+      return;
+    }
+    if (isAppError(e)) {
+      sendRunAgentError(res, writeSSE, e.statusCode, e.message);
+      return;
+    }
     const err = e as { message?: string };
-    if (err?.message === 'Unauthorized') {
-      if (!res.headersSent) res.status(401).json({ error: 'Unauthorized' });
-      else if (writeSSE) writeSSE({ type: 'error', error: 'Unauthorized' });
-      res.end();
-      return;
-    }
-    if (err?.message === 'Chat not found') {
-      if (!res.headersSent) res.status(404).json({ error: 'Chat not found' });
-      else if (writeSSE) writeSSE({ type: 'error', error: 'Chat not found' });
-      res.end();
-      return;
-    }
+    // Keep compatibility with existing thrown string messages from shared helpers.
+    if (err?.message === 'Unauthorized') return sendRunAgentError(res, writeSSE, 401, 'Unauthorized');
+    if (err?.message === 'Chat not found') return sendRunAgentError(res, writeSSE, 404, 'Chat not found');
     console.error('[runChat]', e);
-    if (!res.headersSent) res.status(500).json({ error: err?.message ?? 'Failed to run chat' });
-    else if (writeSSE) writeSSE({ type: 'error', error: err?.message ?? 'Failed to run chat' });
-    res.end();
+    sendRunAgentError(res, writeSSE, 500, err?.message ?? 'Failed to run chat');
   }
 };

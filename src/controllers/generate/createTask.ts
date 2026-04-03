@@ -1,7 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
-import { removeEmptyValues } from '../../utils/payloadUtils';
-import { toWanResolution } from '../../utils/generate';
-import { klingCreateJWT } from '../../utils/klingCreateJWT';
+import { removeEmptyValues } from '../../shared/payloadUtils';
+import { toWanResolution } from './generateUtils';
+import { klingCreateJWT } from '../../shared/klingCreateJWT';
 
 const WAN_INPUT_FIELDS = [
   'prompt',
@@ -118,7 +118,6 @@ export const createTask = async (taskObject: any) => {
       break;
   }
 
-
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
       headers: headers,
@@ -126,10 +125,13 @@ export const createTask = async (taskObject: any) => {
     .catch(error => {
       console.log('error', JSON.stringify(error.response.data));
 
-      throw new Error(error.message || 'Failed to generate.  Please try again later.  If the problem persists, please contact support.');
+      throw new Error(
+        error.message ||
+          'Failed to generate.  Please try again later.  If the problem persists, please contact support.'
+      );
     });
 
-    const task_id =
+  const task_id =
     response.data?.data?.taskId ||
     response.data?.data?.task_id ||
     response.data?.output?.task_id ||
