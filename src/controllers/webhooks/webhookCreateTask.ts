@@ -138,7 +138,33 @@ const replicateProcessResponse = async (pollingFileResponse: any, pollingFileDat
 const eachlabsProcessResponse = async (pollingFileResponse: any, pollingFileData: any) => {
   const status = pollingFileResponse?.status;
   const isSuccess = status === 'success';
-  const fileUrl = isSuccess && typeof pollingFileResponse?.output === 'string' ? pollingFileResponse.output : null;
+  const output = pollingFileResponse?.output;
+
+  if (isSuccess && Array.isArray(output)) {
+    const allFiles: any[] = [];
+    for (let index = 0; index < output.length; index++) {
+      const url = output[index];
+      if (typeof url === 'string' && url.trim()) {
+        const responseWithFileIndex = {
+          ...pollingFileResponse,
+          data: {
+            ...(pollingFileResponse.data ?? {}),
+            fileIndex: index,
+          },
+        };
+        const r = await processResponseWithFileUrl(
+          isSuccess,
+          url.trim(),
+          pollingFileData,
+          responseWithFileIndex
+        );
+        allFiles.push(...r.files);
+      }
+    }
+    return { status: isSuccess ? 'completed' : 'pending', files: allFiles };
+  }
+
+  const fileUrl = isSuccess && typeof output === 'string' ? output : null;
   return processResponseWithFileUrl(isSuccess, fileUrl, pollingFileData, pollingFileResponse);
 };
 

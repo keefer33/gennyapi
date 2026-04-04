@@ -61,7 +61,15 @@ const createFalPayload = (cleanedPayload: any) => cleanedPayload;
 
 const createReplicatePayload = (cleanedPayload: any) => ({ input: cleanedPayload });
 
-const createEachlabsPayload = (cleanedPayload: any) => cleanedPayload;
+const createEachlabsPayload = (cleanedPayload: any, inputModelName: string) => {
+  const version = cleanedPayload.version;
+  delete cleanedPayload.version;
+  return {
+    model: inputModelName,
+    input: cleanedPayload,
+    version: version,
+  };
+};
 
 export const createTask = async (taskObject: any) => {
   let endpoint = taskObject.api.api_url;
@@ -107,7 +115,7 @@ export const createTask = async (taskObject: any) => {
       payload = createReplicatePayload(cleanedPayload);
       break;
     case 'eachlabs':
-      payload = createEachlabsPayload(cleanedPayload);
+      payload = createEachlabsPayload(cleanedPayload, inputModelName);
       headers = {
         'Content-Type': 'application/json',
         'X-API-Key': taskObject.api.key.key,
