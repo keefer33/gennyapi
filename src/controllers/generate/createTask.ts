@@ -122,7 +122,6 @@ export const createTask = async (taskObject: any) => {
       };
       break;
     default:
-      payload = createKiePayload(cleanedPayload, inputModelName);
       break;
   }
 
@@ -146,6 +145,7 @@ export const createTask = async (taskObject: any) => {
     response.data?.task_id ||
     response.data?.request_id ||
     response.data?.id ||
+    response.data?.data?.id ||
     response.data?.predictionID;
   if (!task_id) {
     throw new Error('Failed to generate.  Please try again later.  If the problem persists, please contact support.');

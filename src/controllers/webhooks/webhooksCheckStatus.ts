@@ -50,6 +50,8 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
       endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
     } else if (api.poll_type === 'kling') {
       endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
+    } else if (api.poll_type === 'fal') {
+      endpoint = `${api?.poll_url}${pollingFileData?.task_id}/status?logs=1`;
     }
   }
   const response = await axios
