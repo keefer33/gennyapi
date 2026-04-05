@@ -57,6 +57,11 @@ const createKlingPayload = (cleanedPayload: any) => {
   return { payload: rest, pathSuffix: genType ?? '' };
 };
 
+const createWavespeedPayload = (cleanedPayload: any) => {
+  const { genType, ...rest } = cleanedPayload;
+  return { payload: rest, pathSuffix: genType ?? '' };
+};
+
 const createFalPayload = (cleanedPayload: any) => cleanedPayload;
 
 const createReplicatePayload = (cleanedPayload: any) => ({ input: cleanedPayload });
@@ -121,6 +126,11 @@ export const createTask = async (taskObject: any) => {
         'X-API-Key': taskObject.api.key.key,
       };
       break;
+      case 'wavespeed':
+        const wavespeedResult = createWavespeedPayload(cleanedPayload);
+        payload = wavespeedResult.payload;
+        endpoint = `${endpoint}${wavespeedResult.pathSuffix}`;
+        break;
     default:
       break;
   }
