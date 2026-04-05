@@ -58,7 +58,6 @@ const createKlingPayload = (cleanedPayload: any) => {
 };
 
 const createWavespeedPayload = (cleanedPayload: any) => {
-  console.log('cleanedPayload', cleanedPayload);
   const { genType, ...rest } = cleanedPayload;
   return { payload: rest, pathSuffix: genType ?? '' };
 };
@@ -135,8 +134,6 @@ export const createTask = async (taskObject: any) => {
     default:
       break;
   }
-console.log('endpoint', endpoint);
-console.log('payload', payload);
 
   const response: AxiosResponse = await axios
     .post(endpoint, payload, {
