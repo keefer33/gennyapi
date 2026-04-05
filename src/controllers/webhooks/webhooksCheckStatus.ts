@@ -4,11 +4,14 @@ import { klingCreateJWT } from '../../shared/klingCreateJWT';
 
 export const webhookCheckStatus = async (pollingFileData: any) => {
   let api = pollingFileData?.api_id;
-  let status = 'pending';
-  const files: any[] = [];
   let pollingFileResponse: any = null;
-  let headers: any = {};
+  let status = 'pending';
   let endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
+
+  let headers: any = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${api.key.key}`,
+  };
 
   switch (api.api_type) {
     case 'createTask':
