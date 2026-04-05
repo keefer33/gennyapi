@@ -8,24 +8,31 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
   const files: any[] = [];
   let pollingFileResponse: any = null;
   let headers: any = {};
+  let endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
+
   switch (api.api_type) {
     case 'createTask':
-      if (api.poll_type === 'eachlabs') {
+      if (api.poll_type === 'wavespeed') {
+        endpoint = `${api?.poll_url}${pollingFileData?.task_id}/result`;
+      } else if (api.poll_type === 'eachlabs') {
         headers = {
           'Content-Type': 'application/json',
           'X-API-Key': api.key.key,
         };
       } else if (api.poll_type === 'fal') {
+        endpoint = `${api?.poll_url}${pollingFileData?.task_id}/status?logs=1`;
         headers = {
           'Content-Type': 'application/json',
           Authorization: `Key ${api.key.key}`,
         };
       } else if (api.poll_type === 'kling') {
+        endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
         headers = {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${klingCreateJWT(api.key.key, process.env.KLING_SECRET_KEY || '')}`,
         };
       } else if (api.poll_type === 'vidu') {
+        endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
         headers = {
           'Content-Type': 'application/json',
           Authorization: `Token ${api.key.key}`,
@@ -44,16 +51,6 @@ export const webhookCheckStatus = async (pollingFileData: any) => {
       };
   }
 
-  let endpoint = `${api?.poll_url}${pollingFileData?.task_id}`;
-  if (api.api_type === 'createTask') {
-    if (api.poll_type === 'vidu') {
-      endpoint = `${api?.poll_url}${pollingFileData?.task_id}/creations`;
-    } else if (api.poll_type === 'kling') {
-      endpoint = `${api?.poll_url}${pollingFileData?.payload?.genType}/${pollingFileData?.task_id}`;
-    } else if (api.poll_type === 'fal') {
-      endpoint = `${api?.poll_url}${pollingFileData?.task_id}/status?logs=1`;
-    }
-  }
   const response = await axios
     .get(endpoint, {
       headers: headers,
