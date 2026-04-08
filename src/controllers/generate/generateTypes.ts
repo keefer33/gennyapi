@@ -51,6 +51,7 @@ export interface ToolResponse {
     agent_id?: string;
     generated_info?: any;
     thumbnail_url?: string;
+    gen_model_id?: string;
   }
 
   export interface GenerationModel {
