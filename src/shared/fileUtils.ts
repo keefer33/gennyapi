@@ -465,6 +465,9 @@ export const saveFileFromUrl = async (
   pollingFileData: any,
   pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
+  console.log('Saving file from URL', url);
+  console.log('Polling File Data', pollingFileData);
+  console.log('Polling File Response', pollingFileResponse);
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   try {
     // Validate URL
