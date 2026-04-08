@@ -124,6 +124,27 @@ export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGe
   return row;
 }
 
+/** Single winner: only rows still `pending` transition to `processing`. */
+export async function claimUserGenModelRunPendingToProcessing(taskId: string): Promise<UserGenModel | null> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data: row, error } = await supabaseServerClient
+    .from('user_gen_model_runs')
+    .update({ status: 'processing' })
+    .eq('task_id', taskId)
+    .eq('status', 'pending')
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_runs_claim_failed',
+      expose: false,
+    });
+  }
+  return row;
+}
+
 export async function updateUserGenModelRun(input: UserGenModel): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
   const { error } = await supabaseServerClient.from('user_gen_model_runs').update(input).eq('id', input.id);
