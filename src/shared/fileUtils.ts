@@ -562,7 +562,7 @@ export const saveFileFromUrl = async (
       file_size: zipData.size,
       file_type: zipData.type,
       zip_data: zipData,
-      gen_model_id: pollingFileData.models.id,
+      gen_model_id: pollingFileData.gen_model_id,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
     };
