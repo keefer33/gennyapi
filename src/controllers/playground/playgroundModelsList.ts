@@ -3,9 +3,9 @@ import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { getServerClient } from '../../shared/supabaseClient';
 import type { PlaygroundModelRow } from './playgroundTypes';
-import { deriveModelProduct, deriveModelVariant, toList } from './playgroundUtils';
+import { toList } from './playgroundUtils';
 
-export async function listPlaygroundModels(req: Request, res: Response): Promise<void> {
+export async function playgroundModelsList(req: Request, res: Response): Promise<void> {
   try {
     const { supabaseServerClient } = await getServerClient();
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -19,7 +19,7 @@ export async function listPlaygroundModels(req: Request, res: Response): Promise
     let query = supabaseServerClient
       .from('gen_models')
       .select(
-        'id, model_id, model_name, model_description, model_type, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo)'
+        'id, model_id, model_name, model_description, model_type, model_product, model_variant, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo)'
       )
       .order('sort_order', { ascending: true, nullsFirst: false });
 
@@ -50,11 +50,9 @@ export async function listPlaygroundModels(req: Request, res: Response): Promise
       brand_slug: row.brands?.slug ?? null,
       brand_display: row.brands?.name ?? row.brand_name ?? null,
       brand_logo: row.brands?.logo ?? null,
-      model_product: deriveModelProduct(row.model_id),
-      model_variant: deriveModelVariant(row.model_id),
     }));
 
-    // brand/model_product/model_variant are derived/mapped, so filter in memory.
+    // brand/model_product/model_variant are mapped, so filter in memory.
     const filteredRows = rows.filter((row) => {
       const brandOk =
         brandFilters.length === 0 ||

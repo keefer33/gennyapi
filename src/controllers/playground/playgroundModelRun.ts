@@ -6,8 +6,9 @@ import { createUserGenModelRun, getPlaygroundModel, getVendorApiKeyByServer } fr
 import { getWavespeedCost, joinServerAndPath, parseApiSchema } from './playgroundUtils';
 import { runPlaygroundWavespeed } from './playgroundWavespeed';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import type { ApiSchemaShape, WavespeedRunResponse } from './playgroundTypes';
 
-export async function runPlaygroundModel(req: Request, res: Response): Promise<void> {
+export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
     const body = req.body as { id?: unknown; payload?: unknown };
@@ -36,7 +37,7 @@ export async function runPlaygroundModel(req: Request, res: Response): Promise<v
 
     const { apiKey, vendor } = await getVendorApiKeyByServer(server);
 
-    let response: unknown | any;
+    let response: WavespeedRunResponse = null;
     let cost: number = 0;
     switch (vendor) {
       case 'kie':
@@ -44,7 +45,11 @@ export async function runPlaygroundModel(req: Request, res: Response): Promise<v
       case 'wavespeed':
         console.log('Running playground wavespeed', endpoint);
         response = await runPlaygroundWavespeed(endpoint, apiKey, body.payload as Record<string, unknown>);
-        cost = await getWavespeedCost(row.model_id, body.payload as Record<string, unknown>, apiKey);
+        cost = await getWavespeedCost(
+          (row.api_schema as ApiSchemaShape)?.vendor_model_name ?? null,
+          body.payload as Record<string, unknown>,
+          apiKey
+        );
         break;
       default:
         throw new AppError('Invalid vendor', {
@@ -62,7 +67,7 @@ export async function runPlaygroundModel(req: Request, res: Response): Promise<v
       response: response,
       cost: cost,
       generation_type: vendor,
-      task_id: response?.id,
+      task_id: response?.id ?? null,
       status: 'pending',
     });
  

@@ -1,21 +1,16 @@
 import { AppError } from '../../app/error';
 import { getServerClient } from '../../shared/supabaseClient';
+import type {
+  CreateUserGenModelRunInput,
+  CreateUserGenModelRunResult,
+  PlaygroundModelLookup,
+  UserGenModelRunListRow,
+  UserGenModelRuns,
+  VendorApiConfig,
+  VendorApiLookup,
+} from './playgroundTypes';
 
-export type UserGenModel = {
-  id?: string | null;
-  user_id: string;
-  gen_model_id?: string | null;
-  payload?: unknown;
-  response?: unknown;
-  task_id?: string | null;
-  status?: string | null;
-  polling_response?: unknown;
-  duration?: number | null;
-  cost?: number | null;
-  generation_type?: string | null;
-};
-
-export async function getPlaygroundModel(id: string): Promise<{ id: string; model_id: string; api_schema: unknown }> {
+export async function getPlaygroundModel(id: string): Promise<PlaygroundModelLookup> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('gen_models')
@@ -37,13 +32,13 @@ export async function getPlaygroundModel(id: string): Promise<{ id: string; mode
   return row;
 }
 
-export async function getVendorApiKeyByServer(server: string): Promise<{ apiKey: string; vendor: string }> {
+export async function getVendorApiKeyByServer(server: string): Promise<VendorApiConfig> {
   const { supabaseServerClient } = await getServerClient();
   const { data: matchedKeyRow, error: vendorError } = await supabaseServerClient
     .from('vendor_api_keys')
     .select('key, vendor, config')
     .eq('config->>server', server)
-    .maybeSingle();
+    .maybeSingle<VendorApiLookup>();
 
   if (vendorError) {
     throw new AppError(vendorError.message, {
@@ -75,8 +70,8 @@ export async function getVendorApiKeyByServer(server: string): Promise<{ apiKey:
 }
 
 export async function createUserGenModelRun(
-  input: UserGenModel
-): Promise<{ id: string; created_at: string }> {
+  input: CreateUserGenModelRunInput
+): Promise<CreateUserGenModelRunResult> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from('user_gen_model_runs')
@@ -106,13 +101,13 @@ export async function createUserGenModelRun(
   return data;
 }
 
-export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGenModel | null> {
+export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
     .select('*')
     .eq('task_id', taskId)
-    .maybeSingle();
+    .maybeSingle<UserGenModelRuns>();
 
   if (error) {
     throw new AppError(error.message, {
@@ -125,7 +120,7 @@ export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGe
 }
 
 /** Single winner: only rows still `pending` transition to `processing`. */
-export async function claimUserGenModelRunPendingToProcessing(taskId: string): Promise<UserGenModel | null> {
+export async function claimUserGenModelRunPendingToProcessing(taskId: string): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
@@ -133,7 +128,7 @@ export async function claimUserGenModelRunPendingToProcessing(taskId: string): P
     .eq('task_id', taskId)
     .eq('status', 'pending')
     .select('*')
-    .maybeSingle();
+    .maybeSingle<UserGenModelRuns>();
 
   if (error) {
     throw new AppError(error.message, {
@@ -145,7 +140,7 @@ export async function claimUserGenModelRunPendingToProcessing(taskId: string): P
   return row;
 }
 
-export async function updateUserGenModelRun(input: UserGenModel): Promise<void> {
+export async function updateUserGenModelRun(input: UserGenModelRuns): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
   const { error } = await supabaseServerClient.from('user_gen_model_runs').update(input).eq('id', input.id);
   if (error) {
@@ -155,4 +150,95 @@ export async function updateUserGenModelRun(input: UserGenModel): Promise<void> 
       expose: false,
     });
   }
+}
+
+const RUN_HISTORY_SELECT = `
+  id,
+  created_at,
+  user_id,
+  gen_model_id,
+  status,
+  task_id,
+  cost,
+  duration,
+  generation_type,
+  gen_models(
+    model_name,
+    model_id,
+    brand_name,
+    model_product,
+    model_variant
+  )
+`;
+
+export async function listUserGenModelRunsForUser(
+  userId: string,
+  opts: { page?: number; limit?: number; gen_model_id?: string | null } = {}
+): Promise<{ rows: UserGenModelRunListRow[]; total: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 50));
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  const { supabaseServerClient } = await getServerClient();
+  let query = supabaseServerClient
+    .from('user_gen_model_runs')
+    .select(RUN_HISTORY_SELECT, { count: 'exact' })
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  const genModelId = opts.gen_model_id?.trim();
+  if (genModelId) {
+    query = query.eq('gen_model_id', genModelId);
+  }
+
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_runs_list_failed',
+      expose: false,
+    });
+  }
+
+  const rows = (data ?? []).map(normalizeUserGenModelRunListRow);
+  return { rows, total: count ?? rows.length };
+}
+
+type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_models']>;
+
+function normalizeGenModelsEmbed(raw: unknown): UserGenModelRunListRow['gen_models'] {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    return first && typeof first === 'object' ? (first as GenModelEmbed) : null;
+  }
+  if (typeof raw === 'object') {
+    return raw as GenModelEmbed;
+  }
+  return null;
+}
+
+function normalizeUserGenModelRunListRow(row: Record<string, unknown>): UserGenModelRunListRow {
+  return {
+    id: String(row.id ?? ''),
+    created_at: String(row.created_at ?? ''),
+    user_id: String(row.user_id ?? ''),
+    gen_model_id: row.gen_model_id != null ? String(row.gen_model_id) : null,
+    status: row.status != null ? String(row.status) : null,
+    task_id: row.task_id != null ? String(row.task_id) : null,
+    cost: (() => {
+      if (row.cost == null) return null;
+      const n = typeof row.cost === 'number' ? row.cost : Number(row.cost);
+      return Number.isFinite(n) ? n : null;
+    })(),
+    duration: (() => {
+      if (row.duration == null) return null;
+      const n = typeof row.duration === 'number' ? row.duration : Number(row.duration);
+      return Number.isFinite(n) ? n : null;
+    })(),
+    generation_type: row.generation_type != null ? String(row.generation_type) : null,
+    gen_models: normalizeGenModelsEmbed(row.gen_models),
+  };
 }
