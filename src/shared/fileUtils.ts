@@ -19,6 +19,7 @@ interface FileMetadata {
   generated_info?: any;
   thumbnail_url?: string;
   gen_model_id?: string;
+  gen_model_run_id?: string;
 }
 
 /**
@@ -465,9 +466,6 @@ export const saveFileFromUrl = async (
   pollingFileData: any,
   pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
-  console.log('Saving file from URL', url);
-  console.log('Polling File Data', pollingFileData);
-  console.log('Polling File Response', pollingFileResponse);
   const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
   try {
     // Validate URL
@@ -563,6 +561,7 @@ export const saveFileFromUrl = async (
       file_type: zipData.type,
       zip_data: zipData,
       gen_model_id: pollingFileData.gen_model_id,
+      gen_model_run_id: pollingFileData.id,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
     };

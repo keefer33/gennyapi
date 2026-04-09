@@ -1,9 +1,9 @@
-import { request } from 'http';
 import type { ApiSchemaShape } from './playgroundTypes';
 import axios from 'axios';
 import { AppError } from '../../app/error';
 import { updateUserGeneration } from '../generate/generateData';
 import { saveFileFromUrl } from '../../shared/fileUtils';
+import type { UserGenModelRuns } from './playgroundTypes';
 
 export function parseApiSchema(raw: unknown): ApiSchemaShape | null {
   let obj: unknown = raw;
@@ -89,36 +89,48 @@ export async function getWavespeedCost(
   return response.data.data.unit_price;
 }
 
-export const failWebhookGeneration = async (pollingFileData: any, pollingFileResponse: any): Promise<never> => {
+export const failWebhookGeneration = async (
+  pollingFileData: UserGenModelRuns,
+  pollingFileResponse: unknown
+): Promise<never> => {
   await updateUserGeneration({
     id: pollingFileData.id,
     status: 'error',
     polling_response: pollingFileResponse,
   });
-  throw new Error(`API error: ${pollingFileResponse?.err_code ?? 'unknown'}`);
+  const errCode =
+    pollingFileResponse && typeof pollingFileResponse === 'object'
+      ? (pollingFileResponse as { err_code?: unknown }).err_code
+      : undefined;
+  throw new Error(`API error: ${typeof errCode === 'string' ? errCode : 'unknown'}`);
 };
 
-export const processResponse = async (output: any, pollingFileData: any,pollingFileResponse: any) => {
+export const processResponse = async (
+  output: unknown,
+  pollingFileData: UserGenModelRuns,
+  pollingFileResponse: unknown
+) => {
 
   if (Array.isArray(output)) {
-    const files: any[] = [];
+    const files: unknown[] = [];
     for (let index = 0; index < output.length; index++) {
       const url = output[index];
       if (typeof url === 'string' && url.trim()) {
         try {
-          const savedFile: any = await saveFileFromUrl(url.trim(), pollingFileData, pollingFileResponse);
+          const savedFile = await saveFileFromUrl(url.trim(), pollingFileData, pollingFileResponse);
           if (savedFile) files.push(savedFile);
         } catch (error) {
           await failWebhookGeneration(pollingFileData, pollingFileResponse);
         }
       }
     }
+    
     return { status: 'completed', files: files };
   }
 
   const fileUrl = typeof output === 'string' ? output : null;
   try {
-    const savedFile: any = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
+    const savedFile = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
     if (savedFile) return { status: 'completed', files: [savedFile] };
   } catch (error) {
     await failWebhookGeneration(pollingFileData, pollingFileResponse);

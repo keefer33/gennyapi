@@ -3,9 +3,9 @@ import {
   claimUserGenModelRunPendingToProcessing,
   getUserGenModelRunByTaskId,
   updateUserGenModelRun,
-  type UserGenModel,
 } from './playgroundData';
 import { processResponse } from './playgroundUtils';
+import type { UserGenModelRuns } from './playgroundTypes';
 
 export async function playgroundWebhookWavespeed(req: Request, res: Response): Promise<void> {
   try {
@@ -21,8 +21,8 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
 
     //return status 200 to wavespeed to avoid retries
     res.sendStatus(200);
-    let userGenModelRun: UserGenModel | null = await getUserGenModelRunByTaskId(taskId);
-    if (userGenModelRun.status !== 'pending') return;
+    let userGenModelRun: UserGenModelRuns | null = await getUserGenModelRunByTaskId(taskId);
+    if (!userGenModelRun || userGenModelRun.status !== 'pending') return;
 
     userGenModelRun = await claimUserGenModelRunPendingToProcessing(taskId);
 
@@ -32,7 +32,7 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
     try {
       if (isCompletion) {
         const response = await processResponse(outputList, userGenModelRun, body);
-        const toSave: UserGenModel = {
+        const toSave: UserGenModelRuns = {
           ...userGenModelRun,
           polling_response: { webhook: body, files: response },
           status: 'completed',
