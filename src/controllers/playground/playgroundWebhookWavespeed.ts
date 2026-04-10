@@ -28,7 +28,8 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
 
     const outputList = Array.isArray(outputs) ? outputs : [];
     const isCompletion = status === 'completed' && outputList.length > 0;
-
+    const duration = Math.floor((Date.now() - new Date(userGenModelRun.created_at).getTime()) / 1000);
+    
     try {
       if (isCompletion) {
         const response = await processResponse(outputList, userGenModelRun, body);
@@ -36,6 +37,7 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
           ...userGenModelRun,
           polling_response: { webhook: body, files: response },
           status: 'completed',
+          duration: duration,
         };
         await updateUserGenModelRun(toSave);
       } else {
@@ -43,6 +45,7 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
           ...userGenModelRun,
           polling_response: { webhook: body },
           status: status as string,
+          duration: duration,
         });
         throw new Error('No completion found');
       }
@@ -51,6 +54,7 @@ export async function playgroundWebhookWavespeed(req: Request, res: Response): P
         ...userGenModelRun,
         polling_response: { webhook: body, error: error.message },
         status: 'error',
+        duration: duration,
       });
       throw new Error(error.message);
     }

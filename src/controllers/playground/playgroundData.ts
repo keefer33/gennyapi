@@ -168,6 +168,14 @@ const RUN_HISTORY_SELECT = `
     brand_name,
     model_product,
     model_variant
+  ),
+  user_files(
+    id,
+    created_at,
+    thumbnail_url,
+    file_path,
+    file_type,
+    status
   )
 `;
 
@@ -202,7 +210,8 @@ export async function listUserGenModelRunsForUser(
     });
   }
 
-  const rows = (data ?? []).map(normalizeUserGenModelRunListRow);
+  const rawRows = (data ?? []) as Record<string, unknown>[];
+  const rows = rawRows.map((row) => normalizeUserGenModelRunListRow(row));
   return { rows, total: count ?? rows.length };
 }
 
@@ -220,7 +229,61 @@ function normalizeGenModelsEmbed(raw: unknown): UserGenModelRunListRow['gen_mode
   return null;
 }
 
+type UserFileEmbed = {
+  id?: string;
+  created_at?: string;
+  thumbnail_url?: string | null;
+  file_path?: string | null;
+  file_type?: string | null;
+};
+
+/** Embedded `user_files` from `user_gen_model_runs` (FK `gen_model_run_id`). Only active rows for thumbnails. */
+function activeUserFilesFromEmbed(raw: unknown): UserFileEmbed[] {
+  if (raw == null) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const out: UserFileEmbed[] = [];
+  for (const x of arr) {
+    if (x == null || typeof x !== 'object') continue;
+    const rec = x as Record<string, unknown>;
+    const st = rec.status != null ? String(rec.status).trim() : '';
+    if (st !== '' && st !== 'active') continue;
+    out.push({
+      thumbnail_url: rec.thumbnail_url != null ? String(rec.thumbnail_url) : null,
+      file_path: rec.file_path != null ? String(rec.file_path) : null,
+      file_type: rec.file_type != null ? String(rec.file_type) : null,
+      created_at: rec.created_at != null ? String(rec.created_at) : undefined,
+    });
+  }
+  return out;
+}
+
+function previewUrlForFile(f: UserFileEmbed): string | null {
+  if (typeof f.thumbnail_url === 'string' && f.thumbnail_url.trim()) return f.thumbnail_url.trim();
+  const path = typeof f.file_path === 'string' ? f.file_path.trim() : '';
+  if (!path) return null;
+  if (typeof f.file_type === 'string' && f.file_type.startsWith('image/')) return path;
+  return path;
+}
+
+/** One preview URL per file, newest first. */
+function previewUrlsForRun(files: UserFileEmbed[]): string[] {
+  if (files.length === 0) return [];
+  const sorted = [...files].sort((a, b) => {
+    const ta = a.created_at ?? '';
+    const tb = b.created_at ?? '';
+    return tb.localeCompare(ta);
+  });
+  const urls: string[] = [];
+  for (const f of sorted) {
+    const u = previewUrlForFile(f);
+    if (u) urls.push(u);
+  }
+  return urls;
+}
+
 function normalizeUserGenModelRunListRow(row: Record<string, unknown>): UserGenModelRunListRow {
+  const files = activeUserFilesFromEmbed(row.user_files);
+  const preview_urls = previewUrlsForRun(files);
   return {
     id: String(row.id ?? ''),
     created_at: String(row.created_at ?? ''),
@@ -240,5 +303,7 @@ function normalizeUserGenModelRunListRow(row: Record<string, unknown>): UserGenM
     })(),
     generation_type: row.generation_type != null ? String(row.generation_type) : null,
     gen_models: normalizeGenModelsEmbed(row.gen_models),
+    thumbnail_url: preview_urls[0] ?? null,
+    preview_urls,
   };
 }

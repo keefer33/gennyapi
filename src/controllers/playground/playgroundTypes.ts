@@ -35,17 +35,16 @@ export type PlaygroundModelRow = GenModels;
 
 export type UserGenModelRuns = {
   id?: string | null;
-  user_id?: string;
+  created_at?: string | null;
+  user_id?: string | null;
   gen_model_id?: string | null;
-  payload?: unknown;
-  response?: unknown;
-  task_id?: string | null;
   status?: string | null;
-  polling_response?: unknown;
-  duration?: number | null;
+  task_id?: string | null;
   cost?: number | null;
+  duration?: number | null;
   generation_type?: string | null;
-  api_schema?: unknown;
+  gen_models?: GenModels | null;
+  polling_response?: unknown;
 };
 
 export type PlaygroundModelLookup = {
@@ -101,6 +100,10 @@ export type UserGenModelRunListRow = {
     model_product: string | null;
     model_variant: string | null;
   } | null;
+  /** Best preview URL from linked `user_files` (first entry of `preview_urls`). */
+  thumbnail_url: string | null;
+  /** One preview URL per active file, newest first (thumbnail, else image path, else file path). */
+  preview_urls: string[];
 };
 
 export type WavespeedRunResponse = {
