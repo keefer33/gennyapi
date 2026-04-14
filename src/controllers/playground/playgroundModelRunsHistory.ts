@@ -1,10 +1,9 @@
 import type { Request, Response } from 'express';
 import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import { listUserGenModelRunsForUser } from './playgroundData';
-
+import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
 /**
- * GET /playground/runs?page=1&limit=50&gen_model_id=
+ * GET /playground/runs?page=1&limit=50&gen_model_id=&file_type_filter=all|images|videos&tags=id1,id2
  */
 export async function playgroundModelRunsHistory(req: Request, res: Response): Promise<void> {
   try {
@@ -16,10 +15,22 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
         ? req.query.gen_model_id.trim()
         : null;
 
+    const ftRaw = typeof req.query.file_type_filter === 'string' ? req.query.file_type_filter.trim().toLowerCase() : '';
+    const file_type_filter =
+      ftRaw === 'images' || ftRaw === 'videos' ? (ftRaw as 'images' | 'videos') : 'all';
+
+    const tagsParam = typeof req.query.tags === 'string' ? req.query.tags : '';
+    const tag_ids = tagsParam
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const { rows, total } = await listUserGenModelRunsForUser(userId, {
       page,
       limit,
       gen_model_id: genModelId,
+      file_type_filter,
+      tag_ids,
     });
 
     sendOk(res, { items: rows, total, page, limit });

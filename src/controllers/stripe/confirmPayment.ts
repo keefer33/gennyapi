@@ -1,4 +1,4 @@
-import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 import { isValidTopUpCents } from '../../shared/stripe';
 import Stripe from 'stripe';
 import { Request, Response } from 'express';

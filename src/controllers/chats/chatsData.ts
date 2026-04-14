@@ -1,4 +1,4 @@
-import { getServerClient } from '../../shared/supabaseClient';
+import { getServerClient } from '../../database/supabaseClient';
 import { ListChatMessagesOptions } from './chatsTypes';
 
 const CHATS_TABLE = 'user_models_chats';

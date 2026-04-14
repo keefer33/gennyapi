@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
@@ -14,17 +14,14 @@ const FILE_SELECT = `
 `;
 
 /**
- * GET /user/files/by-path?file_path=<encoded url or path>
- * Returns one active user file owned by the JWT user matching `file_path`.
+ * GET /user/files/:fileId — one active file owned by the JWT user (same shape as by-path).
  */
-export async function getUserFileByPath(req: Request, res: Response): Promise<void> {
+export async function getUserFileById(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-
-    const raw = req.query.file_path;
-    const filePath = typeof raw === 'string' ? raw.trim() : '';
-    if (!filePath) {
-      throw badRequest('file_path query parameter is required');
+    const fileId = typeof req.params.fileId === 'string' ? req.params.fileId.trim() : '';
+    if (!fileId) {
+      throw badRequest('Missing file id');
     }
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
@@ -32,15 +29,15 @@ export async function getUserFileByPath(req: Request, res: Response): Promise<vo
     const { data, error } = await supabaseServerClient
       .from('user_files')
       .select(FILE_SELECT)
+      .eq('id', fileId)
       .eq('user_id', userId)
-      .eq('file_path', filePath)
       .eq('status', 'active')
       .maybeSingle();
 
     if (error) {
       throw new AppError(error.message, {
         statusCode: 500,
-        code: 'user_file_by_path_fetch_failed',
+        code: 'user_file_by_id_fetch_failed',
       });
     }
 

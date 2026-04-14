@@ -1,4 +1,4 @@
-import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';

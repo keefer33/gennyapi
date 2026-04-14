@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { uploadFileToZipline, getZipData } from './ziplineApi';
-import { getServerClient, SupabaseServerClients } from './supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../database/supabaseClient';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import { join } from 'path';

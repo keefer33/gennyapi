@@ -1,25 +1,27 @@
 import { Request, Response } from 'express';
-import { getWavespeedCost } from './playgroundUtils';
-import { getPlaygroundModel, getVendorApiKeyByServer } from './playgroundData';
 import { AppError } from '../../app/error';
 import { sendOk } from '../../app/response';
-import type { ApiSchemaShape } from './playgroundTypes';
+import { getGenModel } from '../../database/gen_models';
+import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 
 export async function playgroundRunCost(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as { modelId?: string; payload?: Record<string, unknown> };
     const modelId = body.modelId ?? '';
     const payload = body.payload ?? {};
-    const genModel = await getPlaygroundModel(modelId);
-    const apiSchema = genModel.api_schema as ApiSchemaShape;
-    const server = apiSchema?.server ?? '';
-    const vendorModelName = apiSchema?.vendor_model_name ?? null;
-    const { apiKey, vendor } = await getVendorApiKeyByServer(server);
+    const genModel = await getGenModel(modelId);
+    const vendor = genModel.vendor_api?.vendor_name ?? '';
+    const apiKey = genModel.vendor_api?.api_key ?? '';
 
     let cost = 0;
     switch (vendor) {
       case 'wavespeed':
-        cost = await getWavespeedCost(vendorModelName, payload, apiKey);
+        cost = await getWavespeedCost(
+          genModel.model_id,
+          payload,
+          apiKey,
+          genModel.vendor_api?.config?.cost_api_endpoint
+        );
         break;
       default:
         throw new AppError('Invalid vendor', {

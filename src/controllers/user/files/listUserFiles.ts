@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
 import { sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 
 const FILE_SELECT = `
   *,
@@ -14,7 +14,7 @@ const FILE_SELECT = `
 `;
 
 /**
- * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|all&generationModelId=&generationType=
+ * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all&generationModelId=&generationType=
  */
 export async function listUserFiles(req: Request, res: Response): Promise<void> {
   try {
@@ -180,6 +180,8 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
       query = query.ilike('file_type', 'image/%');
     } else if (fileTypeFilter === 'videos') {
       query = query.ilike('file_type', 'video/%');
+    } else if (fileTypeFilter === 'audio') {
+      query = query.ilike('file_type', 'audio/%');
     }
 
     const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, to);

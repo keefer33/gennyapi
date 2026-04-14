@@ -1,4 +1,4 @@
-import { getServerClient, SupabaseServerClients } from './supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../database/supabaseClient';
 import { UserUsageLogInsertInput, UserUsageLogRow, UpdateUsageAmountInput } from './types';
 
 /** `usage_log_types.id` for generation / AI usage debits (seed: debit / ai_modal_usage). */

@@ -2,17 +2,19 @@ import axios, { isAxiosError } from 'axios';
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
-import { createUserGenModelRun, getPlaygroundModel, getVendorApiKeyByServer } from './playgroundData';
-import { getWavespeedCost, joinServerAndPath, parseApiSchema } from './playgroundUtils';
-import { runPlaygroundWavespeed } from './playgroundWavespeed';
+import { createUserGenModelRun } from '../../database/user_gen_model_runs';
+import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import type { ApiSchemaShape, WavespeedRunResponse } from './playgroundTypes';
+import { getGenModel } from '../../database/gen_models';
+import { runWavespeedModel } from '../../api-vendors/wavespeed/runWavespeedModel';
+import { WavespeedRunResponse } from '../../api-vendors/wavespeed/types';
 
 export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
     const body = req.body as { id?: unknown; payload?: unknown };
     const id = typeof body?.id === 'string' ? body.id.trim() : '';
+    const payload = body.payload as Record<string, unknown>;
     if (!id) {
       throw badRequest('id is required');
     }
@@ -20,35 +22,20 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       throw badRequest('payload is required');
     }
 
-    const row = await getPlaygroundModel(id);
-
-    const parsed = parseApiSchema(row.api_schema);
-    const server = typeof parsed?.server === 'string' ? parsed.server.trim() : '';
-    const apiPath = typeof parsed?.api_path === 'string' ? parsed.api_path.trim() : '';
-    if (!server || !apiPath) {
-      throw new AppError('Invalid or missing api_schema.server / api_schema.api_path', {
-        statusCode: 400,
-        code: 'invalid_api_schema',
-        expose: true,
-      });
-    }
-
-    const endpoint = joinServerAndPath(server, apiPath);
-
-    const { apiKey, vendor } = await getVendorApiKeyByServer(server);
+    const genModel = await getGenModel(id);
 
     let response: WavespeedRunResponse = null;
     let cost: number = 0;
-    switch (vendor) {
+    switch (genModel.vendor_api?.vendor_name) {
       case 'kie':
         break;
       case 'wavespeed':
-        console.log('Running playground wavespeed', endpoint);
-        response = await runPlaygroundWavespeed(endpoint, apiKey, body.payload as Record<string, unknown>);
+        response = await runWavespeedModel(genModel, payload);
         cost = await getWavespeedCost(
-          (row.api_schema as ApiSchemaShape)?.vendor_model_name ?? null,
-          body.payload as Record<string, unknown>,
-          apiKey
+          genModel.vendor_api?.vendor_name ?? null,
+          payload,
+          genModel.vendor_api?.api_key ?? null,
+          genModel.vendor_api?.config?.cost_api_endpoint ?? null
         );
         break;
       default:
@@ -62,15 +49,14 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
 
     await createUserGenModelRun({
       user_id: userId,
-      gen_model_id: row.id,
+      gen_model_id: genModel.id,
       payload: body.payload,
       response: response,
       cost: cost,
-      generation_type: vendor,
+      generation_type: genModel.vendor_api?.vendor_name ?? null,
       task_id: response?.id ?? null,
       status: 'pending',
     });
- 
 
     sendOk(res, response);
   } catch (err) {

@@ -1,4 +1,4 @@
-import { getServerClient } from '../../shared/supabaseClient';
+import { getServerClient } from '../../database/supabaseClient';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { unauthorized, notFound, sendError, sendOk } from '../../app/response';
