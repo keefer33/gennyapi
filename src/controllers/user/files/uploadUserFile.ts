@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 import { Request, Response } from 'express';
 import multer from 'multer';
 import FormData from 'form-data';

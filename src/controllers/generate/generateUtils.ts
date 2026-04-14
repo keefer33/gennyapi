@@ -1,7 +1,7 @@
 import axios from 'axios';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
-import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 import { uploadFileToZipline, getZipData } from '../../shared/ziplineApi';
 import { isImageUrl, isVideoUrl } from '../../shared/fileUtils';
 import { writeFile, unlink, readFile } from 'fs/promises';
@@ -546,8 +546,8 @@ export const evaluatePricingFormula = (formValues: any, pricing: any): number =>
   const base_price = Number.isFinite(basePrice) ? basePrice : 0;
   const safeForm = formValues && typeof formValues === 'object' ? formValues : {};
   const merged: Record<string, unknown> = { ...safeForm, base_price };
-  const paramNames = Object.keys(merged).filter((k) => /^[a-zA-Z_$][\w$]*$/.test(k));
-  const values = paramNames.map((k) => merged[k]);
+  const paramNames = Object.keys(merged).filter(k => /^[a-zA-Z_$][\w$]*$/.test(k));
+  const values = paramNames.map(k => merged[k]);
   try {
     const fn = new Function(...paramNames, `"use strict"; return (${js});`);
     const result = fn(...values);

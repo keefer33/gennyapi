@@ -1,4 +1,4 @@
-import { getServerClient } from '../../shared/supabaseClient';
+import { getServerClient } from '../../database/supabaseClient';
 import { UserAgentRow } from './agentsTypes';
 import { ServiceResult } from '../../shared/types';
 

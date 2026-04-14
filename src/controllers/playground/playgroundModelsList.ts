@@ -1,9 +1,20 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
-import { getServerClient } from '../../shared/supabaseClient';
-import type { PlaygroundModelRow } from './playgroundTypes';
-import { toList } from './playgroundUtils';
+import { getServerClient } from '../../database/supabaseClient';
+import { PLAYGROUND_LIST_SELECT } from '../../database/gen_models';
+import { GenModelRow } from '../../database/types';
+
+function toList(input: unknown): string[] {
+  if (Array.isArray(input)) {
+    return input.map(v => String(v).trim()).filter(Boolean);
+  }
+  if (typeof input !== 'string') return [];
+  return input
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+}
 
 export async function playgroundModelsList(req: Request, res: Response): Promise<void> {
   try {
@@ -18,9 +29,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     // Start with SQL-friendly filters (search, brand, model_type).
     let query = supabaseServerClient
       .from('gen_models')
-      .select(
-        'id, model_id, model_name, model_description, model_type, model_product, model_variant, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo)'
-      )
+      .select(PLAYGROUND_LIST_SELECT)
       .order('sort_order', { ascending: true, nullsFirst: false });
 
     if (search) {
@@ -45,7 +54,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       });
     }
 
-    const rows = ((data ?? []) as PlaygroundModelRow[]).map((row) => ({
+    const rows = ((data ?? []) as GenModelRow[]).map(row => ({
       ...row,
       brand_slug: row.brands?.slug ?? null,
       brand_display: row.brands?.name ?? row.brand_name ?? null,
@@ -53,24 +62,22 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     }));
 
     // brand/model_product/model_variant are mapped, so filter in memory.
-    const filteredRows = rows.filter((row) => {
+    const filteredRows = rows.filter(row => {
       const brandOk =
         brandFilters.length === 0 ||
         (!!row.brand_slug && brandFilters.includes(row.brand_slug)) ||
         (!!row.brand_name && brandFilters.includes(row.brand_name));
       const productOk =
-        modelProductFilters.length === 0 ||
-        (!!row.model_product && modelProductFilters.includes(row.model_product));
+        modelProductFilters.length === 0 || (!!row.model_product && modelProductFilters.includes(row.model_product));
       const variantOk =
-        modelVariantFilters.length === 0 ||
-        (!!row.model_variant && modelVariantFilters.includes(row.model_variant));
+        modelVariantFilters.length === 0 || (!!row.model_variant && modelVariantFilters.includes(row.model_variant));
       return brandOk && productOk && variantOk;
     });
 
-    const brands = Array.from(new Set(rows.map((r) => r.brand_slug).filter(Boolean))).sort();
-    const model_types = Array.from(new Set(rows.map((r) => r.model_type).filter(Boolean))).sort();
-    const model_products = Array.from(new Set(rows.map((r) => r.model_product).filter(Boolean))).sort();
-    const model_variants = Array.from(new Set(rows.map((r) => r.model_variant).filter(Boolean))).sort();
+    const brands = Array.from(new Set(rows.map(r => r.brand_slug).filter(Boolean))).sort();
+    const model_types = Array.from(new Set(rows.map(r => r.model_type).filter(Boolean))).sort();
+    const model_products = Array.from(new Set(rows.map(r => r.model_product).filter(Boolean))).sort();
+    const model_variants = Array.from(new Set(rows.map(r => r.model_variant).filter(Boolean))).sort();
 
     sendOk(res, {
       items: filteredRows,
@@ -94,4 +101,3 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     sendError(res, err);
   }
 }
-

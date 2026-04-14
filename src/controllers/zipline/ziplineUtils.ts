@@ -1,5 +1,5 @@
 import { AppError } from '../../app/error';
-import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 
 type ZiplineProfile = {
   token?: string;
@@ -21,6 +21,36 @@ export function getZiplineBaseUrl(): string {
     });
   }
   return baseUrl;
+}
+
+/**
+ * Zipline DELETE `/api/user/files/:idOrName` expects the path segment from the public URL
+ * (e.g. `https://aifile.link/tlgHWK.jpg` → `tlgHWK.jpg`). Only URLs whose origin matches
+ * {@link getZiplineBaseUrl} are accepted.
+ */
+export function ziplineStorageKeyFromPublicUrl(
+  fileUrl: string | null | undefined,
+  ziplineBaseUrl: string
+): string | null {
+  if (!fileUrl || typeof fileUrl !== 'string') return null;
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  const normalizedBase = ziplineBaseUrl.replace(/\/+$/, '');
+  let baseParsed: URL;
+  try {
+    baseParsed = new URL(normalizedBase);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== baseParsed.origin) return null;
+  const key = parsed.pathname.replace(/^\/+/, '');
+  return key || null;
 }
 
 export async function getZiplineTokenForUser(userId: string): Promise<string> {

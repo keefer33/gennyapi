@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
 import { badRequest, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 
 /** POST /user/tags — body: { tag_name: string } */
 export async function createUserTag(req: Request, res: Response): Promise<void> {

@@ -1,10 +1,10 @@
-import axios from 'axios';
 import { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
-import { badRequest, sendError, sendOk } from '../../../app/response';
+import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 import { getZiplineBaseUrl, getZiplineTokenForUser } from '../../zipline/ziplineUtils';
+import { deleteUserFileStorageAndDbForRow } from './userFileDeleteCore';
 
 /**
  * DELETE /user/files/:fileId
@@ -29,36 +29,31 @@ export async function deleteUserFile(req: Request, res: Response): Promise<void>
     const token = await getZiplineTokenForUser(userId);
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-    const ziplineRes = await axios.delete(`${baseUrl}/api/user/files/${encodeURIComponent(idOrName)}`, {
-      headers: {
-        Authorization: token,
-      },
-      validateStatus: () => true,
-    });
-
-    const ziplineData = ziplineRes.data;
-    if (ziplineRes.status < 200 || ziplineRes.status >= 300) {
-      throw new AppError(ziplineData?.message || 'Failed to delete file from storage', {
-        statusCode: ziplineRes.status,
-        code: 'user_file_storage_delete_failed',
-        details: ziplineData,
-      });
-    }
-
-    const { error: dbError } = await supabaseServerClient
+    const { data: row, error: fetchError } = await supabaseServerClient
       .from('user_files')
-      .delete()
+      .select('id, file_path, thumbnail_url, file_name')
       .eq('id', fileId)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (dbError) {
-      throw new AppError(dbError.message, {
+    if (fetchError) {
+      throw new AppError(fetchError.message, {
         statusCode: 500,
-        code: 'user_file_db_delete_failed',
+        code: 'user_file_fetch_failed',
       });
     }
+    if (!row) {
+      throw notFound('File not found');
+    }
 
-    sendOk(res, ziplineData);
+    const nameFromDb = (row.file_name ?? '').trim();
+    if (!nameFromDb || idOrName.trim() !== nameFromDb) {
+      throw badRequest('idOrName does not match file record');
+    }
+
+    await deleteUserFileStorageAndDbForRow(userId, row);
+
+    sendOk(res, { ok: true });
   } catch (error) {
     sendError(res, error);
   }

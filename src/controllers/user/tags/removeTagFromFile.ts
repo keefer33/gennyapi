@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 
 /** DELETE /user/tags/file-links — body: { file_id: string, tag_id: string } */
 export async function removeTagFromFile(req: Request, res: Response): Promise<void> {

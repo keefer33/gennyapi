@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
-import { getServerClient, SupabaseServerClients } from '../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 
 const USAGE_LOG_SELECT = `

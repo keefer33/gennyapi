@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../../app/error';
 import { sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../shared/supabaseClient';
+import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 
 /** GET /user/tags */
 export async function listUserTags(req: Request, res: Response): Promise<void> {

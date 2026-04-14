@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
-import { getServerClient } from '../../shared/supabaseClient';
+import { getServerClient } from '../../database/supabaseClient';
 
 /**
  * GET /promotions
