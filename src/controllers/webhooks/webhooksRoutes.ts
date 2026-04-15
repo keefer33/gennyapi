@@ -1,8 +1,10 @@
 import express from 'express';
 import { webhookWavespeed } from '../../api-vendors/wavespeed/webhookWavespeed';
+import { webhookPolling } from './webhookPolling';
 
 const router = express.Router();
-  // POST /webhooks/polling route
-  router.post('/wavespeed', webhookWavespeed);
+// POST /webhooks routes
+router.post('/wavespeed', webhookWavespeed);
+router.post('/polling', webhookPolling);
 
-  export default router;
+export default router;

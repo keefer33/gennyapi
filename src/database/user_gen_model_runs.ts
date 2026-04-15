@@ -76,6 +76,25 @@ export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGe
   return row;
 }
 
+export async function getUserGenModelRunById(runId: string): Promise<UserGenModelRuns | null> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data: row, error } = await supabaseServerClient
+    .from('user_gen_model_runs')
+    .select('*')
+    .eq('id', runId)
+    .maybeSingle<UserGenModelRuns>();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_run_by_id_fetch_failed',
+      expose: false,
+    });
+  }
+
+  return row;
+}
+
 /** Single winner: only rows still `pending` transition to `processing`. */
 export async function claimUserGenModelRunPendingToProcessing(taskId: string): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
@@ -121,7 +140,11 @@ export async function deleteUserGenModelRun(runId: string): Promise<void> {
   }
 }
 
-export async function getUserGenModelRunById(userId: string, runId: string, select: string = '*'): Promise<UserGenModelRuns | null> {
+export async function getUserGenModelRunByIdForUser(
+  userId: string,
+  runId: string,
+  select: string = '*'
+): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
