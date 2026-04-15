@@ -1,5 +1,5 @@
 import { AppError } from '../../app/error';
-import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
+import { readSuperadminProfileZipline, readUserProfile } from '../../database/user_profiles';
 
 type ZiplineProfile = {
   token?: string;
@@ -54,21 +54,7 @@ export function ziplineStorageKeyFromPublicUrl(
 }
 
 export async function getZiplineTokenForUser(userId: string): Promise<string> {
-  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-  const { data: userProfile, error: profileError } = await supabaseServerClient
-    .from('user_profiles')
-    .select('zipline')
-    .eq('user_id', userId)
-    .single();
-
-  if (profileError) {
-    throw new AppError(profileError.message || 'Failed to get user profile', {
-      statusCode: 500,
-      code: 'zipline_profile_fetch_failed',
-    });
-  }
-
+  const userProfile = await readUserProfile(userId, 'zipline');
   const token = extractZiplineToken(userProfile?.zipline);
   if (!token) {
     throw new AppError('Zipline token not configured for user', {
@@ -81,22 +67,7 @@ export async function getZiplineTokenForUser(userId: string): Promise<string> {
 }
 
 export async function getZiplineSuperadminToken(): Promise<string> {
-  const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-  const { data: superadmin, error: superadminError } = await supabaseServerClient
-    .from('user_profiles')
-    .select('zipline')
-    .eq('role', 'superadmin')
-    .single();
-
-  if (superadminError) {
-    throw new AppError(superadminError.message || 'Failed to get superadmin', {
-      statusCode: 500,
-      code: 'zipline_superadmin_fetch_failed',
-      expose: false,
-    });
-  }
-
+  const superadmin = await readSuperadminProfileZipline();
   const token = extractZiplineToken(superadmin?.zipline);
   if (!token) {
     throw new AppError('Superadmin Zipline token is missing', {

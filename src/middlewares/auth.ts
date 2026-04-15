@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { RequestWithUser } from '../shared/types';
+
+type RequestWithUser = Request & {
+  user?: {
+    id?: string;
+    authToken?: string;
+  };
+};
 /**
  * Authenticate using the API key (JWT from createToken / authApiKey).
  * The frontend Supabase token is only used for login; after createToken,

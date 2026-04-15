@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
-import { getServerClient } from '../../database/supabaseClient';
+import { listActivePromotionsData } from '../../database/promotions';
+import { PromotionRow } from '../../database/types';
 
 /**
  * GET /promotions
@@ -11,24 +11,9 @@ import { getServerClient } from '../../database/supabaseClient';
  */
 export async function listActivePromotions(req: Request, res: Response): Promise<void> {
   try {
-    const { supabaseServerClient } = await getServerClient();
-
-    const { data, error } = await supabaseServerClient
-      .from('promotions')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'promotions_list_failed',
-      });
-    }
-
-    const now = new Date().toISOString();
-    const nowDate = new Date(now);
-
-    const activePromotions = (data ?? []).filter((promo: Record<string, unknown>) => {
+    const promotions = await listActivePromotionsData();
+    const nowDate = new Date();
+    const activePromotions = promotions.filter((promo: PromotionRow) => {
       const startDate = promo.start_date ? new Date(String(promo.start_date)) : null;
       const endDate = promo.end_date ? new Date(String(promo.end_date)) : null;
 

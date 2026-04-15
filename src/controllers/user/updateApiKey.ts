@@ -1,7 +1,7 @@
 import { getServerClient } from '../../database/supabaseClient';
 import { Request, Response } from 'express';
-import { AppError } from '../../app/error';
 import { badRequest, unauthorized, sendError, sendOk } from '../../app/response';
+import { updateUserProfile } from '../../database/user_profiles';
 
 /**
  * POST /user/api-key
@@ -34,17 +34,7 @@ export const updateApiKey = async (req: Request, res: Response): Promise<void> =
       throw unauthorized(userError?.message ?? 'User could not be verified');
     }
 
-    const { error: updateError } = await supabaseServerClient
-      .from('user_profiles')
-      .update({ api_key: apiKey.trim() })
-      .eq('user_id', userData.id);
-
-    if (updateError) {
-      throw new AppError(updateError.message, {
-        statusCode: 500,
-        code: 'user_api_key_update_failed',
-      });
-    }
+   await updateUserProfile(userData.id, { api_key: apiKey.trim() ?? '' });
 
     sendOk(res, { message: 'api_key saved' });
   } catch (error) {

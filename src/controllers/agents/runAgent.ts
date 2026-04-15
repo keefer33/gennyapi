@@ -1,22 +1,17 @@
 import { Request, Response } from 'express';
 import { streamText, createGateway, stepCountIs, type ModelMessage } from 'ai';
 import { isAppError } from '../../app/error';
-import { saveAgentGeneratedFile } from '../generate/generateUtils';
-import { handleListChatMessages, saveRunChatMessages } from '../chats/chatsData';
-import { messageRowsToModelMessages } from '../chats/chatsUtils';
-import { MessageRow } from '../chats/chatsTypes';
-import { insertUserUsageLog, updateUserProfileUsageAmount } from '../../shared/usageUtils';
+import { saveAgentGeneratedFile } from '../../shared/fileUtils';
+import { handleListChatMessages, saveRunChatMessages } from "../../database/user_models_chats_messages";
+import { messageRowsToModelMessages } from "../chats/chatsUtils";
+import { MessageRow } from "../../database/types";
 import getAgentCustomTools from './agentCustomTools';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import { RunAgentHttpError, SSEWriter, ApiType, ChatMessage, StoredPart, RunAgentBody } from './agentsTypes';
-import {
-  loadComposioTools,
-  parseRunAgentInput,
-  createSSEWriter,
-  sendRunAgentError,
-  getSelectedModelRow,
-  normalizeAttachments,
-} from './agentUtils';
+import { RunAgentHttpError, SSEWriter, ApiType, ChatMessage, StoredPart, RunAgentBody } from './types';
+import { loadComposioTools, parseRunAgentInput, createSSEWriter, sendRunAgentError, getSelectedModelRow, normalizeAttachments } from './agentUtils';
+import { updateUserUsageBalance } from '../../database/user_profiles';
+import { insertUserUsageLog } from '../../database/user_usage_log';
+import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 
 export const runAgent = async (req: Request, res: Response): Promise<void> => {
   let writeSSE: SSEWriter | null = null;
@@ -311,8 +306,8 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         await insertUserUsageLog({
           user_id: userId,
           usage_amount: totalCost,
-          type_id: 3,
-          generation_id: null,
+          type_id: USAGE_LOG_TYPE_AI_MODEL_USAGE,
+          gen_model_run_id: null,
           transaction_id: null,
           meta: {
             model_name: modelRow.model_name ?? '',
@@ -320,7 +315,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
             usage: usagePayload,
           },
         });
-        await updateUserProfileUsageAmount({ user_id: userId, amount: totalCost, type: 'debit' });
+          await updateUserUsageBalance(userId, totalCost, 'debit');
       } catch (e) {
         console.error('[runChat] Error inserting user usage log:', e);
       }

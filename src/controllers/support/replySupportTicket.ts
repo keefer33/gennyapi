@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
+import { getSupportTicketByIdForUser } from '../../database/user_support_tickets';
+import { createSupportTicketThread } from '../../database/user_support_tickets_threads';
 
 /**
  * POST /support/:ticketId/replies
@@ -22,35 +22,16 @@ export async function replySupportTicket(req: Request, res: Response): Promise<v
       throw badRequest('Message is required');
     }
 
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data: existing, error: findError } = await supabaseServerClient
-      .from('user_support_tickets')
-      .select('id')
-      .eq('id', ticketId)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (findError || !existing) {
+    const existing = await getSupportTicketByIdForUser(ticketId, userId);
+    if (!existing) {
       throw notFound('Ticket not found');
     }
 
-    const { data, error } = await supabaseServerClient
-      .from('user_support_tickets_threads')
-      .insert({
-        ticket_id: ticketId,
-        user_id: userId,
-        message,
-      })
-      .select('id, created_at, ticket_id, user_id, message')
-      .single();
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'support_ticket_reply_failed',
-      });
-    }
+    const data = await createSupportTicketThread({
+      ticket_id: ticketId,
+      user_id: userId,
+      message,
+    });
 
     sendOk(res, { thread: data }, 201);
   } catch (error) {

@@ -10,7 +10,7 @@ GennyAPI is the backend for [Genny.bot](https://genny.bot). It exposes a REST AP
 
 ## ⭐ Features
 
-- 🎨 **Generations** — Model listing, cost calculation, create/list/delete user generations, async status via webhooks
+- 🎨 **Playground** — Model listing, run history, run by id, run cost, create/delete runs, agent run status
 - 💳 **Stripe** — Payment intents and confirmation
 - 🤖 **Agents** — Prompt enhancement, model listing, CRUD for user agents, agent runs
 - 💬 **Chats** — Chat CRUD, messages, streaming runs
@@ -23,9 +23,15 @@ GennyAPI is the backend for [Genny.bot](https://genny.bot). It exposes a REST AP
 
 ```
 src/
+├── app/
+│   ├── error.ts
+│   ├── response.ts
+│   └── router.ts
+├── api-vendors/
+│   └── wavespeed/
 ├── controllers/
 │   ├── agents/
-│   ├── generate/
+│   ├── playground/
 │   ├── stripe/
 │   ├── user/
 │   ├── chats/
@@ -35,9 +41,13 @@ src/
 │   ├── brands/
 │   ├── promotions/
 │   └── support/
+├── database/
+│   ├── const.ts
+│   ├── supabaseClient.ts
+│   ├── types.ts
+│   └── ...
 ├── middlewares/
-├── utils/
-├── routes.ts
+├── shared/
 └── index.ts
 ```
 
@@ -70,20 +80,22 @@ Base path is the API root (e.g. `https://<host>`). All paths below are appended 
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/webhooks/polling` | No | Polling / status updates for async jobs |
+| `POST` | `/webhooks/wavespeed` | No | Wavespeed webhook callback |
 
-### 🎨 Generations
+### 🎨 Playground
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/generations/models` | No | List generation models |
-| `POST` | `/generations/generate` | Yes | Start a generation |
-| `POST` | `/generations/calculate-cost` | Yes | Estimate token cost |
-| `POST` | `/generations/agent-calulate-cost` | Yes | Agent-specific cost estimate |
-| `GET` | `/generations/list` | Yes | List user generations |
-| `GET` | `/generations/by-field` | Yes | Filter generations by field |
-| `GET` | `/generations/:generationId` | Yes | Get one generation |
-| `DELETE` | `/generations/:generationId` | Yes | Delete a generation |
+| `GET` | `/playground/` | No | List playground models |
+| `POST` | `/playground/cost` | Yes | Estimate run cost |
+| `POST` | `/playground/run` | Yes | Create a playground run |
+| `GET` | `/playground/runs` | Yes | List user run history |
+| `GET` | `/playground/runs/models` | Yes | List models used in run history |
+| `GET` | `/playground/models/recent` | Yes | List recent models for user |
+| `GET` | `/playground/runs/:runId` | Yes | Get one run by id |
+| `GET` | `/playground/runs/:runId/agent` | Yes | Agent-focused run status/details |
+| `DELETE` | `/playground/runs/:runId` | Yes | Delete a run and related files |
+| `POST` | `/playground/webhooks/wavespeed` | No | Wavespeed vendor callback |
 
 ### 📎 Zipline
 
@@ -102,11 +114,6 @@ Base path is the API root (e.g. `https://<host>`). All paths below are appended 
 | `GET` | `/agents` | No | List agent models |
 | `POST` | `/agents/enhance/prompt` | Yes | Stream prompt enhancement |
 | `POST` | `/agents/run` | Yes | Run an agent |
-| `POST` | `/agents/user-agents` | Yes | Create user agent |
-| `GET` | `/agents/user-agents` | Yes | List user agents |
-| `GET` | `/agents/user-agents/:agent_id` | Yes | Get user agent |
-| `PATCH` | `/agents/user-agents/:agent_id` | Yes | Update user agent |
-| `DELETE` | `/agents/user-agents/:agent_id` | Yes | Delete user agent |
 
 ### 💬 Chats
 

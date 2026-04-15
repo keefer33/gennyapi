@@ -1,9 +1,7 @@
 import { GenModelEmbed, UserFileEmbed, UserGenModelRunListRow } from "./types";
 import { getServerClient } from "./supabaseClient";
 import { AppError } from "../app/error";
-
-export const RUN_HISTORY_SELECT =
-  'id, created_at, user_id, gen_model_id, status, task_id, cost, duration, generation_type, gen_models:gen_models!gen_model_id_fkey(model_name, model_id, brand_name, model_product, model_variant), payload, response, polling_response';
+import { RUN_HISTORY_SELECT } from "./const";
 
 export async function listUserGenModelRunsForUser(
     userId: string,

@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 import { getZiplineBaseUrl, getZiplineTokenForUser } from '../../zipline/ziplineUtils';
 import { deleteUserFileStorageAndDbForRow } from './userFileDeleteCore';
+import { getUserFileByIdForUser } from '../../../database/user_files';
 
 /**
  * DELETE /user/files/:fileId
@@ -27,21 +26,7 @@ export async function deleteUserFile(req: Request, res: Response): Promise<void>
 
     const baseUrl = getZiplineBaseUrl();
     const token = await getZiplineTokenForUser(userId);
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data: row, error: fetchError } = await supabaseServerClient
-      .from('user_files')
-      .select('id, file_path, thumbnail_url, file_name')
-      .eq('id', fileId)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (fetchError) {
-      throw new AppError(fetchError.message, {
-        statusCode: 500,
-        code: 'user_file_fetch_failed',
-      });
-    }
+    const row = await getUserFileByIdForUser(fileId, userId);
     if (!row) {
       throw notFound('File not found');
     }

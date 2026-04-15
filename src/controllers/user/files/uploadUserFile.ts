@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
 import { Request, Response } from 'express';
 import multer from 'multer';
 import FormData from 'form-data';
@@ -7,6 +6,7 @@ import { AppError } from '../../../app/error';
 import { sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { getZiplineBaseUrl, getZiplineTokenForUser } from '../../zipline/ziplineUtils';
+import { createUserFileRow } from '../../../database/user_files';
 
 const uploadMiddleware = multer({
   storage: multer.memoryStorage(),
@@ -24,7 +24,6 @@ export async function uploadUserFile(req: Request, res: Response): Promise<void>
     const userId = getAuthUserId(req);
     const baseUrl = getZiplineBaseUrl();
     const token = await getZiplineTokenForUser(userId);
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
     await new Promise<void>((resolve, reject) => {
       uploadMiddleware.single('file')(req, res, err => {
@@ -82,26 +81,15 @@ export async function uploadUserFile(req: Request, res: Response): Promise<void>
       });
     }
 
-    const { data: row, error: insertError } = await supabaseServerClient
-      .from('user_files')
-      .insert({
-        user_id: userId,
-        file_name: uploadedFile.name ?? file.originalname,
-        file_path: uploadedFile.url,
-        file_size: file.size,
-        file_type: uploadedFile.type ?? file.mimetype,
-        status: 'active',
-        upload_type: 'upload',
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      throw new AppError(insertError.message, {
-        statusCode: 500,
-        code: 'user_file_upload_insert_failed',
-      });
-    }
+    const row = await createUserFileRow({
+      user_id: userId,
+      file_name: uploadedFile.name ?? file.originalname,
+      file_path: uploadedFile.url,
+      file_size: file.size,
+      file_type: uploadedFile.type ?? file.mimetype,
+      status: 'active',
+      upload_type: 'upload',
+    });
 
     sendOk(res, {
       zipline: ziplineBody,
