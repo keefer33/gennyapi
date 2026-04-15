@@ -33,7 +33,7 @@ export type GenModelRow = {
   brand_name?: string | null;
   brands?: BrandRow | null;
   model_pricing?: unknown;
-  api_schema?: unknown;
+  api_schema?: unknown | null;
   function_schema?: unknown;
   sort_order?: number | null;
   vendor_api?: VendorApisRow;

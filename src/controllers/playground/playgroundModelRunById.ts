@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
+import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
 
 /** GET /playground/runs/:runId — one history row with linked `user_files` (thumbnails + previews). */
 export async function playgroundModelRunById(req: Request, res: Response): Promise<void> {
@@ -11,7 +11,7 @@ export async function playgroundModelRunById(req: Request, res: Response): Promi
     if (!runId) {
       throw badRequest('Missing run id');
     }
-    const row = await getUserGenModelRunById(userId, runId);
+    const row = await getUserGenModelRunByIdForUser(userId, runId);
     if (!row) {
       throw notFound('Run not found');
     }

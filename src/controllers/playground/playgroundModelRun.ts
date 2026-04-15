@@ -11,6 +11,8 @@ import { WavespeedRunResponse } from '../../api-vendors/wavespeed/types';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 import { updateUserUsageBalance } from '../../database/user_profiles';
+import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
+import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
 
 export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
@@ -27,10 +29,18 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
 
     const genModel = await getGenModel(id);
 
-    let response: WavespeedRunResponse = null;
+    let response = null;
     let cost: number = 0;
     switch (genModel.vendor_api?.vendor_name) {
-      case 'kie':
+      case 'xai':
+        response = await runXaiModel(genModel, payload);
+        const xaiVendorApiKey = await getVendorApiKeyByVendorName('wavespeed');
+        cost = await getWavespeedCost(
+          genModel.model_id,
+          payload,
+          xaiVendorApiKey.api_key ?? null,
+          xaiVendorApiKey.config?.cost_api_endpoint ?? null
+        );
         break;
       case 'wavespeed':
         response = await runWavespeedModel(genModel, payload);
