@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
+import { getUserFileByIdForUser } from '../../../database/user_files';
+import { deleteUserFileTagLink } from '../../../database/user_file_tags';
 
 /** DELETE /user/tags/file-links — body: { file_id: string, tag_id: string } */
 export async function removeTagFromFile(req: Request, res: Response): Promise<void> {
@@ -15,37 +15,12 @@ export async function removeTagFromFile(req: Request, res: Response): Promise<vo
       throw badRequest('file_id and tag_id are required');
     }
 
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data: fileRow, error: fileErr } = await supabaseServerClient
-      .from('user_files')
-      .select('id')
-      .eq('id', file_id)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (fileErr) {
-      throw new AppError(fileErr.message, {
-        statusCode: 500,
-        code: 'user_file_lookup_failed',
-      });
-    }
+    const fileRow = await getUserFileByIdForUser(file_id, userId);
     if (!fileRow) {
       throw notFound('File not found');
     }
 
-    const { error } = await supabaseServerClient
-      .from('user_file_tags')
-      .delete()
-      .eq('file_id', file_id)
-      .eq('tag_id', tag_id);
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'user_file_tag_link_remove_failed',
-      });
-    }
+    await deleteUserFileTagLink(file_id, tag_id);
 
     sendOk(res, true);
   } catch (error) {

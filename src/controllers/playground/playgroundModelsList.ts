@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { getServerClient } from '../../database/supabaseClient';
-import { PLAYGROUND_LIST_SELECT } from '../../database/gen_models';
+import { PLAYGROUND_LIST_SELECT } from '../../database/const';
 import { GenModelRow } from '../../database/types';
 
 function toList(input: unknown): string[] {
@@ -54,7 +54,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       });
     }
 
-    const rows = ((data ?? []) as GenModelRow[]).map(row => ({
+    const rows = ((data ?? []) as unknown as GenModelRow[]).map(row => ({
       ...row,
       brand_slug: row.brands?.slug ?? null,
       brand_display: row.brands?.name ?? row.brand_name ?? null,

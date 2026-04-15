@@ -1,20 +1,10 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../../app/error';
 import { sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
-
-const FILE_SELECT = `
-  *,
-  user_file_tags(
-    tag_id,
-    created_at,
-    user_tags(*)
-  )
-`;
+import { listUserFilesData } from '../../../database/user_files';
 
 /**
- * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all&generationModelId=&generationType=
+ * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all
  */
 export async function listUserFiles(req: Request, res: Response): Promise<void> {
   try {
@@ -22,9 +12,6 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '12'), 10) || 12));
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-
     const tagsParam = typeof req.query.tags === 'string' ? req.query.tags : '';
     const tagIds = tagsParam
       .split(',')
@@ -38,172 +25,16 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
 
     const fileTypeFilter = typeof req.query.fileTypeFilter === 'string' ? req.query.fileTypeFilter.trim() : 'all';
 
-    const generationModelId =
-      typeof req.query.generationModelId === 'string' && req.query.generationModelId.trim() !== ''
-        ? req.query.generationModelId.trim()
-        : null;
-
-    const generationType =
-      typeof req.query.generationType === 'string' && req.query.generationType.trim() !== ''
-        ? req.query.generationType.trim()
-        : null;
-
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    let allowedIds: string[] | null = null;
-
-    if (tagIds.length > 0) {
-      const { data: taggedFiles, error: tagError } = await supabaseServerClient
-        .from('user_file_tags')
-        .select('file_id')
-        .in('tag_id', tagIds);
-
-      if (tagError) {
-        throw new AppError(tagError.message, {
-          statusCode: 500,
-          code: 'user_files_tags_filter_failed',
-        });
-      }
-
-      allowedIds = [...new Set((taggedFiles ?? []).map((t: { file_id: string }) => t.file_id))];
-      if (allowedIds.length === 0) {
-        sendOk(res, {
-          files: [],
-          total: 0,
-          totalPages: 0,
-          currentPage: page,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
-        return;
-      }
-    }
-
-    if (generationModelId || generationType) {
-      let generationQuery = supabaseServerClient
-        .from('user_generations')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('status', 'completed');
-
-      if (generationModelId) {
-        generationQuery = generationQuery.eq('model_id', generationModelId);
-      }
-      if (generationType) {
-        generationQuery = generationQuery.eq('generation_type', generationType);
-      }
-
-      const { data: generations, error: genError } = await generationQuery;
-
-      if (genError) {
-        throw new AppError(genError.message, {
-          statusCode: 500,
-          code: 'user_files_generation_filter_failed',
-        });
-      }
-
-      if (!generations || generations.length === 0) {
-        sendOk(res, {
-          files: [],
-          total: 0,
-          totalPages: 0,
-          currentPage: page,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
-        return;
-      }
-
-      const generationIds = generations.map((g: { id: string }) => g.id);
-
-      const { data: generationFiles, error: genFileError } = await supabaseServerClient
-        .from('user_generation_files')
-        .select('file_id')
-        .in('generation_id', generationIds);
-
-      if (genFileError) {
-        throw new AppError(genFileError.message, {
-          statusCode: 500,
-          code: 'user_files_generation_files_filter_failed',
-        });
-      }
-
-      const genFileIds = [...new Set((generationFiles ?? []).map((gf: { file_id: string }) => gf.file_id))];
-
-      if (genFileIds.length === 0) {
-        sendOk(res, {
-          files: [],
-          total: 0,
-          totalPages: 0,
-          currentPage: page,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
-        return;
-      }
-
-      if (allowedIds !== null) {
-        const tagSet = new Set(allowedIds);
-        allowedIds = genFileIds.filter(id => tagSet.has(id));
-      } else {
-        allowedIds = genFileIds;
-      }
-
-      if (allowedIds.length === 0) {
-        sendOk(res, {
-          files: [],
-          total: 0,
-          totalPages: 0,
-          currentPage: page,
-          hasNextPage: false,
-          hasPrevPage: false,
-        });
-        return;
-      }
-    }
-
-    let query = supabaseServerClient
-      .from('user_files')
-      .select(FILE_SELECT, { count: 'exact' })
-      .eq('user_id', userId)
-      .eq('status', 'active');
-
-    if (allowedIds !== null) {
-      query = query.in('id', allowedIds);
-    }
-
-    if (uploadType !== null) {
-      query = query.eq('upload_type', uploadType);
-    }
-
-    if (fileTypeFilter === 'images') {
-      query = query.ilike('file_type', 'image/%');
-    } else if (fileTypeFilter === 'videos') {
-      query = query.ilike('file_type', 'video/%');
-    } else if (fileTypeFilter === 'audio') {
-      query = query.ilike('file_type', 'audio/%');
-    }
-
-    const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, to);
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'user_files_list_failed',
-      });
-    }
-
-    const total = count ?? 0;
-    const totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
-
-    sendOk(res, {
-      files: data ?? [],
-      total,
-      totalPages,
-      currentPage: page,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
+    const result = await listUserFilesData({
+      userId,
+      page,
+      limit,
+      tagIds,
+      uploadType,
+      fileTypeFilter,
     });
+
+    sendOk(res, result);
   } catch (error) {
     sendError(res, error);
   }

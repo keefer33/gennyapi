@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../../app/error';
 import { badRequest, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
+import { createUserFileRow } from '../../../database/user_files';
 
 /**
  * POST /user/files
@@ -24,28 +23,15 @@ export async function createUserFile(req: Request, res: Response): Promise<void>
       throw badRequest('file_name, file_path, file_size, and file_type are required');
     }
 
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data, error } = await supabaseServerClient
-      .from('user_files')
-      .insert({
-        user_id: userId,
-        file_name,
-        file_path,
-        file_size,
-        file_type,
-        status: 'active',
-        upload_type: typeof upload_type === 'string' ? upload_type : 'upload',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'user_file_create_failed',
-      });
-    }
+    const data = await createUserFileRow({
+      user_id: userId,
+      file_name,
+      file_path,
+      file_size,
+      file_type,
+      status: 'active',
+      upload_type: typeof upload_type === 'string' ? upload_type : 'upload',
+    });
 
     sendOk(res, data, 201);
   } catch (error) {

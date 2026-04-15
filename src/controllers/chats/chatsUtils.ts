@@ -1,5 +1,5 @@
 
-import { MessageRow } from './chatsTypes';
+import { MessageRow } from "../../database/types";
 
 /** Build { role, content }[] from message rows for streamText (text + reasoning only). */
 export function messageRowsToModelMessages(rows: MessageRow[]) {

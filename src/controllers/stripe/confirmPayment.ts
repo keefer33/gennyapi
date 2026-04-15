@@ -1,15 +1,13 @@
-import { getServerClient, SupabaseServerClients } from '../../database/supabaseClient';
 import { isValidTopUpCents } from '../../shared/stripe';
 import Stripe from 'stripe';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
-import {
-  insertUserUsageLog,
-  updateUserProfileUsageAmount,
-  USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT,
-} from '../../shared/usageUtils';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import { insertUserUsageLog } from '../../database/user_usage_log';
+import { USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT } from '../../database/const';
+import { updateUserUsageBalance } from '../../database/user_profiles';
+import { createCompletedTransaction, getTransactionByPaymentIntentId } from '../../database/transactions';
 
 export async function confirmPayment(req: Request, res: Response): Promise<void> {
   try {
@@ -61,13 +59,7 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       }
     }
 
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data: existingTransaction } = await supabaseServerClient
-      .from('transactions')
-      .select('id, status')
-      .eq('stripe_payment_intent_id', paymentIntentId)
-      .single();
+    const existingTransaction = await getTransactionByPaymentIntentId(paymentIntentId);
 
     if (existingTransaction && existingTransaction.status === 'completed') {
       sendOk(res, {
@@ -77,35 +69,19 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { data: newTransaction, error: transactionError } = await supabaseServerClient
-      .from('transactions')
-      .insert({
-        user_id: userId,
-        stripe_payment_intent_id: paymentIntentId,
-        amount_cents: paymentIntent.amount,
-        amount_dollars: amountDollars,
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        metadata: paymentIntent,
-      })
-      .select()
-      .single();
-
-    if (transactionError) {
-      throw new AppError('Failed to update transaction', {
-        statusCode: 500,
-        code: 'stripe_transaction_update_failed',
-        details: transactionError,
-      });
-    }
+    const newTransaction = await createCompletedTransaction({
+      user_id: userId,
+      stripe_payment_intent_id: paymentIntentId,
+      amount_cents: paymentIntent.amount,
+      amount_dollars: amountDollars,
+      metadata: paymentIntent,
+    });
 
     try {
       await insertUserUsageLog({
         user_id: userId,
         usage_amount: amountDollars,
-        generation_id: null,
+        gen_model_run_id: null,
         transaction_id: newTransaction?.id ?? null,
         type_id: Number.isFinite(USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT) ? USAGE_LOG_TYPE_STRIPE_DEPOSIT_CREDIT : 2,
         meta: {
@@ -117,11 +93,7 @@ export async function confirmPayment(req: Request, res: Response): Promise<void>
           },
         },
       });
-      await updateUserProfileUsageAmount({
-        user_id: userId,
-        type: 'credit',
-        amount: amountDollars,
-      });
+      await updateUserUsageBalance(userId, amountDollars, 'credit');
     } catch (usageErr) {
       throw new AppError('Payment recorded but failed to apply usage credit', {
         statusCode: 500,

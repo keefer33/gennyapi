@@ -1,18 +1,20 @@
 import { Request, Response } from 'express';
-import { badRequest, notFound, sendError, sendNoContent, sendOk } from '../../app/response';
+import { badRequest, sendError, sendNoContent, sendOk } from "../../app/response";
 import {
   handleCreateChat,
-  handleListChats,
-  handleGetChat,
-  handleUpdateChat,
   handleDeleteChat,
-  handleListChatMessages,
+  handleGetChat,
+  handleListChats,
+  handleUpdateChat,
+} from "../../database/user_models_chats";
+import {
   handleCreateChatMessage,
-  handleGetChatMessage,
   handleDeleteChatMessage,
-} from './chatsData';
-import { getAuthUserId } from '../../shared/getAuthUserId';
-import { CreateChatBody, CreateChatMessageBody, UpdateChatBody } from './chatsTypes';
+  handleGetChatMessage,
+  handleListChatMessages,
+} from "../../database/user_models_chats_messages";
+import { getAuthUserId } from "../../shared/getAuthUserId";
+import { CreateChatBody, CreateChatMessageBody, UpdateChatBody } from "../../database/types";
 
 // ---------- Route handlers ----------
 
@@ -22,10 +24,7 @@ export const createChat = async (req: Request, res: Response) => {
     const userId = getAuthUserId(req);
     const { chat_name } = req.body as CreateChatBody;
     const result = await handleCreateChat(userId, chat_name);
-    if (result.error) {
-      throw badRequest(result.error);
-    }
-    sendOk(res, result.data ?? []);
+    sendOk(res, result.data, 201);
   } catch (error) {
     sendError(res, error);
   }
@@ -36,9 +35,6 @@ export const listChats = async (req: Request, res: Response) => {
   try {
     const userId = getAuthUserId(req);
     const result = await handleListChats(userId);
-    if (result.error) {
-      throw badRequest(result.error);
-    }
     sendOk(res, result.data ?? []);
   } catch (error) {
     sendError(res, error);
@@ -54,9 +50,6 @@ export const getChat = async (req: Request, res: Response) => {
       throw badRequest('chat_id is required');
     }
     const result = await handleGetChat(userId, chat_id);
-    if (result.error) {
-      throw notFound(result.error);
-    }
     sendOk(res, result.data);
   } catch (error) {
     sendError(res, error);
@@ -73,12 +66,6 @@ export const updateChat = async (req: Request, res: Response) => {
       throw badRequest('chat_id is required');
     }
     const result = await handleUpdateChat(userId, chat_id, chat_name ?? '');
-    if (result.error) {
-      if (result.error === 'Chat not found') {
-        throw notFound(result.error);
-      }
-      throw badRequest(result.error);
-    }
     sendOk(res, result.data);
   } catch (error) {
     sendError(res, error);
@@ -93,10 +80,7 @@ export const deleteChat = async (req: Request, res: Response) => {
     if (!chat_id) {
       throw badRequest('chat_id is required');
     }
-    const result = await handleDeleteChat(userId, chat_id);
-    if (result.error) {
-      throw badRequest(result.error);
-    }
+    await handleDeleteChat(userId, chat_id);
     sendNoContent(res);
   } catch (error) {
     sendError(res, error);
@@ -118,13 +102,6 @@ export const listChatMessages = async (req: Request, res: Response) => {
       limit: limitNum,
       order: orderOpt,
     });
-    if ('error' in result) {
-      const errorMessage = typeof result.error === 'string' ? result.error : 'Failed to list chat messages';
-      if (errorMessage === 'Chat not found') {
-        throw notFound(errorMessage);
-      }
-      throw badRequest(errorMessage);
-    }
     sendOk(res, result.data ?? []);
   } catch (error) {
     sendError(res, error);
@@ -144,13 +121,6 @@ export const createChatMessage = async (req: Request, res: Response) => {
       throw badRequest('message is required');
     }
     const result = await handleCreateChatMessage(userId, chat_id, message, usage);
-    if ('error' in result) {
-      const errorMessage = typeof result.error === 'string' ? result.error : 'Failed to create chat message';
-      if (errorMessage === 'Chat not found') {
-        throw notFound(errorMessage);
-      }
-      throw badRequest(errorMessage);
-    }
     sendOk(res, result.data, 201);
   } catch (error) {
     sendError(res, error);
@@ -166,10 +136,6 @@ export const getChatMessage = async (req: Request, res: Response) => {
       throw badRequest('chat_id and message_id are required');
     }
     const result = await handleGetChatMessage(userId, chat_id, message_id);
-    if ('error' in result) {
-      const errorMessage = typeof result.error === 'string' ? result.error : 'Message not found';
-      throw notFound(errorMessage);
-    }
     sendOk(res, result.data);
   } catch (error) {
     sendError(res, error);
@@ -184,14 +150,7 @@ export const deleteChatMessage = async (req: Request, res: Response) => {
     if (!chat_id || !message_id) {
       throw badRequest('chat_id and message_id are required');
     }
-    const result = await handleDeleteChatMessage(userId, chat_id, message_id);
-    if ('error' in result) {
-      const errorMessage = typeof result.error === 'string' ? result.error : 'Failed to delete chat message';
-      if (errorMessage === 'Chat not found') {
-        throw notFound(errorMessage);
-      }
-      throw badRequest(errorMessage);
-    }
+    await handleDeleteChatMessage(userId, chat_id, message_id);
     sendNoContent(res);
   } catch (error) {
     sendError(res, error);

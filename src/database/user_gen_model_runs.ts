@@ -23,16 +23,15 @@ export async function getUserGenModelRunsByUserId(
   genModelIdIsUnique: boolean = false
 ): Promise<UserGenModelRuns[]> {
   const { supabaseServerClient } = await getServerClient();
-  let query = supabaseServerClient
+  /** `isDistinct` on the client is `IS DISTINCT FROM` (filter), not DISTINCT ON — over-fetch then dedupe. */
+  const fetchLimit = genModelIdIsUnique ? Math.min(2000, Math.max(limit * 50, limit)) : limit;
+
+  const { data: rows, error } = await supabaseServerClient
     .from('user_gen_model_runs')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(limit);
-  if (genModelIdIsUnique) {
-    query = query.isDistinct('gen_model_id', true);
-  }
-  const { data: rows, error } = await query;
+    .limit(fetchLimit);
 
   if (error) {
     throw new AppError(error.message, {
@@ -41,7 +40,22 @@ export async function getUserGenModelRunsByUserId(
       expose: false,
     });
   }
-  return rows;
+
+  if (!rows?.length || !genModelIdIsUnique) {
+    return rows ?? [];
+  }
+
+  const seen = new Set<string>();
+  const unique: UserGenModelRuns[] = [];
+  for (const row of rows) {
+    const gid = row.gen_model_id;
+    if (gid == null || gid === '') continue;
+    if (seen.has(gid)) continue;
+    seen.add(gid);
+    unique.push(row);
+    if (unique.length >= limit) break;
+  }
+  return unique;
 }
 
 export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGenModelRuns | null> {
@@ -107,11 +121,11 @@ export async function deleteUserGenModelRun(runId: string): Promise<void> {
   }
 }
 
-export async function getUserGenModelRunById(userId: string, runId: string): Promise<UserGenModelRuns | null> {
+export async function getUserGenModelRunById(userId: string, runId: string, select: string = '*'): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
-    .select('*')
+    .select(select)
     .eq('id', runId)
     .eq('user_id', userId)
     .maybeSingle<UserGenModelRuns>();

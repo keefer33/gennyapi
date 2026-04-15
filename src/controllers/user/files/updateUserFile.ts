@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../../app/error';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { getServerClient, SupabaseServerClients } from '../../../database/supabaseClient';
+import { getActiveUserFileForUpdate, updateUserFileName } from '../../../database/user_files';
 
 /**
  * PATCH /user/files/:fileId
@@ -23,37 +22,15 @@ export async function updateUserFile(req: Request, res: Response): Promise<void>
       throw badRequest('file_name is required');
     }
 
-    const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
-
-    const { data: currentFile, error: fetchError } = await supabaseServerClient
-      .from('user_files')
-      .select('file_path, file_name')
-      .eq('id', fileId)
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
-
-    if (fetchError || !currentFile) {
+    const currentFile = await getActiveUserFileForUpdate(fileId, userId);
+    if (!currentFile) {
       throw notFound('File not found');
     }
 
     const fileExtension = currentFile.file_name.split('.').pop() || '';
     const newFileNameWithExtension = newFileName.includes('.') ? newFileName : `${newFileName}.${fileExtension}`;
 
-    const { data: updatedFile, error: updateError } = await supabaseServerClient
-      .from('user_files')
-      .update({ file_name: newFileNameWithExtension })
-      .eq('id', fileId)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (updateError) {
-      throw new AppError(updateError.message, {
-        statusCode: 500,
-        code: 'user_file_update_failed',
-      });
-    }
+    const updatedFile = await updateUserFileName(fileId, userId, newFileNameWithExtension);
 
     sendOk(res, updatedFile);
   } catch (error) {

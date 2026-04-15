@@ -6,6 +6,8 @@ import {
 } from '../../database/user_gen_model_runs';
 import { saveFileFromUrl } from '../../shared/fileUtils';
 import { UserGenModelRuns } from '../../database/types';
+import { USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT } from '../../database/const';
+import { insertUserUsageLog } from '../../database/user_usage_log';
 
 export async function webhookWavespeed(req: Request, res: Response): Promise<void> {
   try {
@@ -55,6 +57,17 @@ export async function webhookWavespeed(req: Request, res: Response): Promise<voi
         polling_response: { webhook: body, error: error.message },
         status: 'error',
         duration: duration,
+      });
+      await insertUserUsageLog({
+        user_id: userGenModelRun.user_id,
+        usage_amount: userGenModelRun.cost,
+        type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
+        gen_model_run_id: userGenModelRun.id,
+        transaction_id: null,
+        meta: {
+          model_name: userGenModelRun.gen_model_id,
+          error: error.message,
+        },
       });
       throw new Error(error.message);
     }

@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import stripeRoutes from '../controllers/stripe/stripeRoutes';
 import webhooksRoutes from '../controllers/webhooks/webhooksRoutes';
-import generationsRoutes from '../controllers/generate/generationsRoutes';
 import ziplineRoutes from '../controllers/zipline/ziplineRoutes';
 import agentsRoutes from '../controllers/agents/agentsRoutes';
 import userRoutes from '../controllers/user/userRoutes';
@@ -18,7 +17,6 @@ export function createAppRouter() {
 
   router.use('/stripe', stripeRoutes);
   router.use('/webhooks', webhooksRoutes);
-  router.use('/generations', generationsRoutes);
   router.use('/zipline', ziplineRoutes);
   router.use('/agents', agentsRoutes);
   router.use('/user', userRoutes);

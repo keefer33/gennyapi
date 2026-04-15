@@ -1,22 +1,22 @@
 import { Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError } from '../../app/response';
-import {
-  AgentCalculateCostResponse,
-  CreateGenerationResponse,
-  GennyToolPromptMeta,
-  RunAgentAttachmentInput,
-  RunAgentBody,
-  RunAgentHttpError,
-  RunAgentInput,
-  SSEWriter,
-  SelectedModelRow,
-} from './agentsTypes';
 import { z } from 'zod/v3';
-import { handleGetAgentModelByName } from './agentsData';
+import { handleGetAgentModelByName } from '../../database/agent_models';
 import getAgentCustomTools from './agentCustomTools';
 import { Composio } from '@composio/core';
 import { VercelProvider } from '@composio/vercel';
+import { AgentModelRow } from '../../database/types';
+import {
+  SSEWriter,
+  RunAgentBody,
+  RunAgentInput,
+  RunAgentAttachmentInput,
+  RunAgentHttpError,
+  AgentCalculateCostResponse,
+  GenerationRequestResponse,
+  GennyToolPromptMeta,
+} from './types';
 
 export function createSSEWriter(res: Response): SSEWriter {
   return (data: Record<string, unknown>) => {
@@ -68,13 +68,10 @@ export function parseRunAgentInput(body: RunAgentBody): RunAgentInput {
   };
 }
 
-export async function getSelectedModelRow(modelName: string): Promise<SelectedModelRow> {
+export async function getSelectedModelRow(modelName: string): Promise<AgentModelRow> {
   const modelResult = await handleGetAgentModelByName(modelName);
-  if ('error' in modelResult) {
-    throw new RunAgentHttpError(404, modelResult.error);
-  }
 
-  const modelRow = modelResult.data as SelectedModelRow;
+  const modelRow = modelResult;
   const modelId = modelRow.api_id?.schema?.model as string | undefined;
   if (!modelId) {
     throw new RunAgentHttpError(400, 'Selected model has no gateway model configured');
@@ -84,9 +81,11 @@ export async function getSelectedModelRow(modelName: string): Promise<SelectedMo
 
 type NormalizedAttachment = RunAgentAttachmentInput;
 export function normalizeAttachments(attachments: RunAgentBody['attachments']): NormalizedAttachment[] {
-  return (attachments ?? []).filter(
-    (a): a is NormalizedAttachment => typeof a?.url === 'string' && a.url.trim().length > 0
-  );
+  return (attachments ?? []).filter((a): a is NormalizedAttachment => {
+    if (!a || typeof a !== 'object') return false;
+    const attachment = a as { url?: unknown };
+    return typeof attachment.url === 'string' && attachment.url.trim().length > 0;
+  });
 }
 
 export async function loadComposioTools(
@@ -117,19 +116,19 @@ export async function loadComposioTools(
 
 export async function agentCalculateCostRequest(
   authToken: string,
-  toolName: string,
+  modelId: string,
   formValues: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
-    const result = await fetch('https://api.genny.one/generations/agent-calulate-cost', {
+    const result = await fetch('https://api.genny.one/playground/cost', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${authToken}`,
       },
       body: JSON.stringify({
-        formValues,
-        toolName: toolName.trim(),
+        payload: formValues,
+        modelId: modelId.trim(),
       }),
     });
 
@@ -154,10 +153,7 @@ export async function agentCalculateCostRequest(
     if (typeof payload?.cost !== 'number' || Number.isNaN(payload.cost) || !Number.isFinite(payload.cost)) {
       return {
         success: false,
-        message:
-          typeof payload?.message === 'string'
-            ? payload.message
-            : 'Cost calculation did not return a valid numeric cost',
+        message: typeof data?.error === 'string' ? data.error : 'Cost calculation did not return a valid numeric cost',
         status: result.status,
       };
     }
@@ -165,9 +161,6 @@ export async function agentCalculateCostRequest(
     return {
       success: true,
       cost: payload.cost,
-      model_id: payload?.model_id ?? null,
-      toolName: payload?.toolName ?? toolName.trim(),
-      ...(typeof payload?.message === 'string' ? { message: payload.message } : {}),
     };
   } catch (error: unknown) {
     return {
@@ -183,21 +176,21 @@ export async function createGenerationRequest(
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
-    const result = await fetch('https://api.genny.one/generations/generate', {
+    const result = await fetch('https://api.genny.one/playground/run', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${authToken}`,
       },
       body: JSON.stringify({
-        model_id,
+        id: model_id,
         payload,
       }),
     });
 
-    let data: CreateGenerationResponse | null = null;
+    let data: GenerationRequestResponse | null = null;
     try {
-      data = (await result.json()) as CreateGenerationResponse;
+      data = (await result.json()) as GenerationRequestResponse;
     } catch {
       data = null;
     }
