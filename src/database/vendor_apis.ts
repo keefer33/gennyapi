@@ -5,7 +5,7 @@ import { VendorApisRow } from './types';
 export async function getVendorApiKeyByVendorName(vendor_name: string): Promise<VendorApisRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data: matchedKeyRow, error: vendorError } = await supabaseServerClient
-    .from('vendor_api_keys')
+    .from('vendor_apis')
     .select('api_key, vendor_name, config')
     .eq('vendor_name', vendor_name)
     .maybeSingle();
@@ -13,7 +13,7 @@ export async function getVendorApiKeyByVendorName(vendor_name: string): Promise<
   if (vendorError) {
     throw new AppError(vendorError.message, {
       statusCode: 500,
-      code: 'vendor_api_keys_fetch_failed',
+      code: 'vendor_apis_fetch_failed',
       expose: false,
     });
   }

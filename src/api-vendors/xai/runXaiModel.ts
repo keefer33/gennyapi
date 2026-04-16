@@ -3,13 +3,31 @@ import { AppError } from '../../app/error';
 import { GenModelRow } from '../../database/types';
 
 export async function runXaiModel(genModel: GenModelRow, payload: unknown) {
-  const endpoint = `${(genModel.api_schema as { server?: string } | null)?.server ?? ''}${(genModel.api_schema as { path?: string } | null)?.path ?? ''}`;
+  const endpoint = `${(genModel.api_schema as { server?: string } | null)?.server ?? ''}${(genModel.api_schema as { api_path?: string } | null)?.api_path ?? ''}`;
   const apiKey = genModel.vendor_api?.api_key;
-  const payloadData = {
-    ...(payload as Record<string, unknown>),
-    model_id: (genModel.api_schema as { vendor_model_name?: string } | null)?.vendor_model_name,
+  const originalPayload = (payload ?? {}) as Record<string, unknown>;
+  // Keep DB payload untouched; only transform request copy for xAI API contract.
+  const requestPayload: Record<string, unknown> = { ...originalPayload };
+
+  if (requestPayload?.image) {
+    requestPayload.image = {
+      url: requestPayload.image as string,
+    }
   }
-  const response = await axios.post(endpoint, payload, {
+
+  if (Array.isArray(requestPayload.images) && requestPayload.images.length > 0) {
+    requestPayload.reference_images = requestPayload.images
+      .filter(image => typeof image === 'string' && image.trim().length > 0)
+      .map(image => ({ url: image as string }));
+    delete requestPayload.images;
+  }
+  
+  const payloadData = {
+    ...requestPayload,
+    model: (genModel.api_schema as { vendor_model_name?: string } | null)?.vendor_model_name,
+  }
+  console.log('payloadData', payloadData, endpoint, apiKey);
+  const response = await axios.post(endpoint, payloadData, {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,

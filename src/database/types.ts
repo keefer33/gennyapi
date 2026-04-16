@@ -37,6 +37,7 @@ export type GenModelRow = {
   function_schema?: unknown;
   sort_order?: number | null;
   vendor_api?: VendorApisRow;
+  vendor_name?: string | null;
 };
 
 export type CreateUserGenModelRunResult = {
@@ -53,7 +54,6 @@ export type UserGenModelRuns = {
   task_id?: string | null;
   cost?: number | null;
   duration?: number | null;
-  generation_type?: string | null;
   gen_models?: GenModelRow | null;
   payload?: unknown;
   response?: unknown;
