@@ -151,7 +151,6 @@ export async function listUserGenModelRunsForUser(
         const n = typeof row.duration === 'number' ? row.duration : Number(row.duration);
         return Number.isFinite(n) ? n : null;
       })(),
-      generation_type: row.generation_type != null ? String(row.generation_type) : null,
       gen_models: normalizeGenModelsEmbed(row.gen_models),
       thumbnail_url: preview_urls[0] ?? null,
       preview_urls,

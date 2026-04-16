@@ -80,7 +80,7 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
-    .select('*')
+    .select('*,gen_models(vendor_name)')
     .eq('id', runId)
     .maybeSingle<UserGenModelRuns>();
 

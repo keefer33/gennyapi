@@ -27,13 +27,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
-  console.log('[webhookXai] start', {
-    run_id: runRow.id,
-    task_id: runRow.task_id,
-    gen_model_id: runRow.gen_model_id,
-    generation_type: runRow.generation_type,
-  });
-
   if (!runRow.task_id || !runRow.gen_model_id) {
     throw new Error('xai webhook requires task_id and gen_model_id');
   }
@@ -97,16 +90,10 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
 
     if (finalStatus === 'done') {
       videoUrl = typeof body.video?.url === 'string' ? body.video.url : null;
-      console.log('[webhookXai] terminal status done', {
-        has_video_url: Boolean(videoUrl),
-      });
       break;
     }
 
     if (finalStatus === 'failed' || finalStatus === 'expired') {
-      console.log('[webhookXai] terminal status non-success', {
-        status: finalStatus,
-      });
       break;
     }
 
@@ -117,18 +104,11 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
 
   try {
     if (finalStatus === 'done' && videoUrl) {
-      console.log('[webhookXai] processing completed output', {
-        run_id: claimed.id,
-      });
       const savedFiles = await processResponse(videoUrl, claimed, lastResponse);
       await updateUserGenModelRun({
         ...claimed,
         polling_response: { webhook: lastResponse, files: savedFiles },
         status: 'completed',
-        duration,
-      });
-      console.log('[webhookXai] run marked completed', {
-        run_id: claimed.id,
         duration,
       });
       return;
@@ -157,9 +137,6 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
         error: `xai generation ${finalStatus}`,
       },
     });
-    console.log('[webhookXai] refund usage log inserted', {
-      run_id: claimed.id,
-    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookXai] caught error while processing', {
@@ -182,9 +159,6 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
         model_name: claimed.gen_model_id,
         error: message,
       },
-    });
-    console.log('[webhookXai] refund usage log inserted after error', {
-      run_id: claimed.id,
     });
     throw error;
   }

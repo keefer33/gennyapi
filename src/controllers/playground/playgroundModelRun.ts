@@ -66,7 +66,6 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       payload: body.payload,
       response: response,
       cost: cost,
-      generation_type: genModel.vendor_api?.vendor_name ?? null,
       task_id: response?.id ?? null,
       status: 'pending',
     });

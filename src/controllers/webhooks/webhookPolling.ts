@@ -22,16 +22,13 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
       return;
     }
 
-    switch (runRow.generation_type) {
+    switch (runRow.gen_models?.vendor_name) {
       case 'xai':
-        console.log('[webhookPolling] generation_type:', 'xai');
         await webhookXai(runRow);
         break;
       case 'wavespeed':
-        console.log('[webhookPolling] generation_type:', 'wavespeed');
         break;
       default:
-        console.log('[webhookPolling] generation_type:', runRow.generation_type ?? 'unknown');
         break;
     }
 

@@ -3,6 +3,7 @@ import { AppError } from '../../app/error';
 import { sendOk } from '../../app/response';
 import { getGenModel } from '../../database/gen_models';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
+import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
 
 export async function playgroundRunCost(req: Request, res: Response): Promise<void> {
   try {
@@ -15,6 +16,15 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
 
     let cost = 0;
     switch (vendor) {
+      case 'xai':
+        const xaiVendorApiKey = await getVendorApiKeyByVendorName('wavespeed');
+        cost = await getWavespeedCost(
+          genModel.model_id,
+          payload,
+          xaiVendorApiKey.api_key ?? null,
+          xaiVendorApiKey.config?.cost_api_endpoint ?? null
+        );
+        break;
       case 'wavespeed':
         cost = await getWavespeedCost(
           genModel.model_id,
