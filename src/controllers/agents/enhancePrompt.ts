@@ -11,12 +11,25 @@ const MEDIA_URL_KEYS = new Set([
   'src',
   'file_url',
   'image',
+  'images',
+  'reference_images',
+  'reference_image',
   'image_input',
   'image_urls',
   'video',
+  'videos',
   'video_url',
   'video_input',
   'video_urls',
+  'reference_videos',
+  'reference_video',
+  'audio',
+  'audios',
+  'audio_url',
+  'audio_input',
+  'audio_urls',
+  'reference_audio',
+  'reference_audios',
 ]);
 const VISION_MEDIA_ORIGIN = 'https://aifile.link/';
 
@@ -36,7 +49,7 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
     const path = lower.split('?')[0];
     const ext = path.includes('.') ? path.slice(path.lastIndexOf('.')) : '';
     return (
-      ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.mp4', '.webm', '.mov'].includes(ext) ||
+      ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.mp4', '.webm', '.mov', '.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.opus'].includes(ext) ||
       path.includes('/storage/') ||
       path.includes('/object/')
     );
@@ -109,8 +122,8 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
     const normalizedType = String(generationType || 'image')
       .toLowerCase()
       .trim();
-    if (normalizedType !== 'image' && normalizedType !== 'video') {
-      throw badRequest("generationType must be 'image' or 'video'");
+    if (normalizedType !== 'image' && normalizedType !== 'video' && normalizedType !== 'audio') {
+      throw badRequest("generationType must be 'image', 'video', or 'audio'");
     }
 
     const promptMaxLength =
@@ -121,7 +134,7 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
       : ' Output only the prompt text, no quotes or explanation. Keep under 200 words.';
 
     const visionInstruction = hasVision
-      ? ' The user may have attached reference image(s) or video thumbnail(s) below. Look at them and use their content, style, and composition to inform the prompt you generate—e.g. for image-to-image or image-to-video, describe or extend what you see.'
+      ? ' The user may have attached reference media below. Use their content and style to inform the prompt you generate.'
       : '';
 
     const systemPrompt = `You are an expert prompt engineer for AI ${normalizedType} generation. The user will send instructions and context. Your job is to respond with a single, ready-to-use ${normalizedType} prompt.${visionInstruction}${lengthInstruction}`;

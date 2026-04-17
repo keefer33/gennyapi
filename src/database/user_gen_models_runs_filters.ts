@@ -9,7 +9,7 @@ export async function listUserGenModelRunsForUser(
       page?: number;
       limit?: number;
       gen_model_id?: string | null;
-      file_type_filter?: 'all' | 'images' | 'videos' | null;
+      file_type_filter?: 'all' | 'images' | 'videos' | 'audio' | null;
       tag_ids?: string[];
     } = {}
   ): Promise<{ rows: UserGenModelRunListRow[]; total: number }> {
@@ -34,7 +34,7 @@ export async function listUserGenModelRunsForUser(
       }
     };
   
-    if (fileTypeFilter === 'images' || fileTypeFilter === 'videos') {
+    if (fileTypeFilter === 'images' || fileTypeFilter === 'videos' || fileTypeFilter === 'audio') {
       let fq = supabaseServerClient
         .from('user_files')
         .select('gen_model_run_id')
@@ -43,8 +43,10 @@ export async function listUserGenModelRunsForUser(
         .not('gen_model_run_id', 'is', null);
       if (fileTypeFilter === 'images') {
         fq = fq.ilike('file_type', 'image/%');
-      } else {
+      } else if (fileTypeFilter === 'videos') {
         fq = fq.ilike('file_type', 'video/%');
+      } else {
+        fq = fq.ilike('file_type', 'audio/%');
       }
       const { data: ftRows, error: ftError } = await fq;
       if (ftError) {

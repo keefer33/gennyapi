@@ -600,9 +600,7 @@ export const saveAgentGeneratedFile = async (
       conversation_id: options.conversation_id,
     };
 
-    const fakeUrlForType = filename.toLowerCase().endsWith('.mp4')
-      ? 'https://temp/video.mp4'
-      : 'https://temp/image.jpg';
+    const fakeUrlForType = `https://temp/${filename.toLowerCase()}`;
     let thumbnailUrl: string | undefined;
     if (isImageUrl(fakeUrlForType) || isVideoUrl(fakeUrlForType)) {
       const thumbnailBuffer = await generateThumbnail(buffer, fakeUrlForType);
