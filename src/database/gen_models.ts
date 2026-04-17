@@ -43,6 +43,10 @@ export async function getGenModelsList(): Promise<GenModelRow[]> {
 }
 
 export async function getGenModelsListByIds(ids: string[]): Promise<GenModelRow[]> {
+  if (!ids.length) {
+    return [];
+  }
+
   const { supabaseServerClient } = await getServerClient();
   const { data: rows, error } = await supabaseServerClient
     .from('gen_models')
@@ -55,5 +59,22 @@ export async function getGenModelsListByIds(ids: string[]): Promise<GenModelRow[
       expose: false,
     });
   }
-  return rows as unknown as GenModelRow[];
+
+  const typedRows = (rows as unknown as GenModelRow[]) ?? [];
+  const byId = new Map<string, GenModelRow>();
+  for (const row of typedRows) {
+    byId.set(row.id, row);
+  }
+
+  // Preserve caller-provided order (most-recent first for run-history derived lists).
+  const ordered: GenModelRow[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const row = byId.get(id);
+    if (row) ordered.push(row);
+  }
+
+  return ordered;
 }
