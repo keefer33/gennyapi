@@ -20,6 +20,7 @@ export type BrandRow = {
   name?: string | null;
   slug?: string | null;
   logo?: string | null;
+  sort_order?: number | null;
 };
 
 export type GenModelRow = {

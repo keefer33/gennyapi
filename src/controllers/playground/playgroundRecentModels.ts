@@ -12,8 +12,9 @@ export const PLAYGROUND_LIST_SELECT =
 export async function playgroundRecentModels(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? '12'), 10) || 12));
 
-    const runRows = await getUserGenModelRunsByUserId(userId, 20, true);
+    const runRows = await getUserGenModelRunsByUserId(userId, limit, true);
     const orderedIds = runRows.map(r => r.gen_model_id);
 
     const gmRows = await getGenModelsListByIds(orderedIds);

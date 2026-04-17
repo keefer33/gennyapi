@@ -18,10 +18,10 @@ export const USAGE_LOG_TYPES = [
 ];
 
 export const PLAYGROUND_LIST_SELECT =
-  'id, model_id, model_name, model_description, model_type, model_product, model_variant, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo)';
+  'id, model_id, model_name, model_description, model_type, generation_type, model_product, model_variant, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo,sort_order)';
 
   export const RUN_HISTORY_SELECT =
-  'id, created_at, user_id, gen_model_id, status, task_id, cost, duration, gen_models(model_name, model_id, brand_name, model_product, model_variant, vendor_name, generation_type), user_files(id, file_name, thumbnail_url, file_path, file_type, created_at, status), payload, response, polling_response';
+  'id, created_at, user_id, gen_model_id, status, task_id, cost, duration, gen_models(model_name, model_id, brand_name(name,logo), model_product, model_variant, vendor_name, generation_type), user_files(id, file_name, thumbnail_url, file_path, file_type, created_at, status), payload, response, polling_response';
 
 export const RUN_AGENT_SELECT =
   'id, created_at, status, cost, duration, gen_models:gen_models!gen_model_id(model_name, model_id, brand_name, model_product, model_variant, generation_type), user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_type, created_at, status), payload, response, polling_response';
