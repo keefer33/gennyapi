@@ -3,7 +3,7 @@ import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
 /**
- * GET /playground/runs?page=1&limit=50&gen_model_id=&file_type_filter=all|images|videos&tags=id1,id2
+ * GET /playground/runs?page=1&limit=50&gen_model_id=&file_type_filter=all|images|videos|audio&tags=id1,id2
  */
 export async function playgroundModelRunsHistory(req: Request, res: Response): Promise<void> {
   try {
@@ -17,7 +17,9 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
 
     const ftRaw = typeof req.query.file_type_filter === 'string' ? req.query.file_type_filter.trim().toLowerCase() : '';
     const file_type_filter =
-      ftRaw === 'images' || ftRaw === 'videos' ? (ftRaw as 'images' | 'videos') : 'all';
+      ftRaw === 'images' || ftRaw === 'videos' || ftRaw === 'audio'
+        ? (ftRaw as 'images' | 'videos' | 'audio')
+        : 'all';
 
     const tagsParam = typeof req.query.tags === 'string' ? req.query.tags : '';
     const tag_ids = tagsParam
