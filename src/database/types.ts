@@ -133,6 +133,8 @@ export type UserUsageLogRow = {
   created_at?: string | null;
   updated_at?: string | null;
   usage_amount?: number | null;
+  /** DB column `generation_id` — prefer this when building rows; `insertUserUsageLog` maps from `gen_model_run_id`. */
+  generation_id?: string | null;
   gen_model_run_id?: GenModelRow | string | null;
   transaction_id?: TransactionRow | string | null;
   type_id?: UsageLogTypesRow | number | null;

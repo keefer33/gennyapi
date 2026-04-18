@@ -2,8 +2,15 @@ import { updateUserGenModelRun } from '../database/user_gen_model_runs';
 import { UserGenModelRuns } from '../database/types';
 import { saveFileFromUrl } from './fileUtils';
 
-export const failWebhookGeneration = async (pollingFileResponse: unknown): Promise<never> => {
+export const failWebhookGeneration = async (
+  pollingFileData: Pick<UserGenModelRuns, 'id'>,
+  pollingFileResponse: unknown
+): Promise<never> => {
+  if (!pollingFileData.id) {
+    throw new Error('failWebhookGeneration: missing user_gen_model_runs id');
+  }
   await updateUserGenModelRun({
+    id: pollingFileData.id,
     polling_response: pollingFileResponse,
     status: 'error',
   });
@@ -28,7 +35,7 @@ export const processResponse = async (
           const savedFile = await saveFileFromUrl(url.trim(), pollingFileData, pollingFileResponse);
           if (savedFile) files.push(savedFile);
         } catch (_error) {
-          await failWebhookGeneration(pollingFileResponse);
+          await failWebhookGeneration(pollingFileData, pollingFileResponse);
         }
       }
     }
@@ -41,7 +48,7 @@ export const processResponse = async (
     const savedFile = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
     if (savedFile) return { status: 'completed', files: [savedFile] };
   } catch (_error) {
-    await failWebhookGeneration(pollingFileResponse);
+    await failWebhookGeneration(pollingFileData, pollingFileResponse);
   }
   throw new Error('API error: unknown');
 };

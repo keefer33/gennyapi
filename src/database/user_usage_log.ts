@@ -3,9 +3,29 @@ import { UserUsageLogRow } from './types';
 import { AppError } from '../app/error';
 import { USAGE_LOG_SELECT } from './const';
 
+/** DB column is `generation_id` (FK to `user_gen_model_runs.id`); callers often pass `gen_model_run_id`. */
+function usageLogInsertPayload(row: UserUsageLogRow): Record<string, unknown> {
+  const payload = { ...(row as Record<string, unknown>) };
+  const explicit = payload.generation_id;
+  const shorthand = payload.gen_model_run_id;
+  let generationId: string | null = null;
+  if (typeof explicit === 'string' && explicit.trim()) {
+    generationId = explicit.trim();
+  } else if (typeof shorthand === 'string' && shorthand.trim()) {
+    generationId = shorthand.trim();
+  }
+  delete payload.gen_model_run_id;
+  payload.generation_id = generationId;
+  return payload;
+}
+
 export async function insertUserUsageLog(row: UserUsageLogRow): Promise<UserUsageLogRow> {
   const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient.from('user_usage_log').insert(row).select('*').single();
+  const { data, error } = await supabaseServerClient
+    .from('user_usage_log')
+    .insert(usageLogInsertPayload(row))
+    .select('*')
+    .single();
   if (error) {
     throw new AppError(error.message, {
       statusCode: 500,
