@@ -3,27 +3,21 @@ import { UserUsageLogRow } from './types';
 import { AppError } from '../app/error';
 import { USAGE_LOG_SELECT } from './const';
 
-/** DB column is `generation_id` (FK to `user_gen_model_runs.id`); callers often pass `gen_model_run_id`. */
-function usageLogInsertPayload(row: UserUsageLogRow): Record<string, unknown> {
-  const payload = { ...(row as Record<string, unknown>) };
-  const explicit = payload.generation_id;
-  const shorthand = payload.gen_model_run_id;
-  let generationId: string | null = null;
-  if (typeof explicit === 'string' && explicit.trim()) {
-    generationId = explicit.trim();
-  } else if (typeof shorthand === 'string' && shorthand.trim()) {
-    generationId = shorthand.trim();
+/** Ensures `gen_model_run_id` is a UUID string or omitted (embed joins must not leak into inserts). */
+function sanitizeUsageLogInsert(row: UserUsageLogRow): UserUsageLogRow {
+  const g = row.gen_model_run_id;
+  if (g != null && typeof g !== 'string') {
+    const { gen_model_run_id: _drop, ...rest } = row;
+    return rest;
   }
-  delete payload.gen_model_run_id;
-  payload.generation_id = generationId;
-  return payload;
+  return row;
 }
 
 export async function insertUserUsageLog(row: UserUsageLogRow): Promise<UserUsageLogRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from('user_usage_log')
-    .insert(usageLogInsertPayload(row))
+    .insert(sanitizeUsageLogInsert(row))
     .select('*')
     .single();
   if (error) {

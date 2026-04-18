@@ -562,6 +562,8 @@ export const saveFileFromUrl = async (
       file_size: zipData.size,
       file_type: zipData.type,
       zip_data: zipData,
+      status: 'active',
+      upload_type: 'generation',
       gen_model_id: pollingFileData.gen_model_id,
       gen_model_run_id: runId,
       generated_info: generatedInfo,
@@ -632,7 +634,6 @@ export const saveAgentGeneratedFile = async (
       }
     }
 
-    // Agent-generated files: agent_id = agent_models.id (FK), model_id left null (FK references models table)
     const fileMetadata: Partial<UserFileRow> = {
       user_id: userId,
       file_name: zipData.name,
@@ -640,7 +641,8 @@ export const saveAgentGeneratedFile = async (
       file_size: zipData.size,
       file_type: zipData.type,
       zip_data: zipData,
-      agent_id: options.agent_id,
+      status: 'active',
+      upload_type: 'generation',
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
     };
