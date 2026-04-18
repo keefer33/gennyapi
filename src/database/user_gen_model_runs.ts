@@ -1,5 +1,6 @@
 import { getServerClient } from './supabaseClient';
 import { AppError } from '../app/error';
+import { normalizeGenModelRow } from './gen_models';
 import { CreateUserGenModelRunResult, UserGenModelRuns } from './types';
 
 export async function createUserGenModelRun(input: UserGenModelRuns): Promise<CreateUserGenModelRunResult> {
@@ -80,9 +81,13 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
-    .select('*,gen_models(vendor_name)')
+    .select(
+      `*, gen_models (
+        gen_models_apis!gen_models_gen_models_apis_id_fkey (vendor_api)
+      )`
+    )
     .eq('id', runId)
-    .maybeSingle<UserGenModelRuns>();
+    .maybeSingle<UserGenModelRuns & { gen_models?: unknown }>();
 
   if (error) {
     throw new AppError(error.message, {
@@ -92,7 +97,14 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
     });
   }
 
-  return row;
+  if (row?.gen_models != null && typeof row.gen_models === 'object') {
+    return {
+      ...row,
+      gen_models: normalizeGenModelRow(row.gen_models),
+    } as UserGenModelRuns;
+  }
+
+  return row as UserGenModelRuns | null;
 }
 
 /** Single winner: only rows still `pending` transition to `processing`. */

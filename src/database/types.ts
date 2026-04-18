@@ -33,11 +33,15 @@ export type GenModelRow = {
   model_variant?: string | null;
   brand_name?: string | null;
   brands?: BrandRow | null;
+  /** FK to `gen_models_apis`; pricing/schemas are stored on that row. */
+  gen_models_apis_id?: string | null;
   model_pricing?: unknown;
   api_schema?: unknown | null;
   function_schema?: unknown;
   sort_order?: number | null;
+  /** Resolved from `gen_models_apis` → `vendor_apis` join for runtime calls. */
   vendor_api?: VendorApisRow;
+  /** Same as `vendor_apis.vendor_name` / `gen_models_apis.vendor_api` for routing. */
   vendor_name?: string | null;
 };
 

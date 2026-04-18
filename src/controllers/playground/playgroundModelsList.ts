@@ -3,6 +3,7 @@ import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { getServerClient } from '../../database/supabaseClient';
 import { PLAYGROUND_LIST_SELECT } from '../../database/const';
+import { normalizeGenModelRow } from '../../database/gen_models';
 import { GenModelRow } from '../../database/types';
 
 function toList(input: unknown): string[] {
@@ -54,12 +55,15 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       });
     }
 
-    const rows = ((data ?? []) as unknown as GenModelRow[]).map(row => ({
-      ...row,
-      brand_slug: row.brands?.slug ?? null,
-      brand_display: row.brands?.name ?? row.brand_name ?? null,
-      brand_logo: row.brands?.logo ?? null,
-    }));
+    const rows = ((data ?? []) as unknown[]).map(raw => {
+      const row = normalizeGenModelRow(raw) as GenModelRow;
+      return {
+        ...row,
+        brand_slug: row.brands?.slug ?? null,
+        brand_display: row.brands?.name ?? row.brand_name ?? null,
+        brand_logo: row.brands?.logo ?? null,
+      };
+    });
 
     // brand/model_product/model_variant are mapped, so filter in memory.
     const filteredRows = rows.filter(row => {
