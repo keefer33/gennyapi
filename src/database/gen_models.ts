@@ -33,6 +33,14 @@ export function normalizeGenModelRow(raw: unknown): GenModelRow {
     return raw as GenModelRow;
   }
 
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    if (first == null || typeof first !== 'object') {
+      return raw as unknown as GenModelRow;
+    }
+    return normalizeGenModelRow(first);
+  }
+
   const row = raw as Record<string, unknown>;
   const embedded = row.gen_models_apis;
   const api = Array.isArray(embedded) ? embedded[0] : embedded;
