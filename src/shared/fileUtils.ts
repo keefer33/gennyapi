@@ -464,6 +464,14 @@ export const saveFileFromUrl = async (
   pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
   try {
+    const runId =
+      pollingFileData?.id != null && typeof pollingFileData.id === 'string'
+        ? pollingFileData.id.trim()
+        : '';
+    if (!runId) {
+      throw new Error('saveFileFromUrl: missing user_gen_model_runs id on pollingFileData');
+    }
+
     // Validate URL
     if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
       console.error('Invalid URL provided:', url);
@@ -505,9 +513,17 @@ export const saveFileFromUrl = async (
     const uploadedFile = uploadResponse.files[0];
 
     const zipData = await getZipData(uploadedFile.id, authToken);
+    const callbackData =
+      pollingFileResponse &&
+      typeof pollingFileResponse === 'object' &&
+      'data' in pollingFileResponse &&
+      (pollingFileResponse as { data?: unknown }).data !== undefined
+        ? (pollingFileResponse as { data?: unknown }).data
+        : pollingFileResponse;
+
     const generatedInfo = {
       payload: pollingFileData.payload,
-      callback_data: pollingFileResponse.data,
+      callback_data: callbackData,
     };
 
     // Generate thumbnail if file is an image or video
@@ -546,8 +562,10 @@ export const saveFileFromUrl = async (
       file_size: zipData.size,
       file_type: zipData.type,
       zip_data: zipData,
+      status: 'active',
+      upload_type: 'generation',
       gen_model_id: pollingFileData.gen_model_id,
-      gen_model_run_id: pollingFileData.id,
+      gen_model_run_id: runId,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
     };
@@ -616,7 +634,6 @@ export const saveAgentGeneratedFile = async (
       }
     }
 
-    // Agent-generated files: agent_id = agent_models.id (FK), model_id left null (FK references models table)
     const fileMetadata: Partial<UserFileRow> = {
       user_id: userId,
       file_name: zipData.name,
@@ -624,7 +641,8 @@ export const saveAgentGeneratedFile = async (
       file_size: zipData.size,
       file_type: zipData.type,
       zip_data: zipData,
-      agent_id: options.agent_id,
+      status: 'active',
+      upload_type: 'generation',
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
     };

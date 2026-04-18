@@ -35,13 +35,39 @@ export async function deleteUserFile(id: string): Promise<void> {
   }
 }
 
+/** Columns on `public.user_files` — inserts are filtered so embed/extra keys never hit PostgREST. */
+const USER_FILES_INSERT_KEYS = [
+  'id',
+  'user_id',
+  'created_at',
+  'file_name',
+  'file_path',
+  'file_size',
+  'file_type',
+  'generated_info',
+  'folder_id',
+  'zip_data',
+  'status',
+  'upload_type',
+  'thumbnail_url',
+  'gen_model_id',
+  'gen_model_run_id',
+] as const;
+
 export async function createUserFileRow(
   row: Partial<UserFileRow>
 ): Promise<UserFileRow> {
   const { supabaseServerClient } = await getServerClient();
+  const raw = row as Record<string, unknown>;
+  const payload: Record<string, unknown> = {};
+  for (const key of USER_FILES_INSERT_KEYS) {
+    if (raw[key] !== undefined) {
+      payload[key] = raw[key];
+    }
+  }
   const { data, error } = await supabaseServerClient
     .from('user_files')
-    .insert(row)
+    .insert(payload)
     .select('*')
     .single();
 

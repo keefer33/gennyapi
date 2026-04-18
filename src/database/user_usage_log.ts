@@ -3,9 +3,23 @@ import { UserUsageLogRow } from './types';
 import { AppError } from '../app/error';
 import { USAGE_LOG_SELECT } from './const';
 
+/** Ensures `gen_model_run_id` is a UUID string or omitted (embed joins must not leak into inserts). */
+function sanitizeUsageLogInsert(row: UserUsageLogRow): UserUsageLogRow {
+  const g = row.gen_model_run_id;
+  if (g != null && typeof g !== 'string') {
+    const { gen_model_run_id: _drop, ...rest } = row;
+    return rest;
+  }
+  return row;
+}
+
 export async function insertUserUsageLog(row: UserUsageLogRow): Promise<UserUsageLogRow> {
   const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient.from('user_usage_log').insert(row).select('*').single();
+  const { data, error } = await supabaseServerClient
+    .from('user_usage_log')
+    .insert(sanitizeUsageLogInsert(row))
+    .select('*')
+    .single();
   if (error) {
     throw new AppError(error.message, {
       statusCode: 500,

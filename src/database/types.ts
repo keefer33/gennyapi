@@ -83,22 +83,21 @@ export type UserFileEmbed = {
 
 export type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_models']>;
 
+/** Matches `public.user_files` */
 export type UserFileRow = {
   id?: string | null;
   user_id?: string | null;
   created_at?: string | null;
-  updated_at?: string | null;
-  file_path?: string | null;
-  thumbnail_url?: string | null;
   file_name?: string | null;
+  file_path?: string | null;
   file_size?: number | null;
   file_type?: string | null;
+  generated_info?: unknown | null;
+  folder_id?: string | null;
+  zip_data?: unknown | null;
   status?: string | null;
   upload_type?: string | null;
-  zip_data?: unknown | null;
-  model_id?: string | null;
-  agent_id?: string | null;
-  generated_info?: unknown | null;
+  thumbnail_url?: string | null;
   gen_model_id?: string | null;
   gen_model_run_id?: string | null;
 };
@@ -133,6 +132,7 @@ export type UserUsageLogRow = {
   created_at?: string | null;
   updated_at?: string | null;
   usage_amount?: number | null;
+  /** FK to `user_gen_model_runs.id` (constraint name `user_usage_log_generation_id_fkey` uses legacy wording). */
   gen_model_run_id?: GenModelRow | string | null;
   transaction_id?: TransactionRow | string | null;
   type_id?: UsageLogTypesRow | number | null;

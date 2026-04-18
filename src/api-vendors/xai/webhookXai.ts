@@ -26,6 +26,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** `gen_models` is a join embed, not a `user_gen_model_runs` column — strip before PATCH. */
+function runRowForDbUpdate(r: UserGenModelRuns): UserGenModelRuns {
+  const { gen_models: _embed, ...rest } = r as UserGenModelRuns & { gen_models?: unknown };
+  return rest as UserGenModelRuns;
+}
+
 export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   if (!runRow.task_id || !runRow.gen_model_id) {
     throw new Error('xai webhook requires task_id and gen_model_id');
@@ -39,11 +45,21 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     return;
   }
 
-  const genModel = await getGenModel(runRow.gen_model_id);
+  const runId = String(claimed.id ?? runRow.id ?? '').trim();
+  if (!runId) {
+    throw new Error('xai webhook: user_gen_model_runs id missing after claim');
+  }
+  const run = { ...runRow, ...claimed, id: runId };
+
+  const modelId = run.gen_model_id ?? runRow.gen_model_id;
+  if (!modelId) {
+    throw new Error('xai webhook: gen_model_id missing');
+  }
+  const genModel = await getGenModel(modelId);
   const apiSchema = (genModel.api_schema ?? {}) as { server?: string; polling_path?: string };
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
-  const taskId = claimed.task_id;
+  const taskId = run.task_id;
 
   if (!server || !pollingPath || !taskId) {
     throw new Error('xai api_schema missing server/polling_path or task_id');
@@ -83,7 +99,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       console.log('[webhookXai] poll tick', {
         attempt: attempt + 1,
         status: finalStatus,
-        run_id: claimed.id,
+        run_id: run.id,
         task_id: taskId,
       });
     }
@@ -100,13 +116,13 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     await sleep(POLL_INTERVAL_MS);
   }
 
-  const duration = Math.floor((Date.now() - new Date(claimed.created_at ?? Date.now()).getTime()) / 1000);
+  const duration = Math.floor((Date.now() - new Date(run.created_at ?? Date.now()).getTime()) / 1000);
 
   try {
     if (finalStatus === 'done' && videoUrl) {
-      const savedFiles = await processResponse(videoUrl, claimed, lastResponse);
+      const savedFiles = await processResponse(videoUrl, run, lastResponse);
       await updateUserGenModelRun({
-        ...claimed,
+        ...runRowForDbUpdate(run),
         polling_response: { webhook: lastResponse, files: savedFiles },
         status: 'completed',
         duration,
@@ -115,48 +131,48 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     }
 
     console.log('[webhookXai] run marked error from terminal/timeout', {
-      run_id: claimed.id,
+      run_id: run.id,
       final_status: finalStatus,
       duration,
     });
     await updateUserGenModelRun({
-      ...claimed,
+      ...runRowForDbUpdate(run),
       polling_response: { webhook: lastResponse },
       status: 'error',
       duration,
     });
 
     await insertUserUsageLog({
-      user_id: claimed.user_id,
-      usage_amount: claimed.cost,
+      user_id: run.user_id,
+      usage_amount: run.cost,
       type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
-      gen_model_run_id: claimed.id,
+      gen_model_run_id: run.id,
       transaction_id: null,
       meta: {
-        model_name: claimed.gen_model_id,
+        model_name: run.gen_model_id,
         error: `xai generation ${finalStatus}`,
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookXai] caught error while processing', {
-      run_id: claimed.id,
+      run_id: run.id,
       message,
     });
     await updateUserGenModelRun({
-      ...claimed,
+      ...runRowForDbUpdate(run),
       polling_response: { webhook: lastResponse, error: message },
       status: 'error',
       duration,
     });
     await insertUserUsageLog({
-      user_id: claimed.user_id,
-      usage_amount: claimed.cost,
+      user_id: run.user_id,
+      usage_amount: run.cost,
       type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
-      gen_model_run_id: claimed.id,
+      gen_model_run_id: run.id,
       transaction_id: null,
       meta: {
-        model_name: claimed.gen_model_id,
+        model_name: run.gen_model_id,
         error: message,
       },
     });
