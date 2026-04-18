@@ -68,6 +68,17 @@ export function normalizeGenModelRow(raw: unknown): GenModelRow {
   } as GenModelRow;
 }
 
+/**
+ * Vendor key for webhooks / routing (`vendor_apis.vendor_name`), after `gen_models_apis` normalization.
+ * Prefer `vendor_api.vendor_name`, then top-level `vendor_name`.
+ */
+export function genModelVendorKey(gm: GenModelRow | null | undefined): string | null {
+  if (gm == null) return null;
+  const v = gm.vendor_api?.vendor_name ?? gm.vendor_name;
+  if (typeof v === 'string' && v.trim()) return v.trim();
+  return null;
+}
+
 export async function getGenModel(id: string): Promise<GenModelRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
