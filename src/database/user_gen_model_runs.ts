@@ -98,9 +98,10 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
   }
 
   if (row?.gen_models != null && typeof row.gen_models === 'object') {
+    const gmRaw = Array.isArray(row.gen_models) ? row.gen_models[0] : row.gen_models;
     return {
       ...row,
-      gen_models: normalizeGenModelRow(row.gen_models),
+      gen_models: gmRaw != null ? normalizeGenModelRow(gmRaw) : null,
     } as UserGenModelRuns;
   }
 
