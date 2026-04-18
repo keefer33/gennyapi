@@ -2,6 +2,7 @@ import { GenModelEmbed, UserFileEmbed, UserGenModelRunListRow } from "./types";
 import { getServerClient } from "./supabaseClient";
 import { AppError } from "../app/error";
 import { RUN_HISTORY_SELECT } from "./const";
+import { normalizeGenModelRow } from "./gen_models";
 
 export async function listUserGenModelRunsForUser(
     userId: string,
@@ -217,14 +218,9 @@ function previewsForRun(files: UserFileEmbed[]): {
 
 function normalizeGenModelsEmbed(raw: unknown): UserGenModelRunListRow['gen_models'] {
   if (raw == null) return null;
-  if (Array.isArray(raw)) {
-    const first = raw[0];
-    return first && typeof first === 'object' ? (first as GenModelEmbed) : null;
-  }
-  if (typeof raw === 'object') {
-    return raw as GenModelEmbed;
-  }
-  return null;
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  if (!first || typeof first !== 'object') return null;
+  return normalizeGenModelRow(first) as GenModelEmbed;
 }
 
 function previewUrlForFile(f: UserFileEmbed): string | null {

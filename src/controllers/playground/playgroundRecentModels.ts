@@ -5,9 +5,6 @@ import { GenModelRow } from '../../database/types';
 import { getGenModelsListByIds } from '../../database/gen_models';
 import { getUserGenModelRunsByUserId } from '../../database/user_gen_model_runs';
 
-export const PLAYGROUND_LIST_SELECT =
-  'id, model_id, model_name, model_description, model_type, model_product, model_variant, brand_name, model_pricing, api_schema, function_schema, sort_order, brands:brands!gen_models_brand_name_fkey(slug,name,logo)';
-
 /** GET /playground/models/recent — catalog-shaped gen_models the user ran most recently (distinct gen_model_id). */
 export async function playgroundRecentModels(req: Request, res: Response): Promise<void> {
   try {
