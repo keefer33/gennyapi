@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { genModelVendorKey } from '../../database/gen_models';
 import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
 import { webhookXai } from '../../api-vendors/xai/webhookXai';
+import { GenModelRow } from '../../database/types';
 
 /**
  * POST /webhooks/polling
@@ -23,7 +23,7 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
       return;
     }
 
-    switch (genModelVendorKey(runRow.gen_models ?? undefined)) {
+    switch ((runRow.gen_model_id as GenModelRow)?.gen_models_apis_id?.vendor_api?.vendor_name) {
       case 'xai':
         await webhookXai(runRow);
         break;

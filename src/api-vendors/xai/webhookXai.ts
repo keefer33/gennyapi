@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT } from '../../database/const';
-import { getGenModel } from '../../database/gen_models';
+import { getGenModelById } from '../../database/gen_models';
 import {
   claimUserGenModelRunPendingToProcessing,
   updateUserGenModelRun,
 } from '../../database/user_gen_model_runs';
-import { UserGenModelRuns } from '../../database/types';
+import { GenModelRow, UserGenModelRuns } from '../../database/types';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { processResponse } from '../../shared/webhooksUtils';
 
@@ -51,12 +51,12 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   }
   const run = { ...runRow, ...claimed, id: runId };
 
-  const modelId = run.gen_model_id ?? runRow.gen_model_id;
+  const modelId = (run.gen_model_id as GenModelRow)?.id ?? (runRow.gen_model_id as GenModelRow)?.id;
   if (!modelId) {
     throw new Error('xai webhook: gen_model_id missing');
   }
-  const genModel = await getGenModel(modelId);
-  const apiSchema = (genModel.api_schema ?? {}) as { server?: string; polling_path?: string };
+  const genModel = await getGenModelById(modelId);
+  const apiSchema = (genModel.gen_models_apis_id?.api_schema ?? {}) as { server?: string; polling_path?: string };
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
   const taskId = run.task_id;
@@ -72,7 +72,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     max_poll_attempts: MAX_POLL_ATTEMPTS,
   });
 
-  const apiKey = genModel.vendor_api?.api_key ?? '';
+  const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key ?? '';
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   };

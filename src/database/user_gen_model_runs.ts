@@ -1,7 +1,7 @@
 import { getServerClient } from './supabaseClient';
 import { AppError } from '../app/error';
-import { normalizeGenModelRow } from './gen_models';
 import { CreateUserGenModelRunResult, UserGenModelRuns } from './types';
+import { RUN_HISTORY_SELECT } from './const';
 
 export async function createUserGenModelRun(input: UserGenModelRuns): Promise<CreateUserGenModelRunResult> {
   const { supabaseServerClient } = await getServerClient();
@@ -18,45 +18,18 @@ export async function createUserGenModelRun(input: UserGenModelRuns): Promise<Cr
   return data;
 }
 
-export async function getUserGenModelRunsByUserId(
-  userId: string,
-  limit: number = 20,
-  genModelIdIsUnique: boolean = false
-): Promise<UserGenModelRuns[]> {
+// sdk/userGenModelRuns.js
+export async function getUniqueGenModelIds(userId: string) {
   const { supabaseServerClient } = await getServerClient();
-  /** `isDistinct` on the client is `IS DISTINCT FROM` (filter), not DISTINCT ON — over-fetch then dedupe. */
-  const fetchLimit = genModelIdIsUnique ? Math.min(2000, Math.max(limit * 50, limit)) : limit;
-
-  const { data: rows, error } = await supabaseServerClient
+  const { data, error } = await supabaseServerClient
     .from('user_gen_model_runs')
-    .select('*')
+    .select('gen_model_id')
+    .not('gen_model_id', 'is', null)
     .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(fetchLimit);
+  if (error) throw error
 
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'user_gen_model_runs_fetch_failed',
-      expose: false,
-    });
-  }
-
-  if (!rows?.length || !genModelIdIsUnique) {
-    return rows ?? [];
-  }
-
-  const seen = new Set<string>();
-  const unique: UserGenModelRuns[] = [];
-  for (const row of rows) {
-    const gid = row.gen_model_id;
-    if (gid == null || gid === '') continue;
-    if (seen.has(gid)) continue;
-    seen.add(gid);
-    unique.push(row);
-    if (unique.length >= limit) break;
-  }
-  return unique;
+  // Deduplicate in JS
+  return [...new Set(data.map((row) => row.gen_model_id))]
 }
 
 export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGenModelRuns | null> {
@@ -81,13 +54,9 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient
     .from('user_gen_model_runs')
-    .select(
-      `*, gen_models (
-        gen_models_apis!gen_models_gen_models_apis_id_fkey (vendor_api)
-      )`
-    )
+    .select(RUN_HISTORY_SELECT)
     .eq('id', runId)
-    .maybeSingle<UserGenModelRuns & { gen_models?: unknown }>();
+    .maybeSingle<UserGenModelRuns>();
 
   if (error) {
     throw new AppError(error.message, {
@@ -97,15 +66,7 @@ export async function getUserGenModelRunById(runId: string): Promise<UserGenMode
     });
   }
 
-  if (row?.gen_models != null && typeof row.gen_models === 'object') {
-    const gmRaw = Array.isArray(row.gen_models) ? row.gen_models[0] : row.gen_models;
-    return {
-      ...row,
-      gen_models: gmRaw != null ? normalizeGenModelRow(gmRaw) : null,
-    } as UserGenModelRuns;
-  }
-
-  return row as UserGenModelRuns | null;
+  return row;
 }
 
 /** Single winner: only rows still `pending` transition to `processing`. */

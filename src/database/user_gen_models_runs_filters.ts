@@ -1,8 +1,7 @@
-import { GenModelEmbed, UserFileEmbed, UserGenModelRunListRow } from "./types";
+import { GenModelRow, UserFileEmbed, UserGenModelRunListRow } from "./types";
 import { getServerClient } from "./supabaseClient";
 import { AppError } from "../app/error";
 import { RUN_HISTORY_SELECT } from "./const";
-import { normalizeGenModelRow } from "./gen_models";
 
 export async function listUserGenModelRunsForUser(
     userId: string,
@@ -119,7 +118,7 @@ export async function listUserGenModelRunsForUser(
       query = query.in('id', [...runIdSet]);
     }
   
-    const { data, error, count } = await query.range(from, to);
+    const { data: rows, error, count } = await query.range(from, to);
   
     if (error) {
       throw new AppError(error.message, {
@@ -129,37 +128,7 @@ export async function listUserGenModelRunsForUser(
       });
     }
   
-    const rawRows = (data ?? []) as Record<string, unknown>[];
-    const rows = rawRows.map(row => normalizeUserGenModelRunListRow(row));
-    return { rows, total: count ?? rows.length };
-  }
-
-  function normalizeUserGenModelRunListRow(row: Record<string, unknown>): UserGenModelRunListRow {
-    const files = activeUserFilesFromEmbed(row.user_files);
-    const { preview_urls, preview_file_types, preview_files } = previewsForRun(files);
-    return {
-      id: String(row.id ?? ''),
-      created_at: String(row.created_at ?? ''),
-      user_id: String(row.user_id ?? ''),
-      gen_model_id: row.gen_model_id != null ? String(row.gen_model_id) : null,
-      status: row.status != null ? String(row.status) : null,
-      task_id: row.task_id != null ? String(row.task_id) : null,
-      cost: (() => {
-        if (row.cost == null) return null;
-        const n = typeof row.cost === 'number' ? row.cost : Number(row.cost);
-        return Number.isFinite(n) ? n : null;
-      })(),
-      duration: (() => {
-        if (row.duration == null) return null;
-        const n = typeof row.duration === 'number' ? row.duration : Number(row.duration);
-        return Number.isFinite(n) ? n : null;
-      })(),
-      gen_models: normalizeGenModelsEmbed(row.gen_models),
-      thumbnail_url: preview_urls[0] ?? null,
-      preview_urls,
-      preview_file_types,
-      preview_files,
-    };
+    return { rows: rows as UserGenModelRunListRow[], total: count ?? rows?.length ?? 0 };
   }
 
   /** Embedded `user_files` from `user_gen_model_runs` (FK `gen_model_run_id`). Only active rows for thumbnails. */
@@ -215,13 +184,6 @@ function previewsForRun(files: UserFileEmbed[]): {
     }
     return { preview_urls, preview_file_types, preview_files };
   }
-
-function normalizeGenModelsEmbed(raw: unknown): UserGenModelRunListRow['gen_models'] {
-  if (raw == null) return null;
-  const first = Array.isArray(raw) ? raw[0] : raw;
-  if (!first || typeof first !== 'object') return null;
-  return normalizeGenModelRow(first) as GenModelEmbed;
-}
 
 function previewUrlForFile(f: UserFileEmbed): string | null {
     if (typeof f.thumbnail_url === 'string' && f.thumbnail_url.trim()) return f.thumbnail_url.trim();
