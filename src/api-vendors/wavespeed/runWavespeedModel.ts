@@ -3,8 +3,8 @@ import { AppError } from '../../app/error';
 import { GenModelRow } from '../../database/types';
 
 export async function runWavespeedModel(genModel: GenModelRow, payload: unknown) {
-  const endpoint = `${genModel.vendor_api?.config?.endpoint}${genModel.model_id}?webhook=${genModel.vendor_api?.config?.webhook_url}`;
-  const apiKey = genModel.vendor_api?.api_key;
+  const endpoint = `${genModel.gen_models_apis_id?.vendor_api?.config?.endpoint}${genModel.model_id}?webhook=${genModel.gen_models_apis_id?.vendor_api?.config?.webhook_url}`;
+  const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key;
   const response = await axios.post(endpoint, payload, {
     headers: {
       'Content-Type': 'application/json',

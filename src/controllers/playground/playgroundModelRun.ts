@@ -5,9 +5,8 @@ import { badRequest, sendError, sendOk } from '../../app/response';
 import { createUserGenModelRun } from '../../database/user_gen_model_runs';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-import { getGenModel } from '../../database/gen_models';
+import { getGenModelById } from '../../database/gen_models';
 import { runWavespeedModel } from '../../api-vendors/wavespeed/runWavespeedModel';
-import { WavespeedRunResponse } from '../../api-vendors/wavespeed/types';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 import { updateUserUsageBalance } from '../../database/user_profiles';
@@ -27,11 +26,11 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       throw badRequest('payload is required');
     }
 
-    const genModel = await getGenModel(id);
+    const genModel = await getGenModelById(id);
 
     let response = null;
     let cost: number = 0;
-    switch (genModel.vendor_api?.vendor_name) {
+    switch (genModel.gen_models_apis_id?.vendor_api?.vendor_name) {
       case 'xai':
         response = await runXaiModel(genModel, payload);
         const xaiVendorApiKey = await getVendorApiKeyByVendorName('wavespeed');
@@ -47,8 +46,8 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
         cost = await getWavespeedCost(
           genModel.model_id,
           payload,
-          genModel.vendor_api?.api_key ?? null,
-          genModel.vendor_api?.config?.cost_api_endpoint ?? null
+          genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
+          genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint ?? null
         );
         break;
       default:

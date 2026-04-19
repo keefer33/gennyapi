@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendOk } from '../../app/response';
-import { getGenModel } from '../../database/gen_models';
+import { getGenModelById } from '../../database/gen_models';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
 
@@ -10,9 +10,9 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     const body = req.body as { modelId?: string; payload?: Record<string, unknown> };
     const modelId = body.modelId ?? '';
     const payload = body.payload ?? {};
-    const genModel = await getGenModel(modelId);
-    const vendor = genModel.vendor_api?.vendor_name ?? '';
-    const apiKey = genModel.vendor_api?.api_key ?? '';
+    const genModel = await getGenModelById(modelId);
+    const vendor = genModel.gen_models_apis_id?.vendor_api?.vendor_name ?? '';
+    const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key ?? '';
 
     let cost = 0;
     switch (vendor) {
@@ -30,7 +30,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
           genModel.model_id,
           payload,
           apiKey,
-          genModel.vendor_api?.config?.cost_api_endpoint
+          genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint
         );
         break;
       default:

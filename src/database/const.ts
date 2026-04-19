@@ -44,20 +44,20 @@ export const RUN_HISTORY_SELECT = `
   id,
   created_at,
   user_id,
-  gen_model_id,
-  status,
-  task_id,
-  cost,
-  duration,
-  gen_models (
+  gen_model_id(
+    id,
     model_name,
     model_id,
     brand_name(name,logo),
     model_product,
     model_variant,
     generation_type,
-    gen_models_apis!gen_models_gen_models_apis_id_fkey (vendor_api)
+    gen_models_apis_id(*,vendor_api(*))
   ),
+  status,
+  task_id,
+  cost,
+  duration,
   user_files(id, file_name, thumbnail_url, file_path, file_type, created_at, status),
   payload,
   response,
@@ -116,5 +116,25 @@ export const FILE_SELECT = `
     tag_id,
     created_at,
     user_tags(*)
+  )
+`;
+
+export const GEN_MODEL_DETAIL_SELECT = `
+  id,
+  model_id,
+  model_name,
+  model_description,
+  model_type,
+  generation_type,
+  model_product,
+  model_variant,
+  brand_name(id, name, slug, logo),
+  sort_order,
+  gen_models_apis!gen_models_gen_models_apis_id_fkey(
+    id,
+    api_schema,
+    function_schema,
+    model_pricing,
+    vendor_apis(id, vendor_name, api_key, config)
   )
 `;

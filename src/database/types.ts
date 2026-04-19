@@ -6,15 +6,6 @@ export type VendorApisRow = {
   config?: any;
 };
 
-/** Matches `public.vendor_apis` */
-export type VendorApiRow = {
-  id?: string | null;
-  created_at?: string | null;
-  vendor_name?: string | null;
-  api_key?: string | null;
-  config?: unknown | null;
-};
-
 export type BrandRow = {
   id?: string | null;
   name?: string | null;
@@ -23,26 +14,28 @@ export type BrandRow = {
   sort_order?: number | null;
 };
 
+export type GenModelsApisRow = {
+  id?: string | null;
+  created_at?: string | null;
+  gen_models_model_id?: GenModelRow | string | null;
+  vendor_api?: VendorApisRow | null;
+  api_schema?: unknown | null;
+  function_schema?: unknown | null;
+  model_pricing?: unknown | null;
+};
+
 export type GenModelRow = {
   id?: string | null;
   model_id?: string | null;
   model_name?: string | null;
   model_description?: string | null;
   model_type?: string | null;
+  generation_type?: string | null;
   model_product?: string | null;
   model_variant?: string | null;
-  brand_name?: string | null;
-  brands?: BrandRow | null;
-  /** FK to `gen_models_apis`; pricing/schemas are stored on that row. */
-  gen_models_apis_id?: string | null;
-  model_pricing?: unknown;
-  api_schema?: unknown | null;
-  function_schema?: unknown;
+  brand_name?: BrandRow | string | null;
   sort_order?: number | null;
-  /** Resolved from `gen_models_apis` → `vendor_apis` join for runtime calls. */
-  vendor_api?: VendorApisRow;
-  /** Same as `vendor_apis.vendor_name` / `gen_models_apis.vendor_api` for routing. */
-  vendor_name?: string | null;
+  gen_models_apis_id?: GenModelsApisRow | null;
 };
 
 export type CreateUserGenModelRunResult = {
@@ -54,12 +47,11 @@ export type UserGenModelRuns = {
   id?: string | null;
   created_at?: string | null;
   user_id?: string | null;
-  gen_model_id?: string;
+  gen_model_id?: GenModelRow | string | null;
   status?: string | null;
   task_id?: string | null;
   cost?: number | null;
   duration?: number | null;
-  gen_models?: GenModelRow | null;
   payload?: unknown;
   response?: unknown;
   polling_response?: unknown;
@@ -81,7 +73,7 @@ export type UserFileEmbed = {
   file_type?: string | null;
 };
 
-export type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_models']>;
+export type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_model_id']>;
 
 /** Matches `public.user_files` */
 export type UserFileRow = {
