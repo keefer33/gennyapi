@@ -11,6 +11,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     const modelId = body.modelId ?? '';
     const payload = body.payload ?? {};
     const genModel = await getGenModelById(modelId);
+    console.log("genModel", genModel);
     const vendor = genModel.gen_models_apis_id?.vendor_api?.vendor_name ?? '';
     const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key ?? '';
 

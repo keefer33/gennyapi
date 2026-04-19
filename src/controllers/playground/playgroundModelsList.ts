@@ -15,6 +15,15 @@ function toList(input: unknown): string[] {
     .filter(Boolean);
 }
 
+/** Supabase may type FK embed `brand_name` as a single row or a one-element array. */
+function brandSlugFromEmbed(brandName: unknown): string | null {
+  if (brandName == null || typeof brandName === 'string') return null;
+  const row = Array.isArray(brandName) ? brandName[0] : brandName;
+  if (!row || typeof row !== 'object') return null;
+  const slug = (row as { slug?: unknown }).slug;
+  return typeof slug === 'string' && slug.trim() ? slug.trim() : null;
+}
+
 export async function playgroundModelsList(req: Request, res: Response): Promise<void> {
   try {
     const { supabaseServerClient } = await getServerClient();
@@ -57,10 +66,11 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
 
     // brand/model_product/model_variant are mapped, so filter in memory.
     const filteredRows = rows.filter(row => {
+      const brandSlug = brandSlugFromEmbed(row.brand_name);
       const brandOk =
         brandFilters.length === 0 ||
-        (!!row.brand_name?.slug && brandFilters.includes(row.brand_name?.slug)) ||
-        (!!row.brand_name && brandFilters.includes(row.brand_name));
+        (!!brandSlug && brandFilters.includes(brandSlug)) ||
+        (typeof row.brand_name === 'string' && brandFilters.includes(row.brand_name));
       const productOk =
         modelProductFilters.length === 0 || (!!row.model_product && modelProductFilters.includes(row.model_product));
       const variantOk =
@@ -68,7 +78,9 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       return brandOk && productOk && variantOk;
     });
 
-    const brands = Array.from(new Set(rows.map(r => r.brand_name?.slug).filter(Boolean))).sort();
+    const brands = Array.from(
+      new Set(rows.map(r => brandSlugFromEmbed(r.brand_name)).filter((s): s is string => Boolean(s)))
+    ).sort();
     const model_types = Array.from(new Set(rows.map(r => r.model_type).filter(Boolean))).sort();
     const model_products = Array.from(new Set(rows.map(r => r.model_product).filter(Boolean))).sort();
     const model_variants = Array.from(new Set(rows.map(r => r.model_variant).filter(Boolean))).sort();
