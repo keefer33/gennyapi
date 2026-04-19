@@ -90,9 +90,62 @@ export async function claimUserGenModelRunPendingToProcessing(taskId: string): P
   return row;
 }
 
+/** Real `user_gen_model_runs` columns only — rows from `RUN_HISTORY_SELECT` embed `user_files`, `gen_model_id`, etc. */
+const USER_GEN_MODEL_RUNS_PATCH_KEYS = [
+  'user_id',
+  'gen_model_id',
+  'status',
+  'task_id',
+  'cost',
+  'duration',
+  'payload',
+  'response',
+  'polling_response',
+] as const satisfies readonly (keyof UserGenModelRuns)[];
+
+function normalizeGenModelIdForPatch(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    return t || null;
+  }
+  if (typeof value === 'object' && value !== null && 'id' in value) {
+    const id = (value as { id: unknown }).id;
+    if (typeof id === 'string' && id.trim()) return id.trim();
+    if (id != null) return String(id);
+  }
+  return null;
+}
+
+function patchForUserGenModelRunUpdate(input: UserGenModelRuns): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const key of USER_GEN_MODEL_RUNS_PATCH_KEYS) {
+    const v = input[key];
+    if (v === undefined) continue;
+    if (key === 'gen_model_id') {
+      patch.gen_model_id = normalizeGenModelIdForPatch(v);
+    } else {
+      patch[key] = v;
+    }
+  }
+  return patch;
+}
+
 export async function updateUserGenModelRun(input: UserGenModelRuns): Promise<void> {
+  const id = String(input.id ?? '').trim();
+  if (!id) {
+    throw new AppError('user_gen_model_runs update requires id', {
+      statusCode: 400,
+      code: 'user_gen_model_runs_update_missing_id',
+      expose: false,
+    });
+  }
+  const patch = patchForUserGenModelRunUpdate(input);
+  if (Object.keys(patch).length === 0) {
+    return;
+  }
   const { supabaseServerClient } = await getServerClient();
-  const { error } = await supabaseServerClient.from('user_gen_model_runs').update(input).eq('id', input.id);
+  const { error } = await supabaseServerClient.from('user_gen_model_runs').update(patch).eq('id', id);
   if (error) {
     throw new AppError(error.message, {
       statusCode: 500,
