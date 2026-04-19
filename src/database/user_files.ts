@@ -54,6 +54,21 @@ const USER_FILES_INSERT_KEYS = [
   'gen_model_run_id',
 ] as const;
 
+/** `user_gen_model_runs` embeds `gen_model_id` as an object; `user_files.gen_model_id` is a UUID FK. */
+function genModelIdUuidForUserFile(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    return t || undefined;
+  }
+  if (typeof value === 'object' && value !== null && 'id' in value) {
+    const id = (value as { id: unknown }).id;
+    if (typeof id === 'string' && id.trim()) return id.trim();
+    if (id != null) return String(id);
+  }
+  return undefined;
+}
+
 export async function createUserFileRow(
   row: Partial<UserFileRow>
 ): Promise<UserFileRow> {
@@ -61,7 +76,11 @@ export async function createUserFileRow(
   const raw = row as Record<string, unknown>;
   const payload: Record<string, unknown> = {};
   for (const key of USER_FILES_INSERT_KEYS) {
-    if (raw[key] !== undefined) {
+    if (raw[key] === undefined) continue;
+    if (key === 'gen_model_id') {
+      const uuid = genModelIdUuidForUserFile(raw[key]);
+      if (uuid !== undefined) payload[key] = uuid;
+    } else {
       payload[key] = raw[key];
     }
   }
