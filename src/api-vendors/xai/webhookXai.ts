@@ -19,6 +19,13 @@ type XaiPollingResponse = {
   model?: string;
 };
 
+/** Debounce duplicate DB-trigger invocations before `pending` → `processing` (one poll per transition). */
+const DELAY_BEFORE_CLAIM_MS = 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /** `gen_models` is a join embed, not a `user_gen_model_runs` column — strip before PATCH. */
 function runRowForDbUpdate(r: UserGenModelRuns): UserGenModelRuns {
   const { gen_models: _embed, ...rest } = r as UserGenModelRuns & { gen_models?: unknown };
@@ -47,6 +54,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   /** First call: `pending` → claim. Later calls: DB trigger re-invokes after `processing` updates — one GET per request. */
   let run: UserGenModelRuns;
   if (rowStatus === 'pending') {
+    await sleep(DELAY_BEFORE_CLAIM_MS);
     const claimed = await claimUserGenModelRunPendingToProcessing(runRow.task_id);
     if (!claimed) {
       console.log('[webhookXai] skip: run was not pending at claim step', {
@@ -175,6 +183,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       final_status: finalStatus,
       duration,
     });
+    await sleep(DELAY_BEFORE_CLAIM_MS);
     await updateUserGenModelRun({
       ...runRowForDbUpdate(run),
       polling_response: { webhook: lastResponse },
