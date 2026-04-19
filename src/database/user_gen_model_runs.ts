@@ -90,6 +90,31 @@ export async function claimUserGenModelRunPendingToProcessing(taskId: string): P
   return row;
 }
 
+/**
+ * xAI: duplicate `/webhooks/polling` calls can both see `done` before either writes `completed`.
+ * Only one row update succeeds (`processing` → `finalizing`); that worker runs `processResponse` then `completed`.
+ * Requires `status` column to accept the value `finalizing` (text / enum includes it).
+ */
+export async function claimUserGenModelRunForXaiFinalize(runId: string): Promise<boolean> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_gen_model_runs')
+    .update({ status: 'finalizing' })
+    .eq('id', runId)
+    .eq('status', 'processing')
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_runs_finalize_claim_failed',
+      expose: false,
+    });
+  }
+  return data != null;
+}
+
 /** Real `user_gen_model_runs` columns only — rows from `RUN_HISTORY_SELECT` embed `user_files`, `gen_model_id`, etc. */
 const USER_GEN_MODEL_RUNS_PATCH_KEYS = [
   'user_id',

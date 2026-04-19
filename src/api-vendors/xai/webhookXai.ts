@@ -2,7 +2,9 @@ import axios from 'axios';
 import { USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT } from '../../database/const';
 import { getGenModelById } from '../../database/gen_models';
 import {
+  claimUserGenModelRunForXaiFinalize,
   claimUserGenModelRunPendingToProcessing,
+  getUserGenModelRunById,
   updateUserGenModelRun,
 } from '../../database/user_gen_model_runs';
 import { GenModelRow, UserGenModelRuns } from '../../database/types';
@@ -26,6 +28,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Serialize xAI polling for the same run (paired DB triggers / double POST). */
+const xaiWebhookTailByRunId = new Map<string, Promise<unknown>>();
+
+function serializeXaiWebhookByRunId<R>(runId: string, fn: () => Promise<R>): Promise<R> {
+  const prev = xaiWebhookTailByRunId.get(runId) ?? Promise.resolve();
+  const next = prev.catch(() => undefined).then(() => fn()) as Promise<R>;
+  xaiWebhookTailByRunId.set(runId, next);
+  void next.finally(() => {
+    if (xaiWebhookTailByRunId.get(runId) === next) {
+      xaiWebhookTailByRunId.delete(runId);
+    }
+  });
+  return next;
+}
+
 /** `gen_models` is a join embed, not a `user_gen_model_runs` column — strip before PATCH. */
 function runRowForDbUpdate(r: UserGenModelRuns): UserGenModelRuns {
   const { gen_models: _embed, ...rest } = r as UserGenModelRuns & { gen_models?: unknown };
@@ -37,6 +54,23 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     throw new Error('xai webhook requires task_id and gen_model_id');
   }
 
+  const runId = String(runRow.id ?? '').trim();
+  if (!runId) {
+    throw new Error('xai webhook: user_gen_model_runs id missing');
+  }
+
+  return serializeXaiWebhookByRunId(runId, () => webhookXaiSerialized(runId));
+}
+
+async function webhookXaiSerialized(runId: string): Promise<void> {
+  const latest = await getUserGenModelRunById(runId);
+  if (!latest) {
+    console.log('[webhookXai] skip: run not found', { run_id: runId });
+    return;
+  }
+
+  const runRow = latest as UserGenModelRuns;
+
   const rowStatus = (runRow.status ?? '').toLowerCase().trim();
   if (rowStatus === 'completed' || rowStatus === 'error') {
     console.log('[webhookXai] skip: terminal status', {
@@ -46,9 +80,9 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     return;
   }
 
-  const runId = String(runRow.id ?? '').trim();
-  if (!runId) {
-    throw new Error('xai webhook: user_gen_model_runs id missing');
+  if (rowStatus === 'finalizing') {
+    console.log('[webhookXai] skip: file ingest already claimed', { run_id: runId, task_id: runRow.task_id });
+    return;
   }
 
   /** First call: `pending` → claim. Later calls: DB trigger re-invokes after `processing` updates — one GET per request. */
@@ -117,6 +151,14 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
 
   try {
     if (finalStatus === 'done' && videoUrl) {
+      const claimedFinalize = await claimUserGenModelRunForXaiFinalize(runId);
+      if (!claimedFinalize) {
+        console.log('[webhookXai] skip: another worker is finalizing or run not processing', {
+          run_id: run.id,
+          task_id: taskId,
+        });
+        return;
+      }
       const savedFiles = await processResponse(videoUrl, run, lastResponse);
       await updateUserGenModelRun({
         ...runRowForDbUpdate(run),
