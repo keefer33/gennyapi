@@ -19,13 +19,6 @@ type XaiPollingResponse = {
   model?: string;
 };
 
-const POLL_INTERVAL_MS = 1000;
-const MAX_POLL_ATTEMPTS = 480;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 /** `gen_models` is a join embed, not a `user_gen_model_runs` column — strip before PATCH. */
 function runRowForDbUpdate(r: UserGenModelRuns): UserGenModelRuns {
   const { gen_models: _embed, ...rest } = r as UserGenModelRuns & { gen_models?: unknown };
@@ -37,19 +30,37 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     throw new Error('xai webhook requires task_id and gen_model_id');
   }
 
-  const claimed = await claimUserGenModelRunPendingToProcessing(runRow.task_id);
-  if (!claimed) {
-    console.log('[webhookXai] skip: run was not pending at claim step', {
+  const rowStatus = (runRow.status ?? '').toLowerCase().trim();
+  if (rowStatus === 'completed' || rowStatus === 'error') {
+    console.log('[webhookXai] skip: terminal status', {
       task_id: runRow.task_id,
+      status: rowStatus,
     });
     return;
   }
 
-  const runId = String(claimed.id ?? runRow.id ?? '').trim();
+  const runId = String(runRow.id ?? '').trim();
   if (!runId) {
-    throw new Error('xai webhook: user_gen_model_runs id missing after claim');
+    throw new Error('xai webhook: user_gen_model_runs id missing');
   }
-  const run = { ...runRow, ...claimed, id: runId };
+
+  /** First call: `pending` → claim. Later calls: DB trigger re-invokes after `processing` updates — one GET per request. */
+  let run: UserGenModelRuns;
+  if (rowStatus === 'pending') {
+    const claimed = await claimUserGenModelRunPendingToProcessing(runRow.task_id);
+    if (!claimed) {
+      console.log('[webhookXai] skip: run was not pending at claim step', {
+        task_id: runRow.task_id,
+      });
+      return;
+    }
+    run = { ...runRow, ...claimed, id: runId };
+  } else if (rowStatus === 'processing') {
+    run = { ...runRow, id: runId };
+  } else {
+    console.log('[webhookXai] skip: unexpected status', { task_id: runRow.task_id, status: rowStatus });
+    return;
+  }
 
   const modelId = (run.gen_model_id as GenModelRow)?.id ?? (runRow.gen_model_id as GenModelRow)?.id;
   if (!modelId) {
@@ -66,11 +77,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   }
 
   const endpoint = `${server}${pollingPath}${taskId}`;
-  console.log('[webhookXai] polling configured', {
-    endpoint,
-    poll_interval_ms: POLL_INTERVAL_MS,
-    max_poll_attempts: MAX_POLL_ATTEMPTS,
-  });
+  console.log('[webhookXai] single poll', { endpoint, run_id: run.id, task_id: taskId });
 
   const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key ?? '';
   const requestHeaders: Record<string, string> = {
@@ -78,43 +85,25 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   };
   if (apiKey) requestHeaders.Authorization = `Bearer ${apiKey}`;
 
-  let lastResponse: XaiPollingResponse | null = null;
-  let finalStatus: string = 'pending';
-  let videoUrl: string | null = null;
+  const response = await axios.get(endpoint, {
+    headers: requestHeaders,
+    validateStatus: () => true,
+  });
 
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
-    const response = await axios.get(endpoint, {
-      headers: requestHeaders,
-      validateStatus: () => true,
-    });
-
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`xai polling failed with status ${response.status}`);
-    }
-
-    const body = (response.data ?? {}) as XaiPollingResponse;
-    lastResponse = body;
-    finalStatus = typeof body.status === 'string' ? body.status : 'unknown';
-    if (attempt === 0 || (attempt + 1) % 10 === 0 || finalStatus !== 'pending') {
-      console.log('[webhookXai] poll tick', {
-        attempt: attempt + 1,
-        status: finalStatus,
-        run_id: run.id,
-        task_id: taskId,
-      });
-    }
-
-    if (finalStatus === 'done') {
-      videoUrl = typeof body.video?.url === 'string' ? body.video.url : null;
-      break;
-    }
-
-    if (finalStatus === 'failed' || finalStatus === 'expired') {
-      break;
-    }
-
-    await sleep(POLL_INTERVAL_MS);
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`xai polling failed with status ${response.status}`);
   }
+
+  const lastResponse = (response.data ?? {}) as XaiPollingResponse;
+  const finalStatus = typeof lastResponse.status === 'string' ? lastResponse.status : 'unknown';
+  const videoUrl =
+    finalStatus === 'done' && typeof lastResponse.video?.url === 'string' ? lastResponse.video.url : null;
+
+  console.log('[webhookXai] poll result', {
+    status: finalStatus,
+    run_id: run.id,
+    task_id: taskId,
+  });
 
   const duration = Math.floor((Date.now() - new Date(run.created_at ?? Date.now()).getTime()) / 1000);
 
@@ -130,7 +119,58 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       return;
     }
 
-    console.log('[webhookXai] run marked error from terminal/timeout', {
+    if (finalStatus === 'done' && !videoUrl) {
+      const message = 'xai status done but video.url missing';
+      console.log('[webhookXai] run marked error', { run_id: run.id, duration, message });
+      await updateUserGenModelRun({
+        ...runRowForDbUpdate(run),
+        polling_response: { webhook: lastResponse },
+        status: 'error',
+        duration,
+      });
+      await insertUserUsageLog({
+        user_id: run.user_id,
+        usage_amount: run.cost,
+        type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
+        gen_model_run_id: run.id,
+        transaction_id: null,
+        meta: {
+          model_name: run.gen_model_id,
+          error: message,
+        },
+      });
+      return;
+    }
+
+    if (finalStatus === 'failed' || finalStatus === 'expired') {
+      console.log('[webhookXai] run marked error from terminal xAI status', {
+        run_id: run.id,
+        final_status: finalStatus,
+        duration,
+      });
+      await updateUserGenModelRun({
+        ...runRowForDbUpdate(run),
+        polling_response: { webhook: lastResponse },
+        status: 'error',
+        duration,
+      });
+
+      await insertUserUsageLog({
+        user_id: run.user_id,
+        usage_amount: run.cost,
+        type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
+        gen_model_run_id: run.id,
+        transaction_id: null,
+        meta: {
+          model_name: run.gen_model_id,
+          error: `xai generation ${finalStatus}`,
+        },
+      });
+      return;
+    }
+
+    /** Not terminal yet — persist snapshot; DB trigger on update can invoke `/webhooks/polling` again. */
+    console.log('[webhookXai] interim status, awaiting next trigger', {
       run_id: run.id,
       final_status: finalStatus,
       duration,
@@ -138,21 +178,10 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     await updateUserGenModelRun({
       ...runRowForDbUpdate(run),
       polling_response: { webhook: lastResponse },
-      status: 'error',
+      status: 'processing',
       duration,
     });
-
-    await insertUserUsageLog({
-      user_id: run.user_id,
-      usage_amount: run.cost,
-      type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
-      gen_model_run_id: run.id,
-      transaction_id: null,
-      meta: {
-        model_name: run.gen_model_id,
-        error: `xai generation ${finalStatus}`,
-      },
-    });
+    return;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookXai] caught error while processing', {
