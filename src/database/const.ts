@@ -27,7 +27,7 @@ export const PLAYGROUND_LIST_SELECT = `
   generation_type,
   model_product,
   model_variant,
-  brand_name,
+  brand_name(id, name, slug, logo),
   sort_order,
   gen_models_apis_id,
   gen_models_apis!gen_models_gen_models_apis_id_fkey (
@@ -36,8 +36,7 @@ export const PLAYGROUND_LIST_SELECT = `
     function_schema,
     model_pricing,
     vendor_apis:vendor_apis!gen_models_apis_vendor_api_fkey (vendor_name, api_key, config)
-  ),
-  brands:brands!gen_models_brand_name_fkey(slug,name,logo,sort_order)
+  )
 `;
 
 export const RUN_HISTORY_SELECT = `
@@ -130,11 +129,11 @@ export const GEN_MODEL_DETAIL_SELECT = `
   model_variant,
   brand_name(id, name, slug, logo),
   sort_order,
-  gen_models_apis!gen_models_gen_models_apis_id_fkey(
+  gen_models_apis_id(
     id,
     api_schema,
     function_schema,
     model_pricing,
-    vendor_apis(id, vendor_name, api_key, config)
+    vendor_api(id, vendor_name, api_key, config)
   )
 `;
