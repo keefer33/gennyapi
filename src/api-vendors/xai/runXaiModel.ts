@@ -26,7 +26,7 @@ export async function runXaiModel(genModel: GenModelRow, payload: unknown) {
     ...requestPayload,
     model: (genModel.gen_models_apis_id?.api_schema as { vendor_model_name?: string } | null)?.vendor_model_name,
   }
-  console.log('payloadData', payloadData, endpoint, apiKey);
+
   const response = await axios.post(endpoint, payloadData, {
     headers: {
       'Content-Type': 'application/json',
