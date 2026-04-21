@@ -9,6 +9,8 @@ export async function listUserGenModelRunsForUser(
       page?: number;
       limit?: number;
       gen_model_id?: string | null;
+      brand_slugs?: string[];
+      model_products?: string[];
       file_type_filter?: 'all' | 'images' | 'videos' | 'audio' | null;
       tag_ids?: string[];
     } = {}
@@ -24,6 +26,7 @@ export async function listUserGenModelRunsForUser(
     const tagIds = (opts.tag_ids ?? []).map(t => t.trim()).filter(Boolean);
   
     let runIdSet: Set<string> | null = null;
+    let genModelIdSet: Set<string> | null = null;
   
     const intersectRunIds = (ids: string[]) => {
       const s = new Set(ids.filter(Boolean));
@@ -31,6 +34,15 @@ export async function listUserGenModelRunsForUser(
         runIdSet = s;
       } else {
         runIdSet = new Set([...runIdSet].filter(id => s.has(id)));
+      }
+    };
+
+    const intersectGenModelIds = (ids: string[]) => {
+      const s = new Set(ids.filter(Boolean));
+      if (genModelIdSet === null) {
+        genModelIdSet = s;
+      } else {
+        genModelIdSet = new Set([...genModelIdSet].filter(id => s.has(id)));
       }
     };
   
@@ -102,21 +114,75 @@ export async function listUserGenModelRunsForUser(
     if (runIdSet !== null && runIdSet.size === 0) {
       return { rows: [], total: 0 };
     }
-  
-    let query = supabaseServerClient
-      .from('user_gen_model_runs')
-      .select(RUN_HISTORY_SELECT, { count: 'exact' })
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-  
-    const genModelId = opts.gen_model_id?.trim();
-    if (genModelId) {
-      query = query.eq('gen_model_id', genModelId);
+
+    const brandSlugs = (opts.brand_slugs ?? []).map(s => s.trim()).filter(Boolean);
+    const modelProducts = (opts.model_products ?? []).map(s => s.trim()).filter(Boolean);
+    if (brandSlugs.length > 0 || modelProducts.length > 0) {
+      let gmQuery = supabaseServerClient
+        .from('gen_models')
+        .select('id,model_product,brand_name(id,slug,name)');
+
+      if (modelProducts.length > 0) {
+        gmQuery = gmQuery.in('model_product', modelProducts);
+      }
+
+      const { data: gmRows, error: gmError } = await gmQuery;
+      if (gmError) {
+        throw new AppError(gmError.message, {
+          statusCode: 500,
+          code: 'user_gen_model_runs_gen_models_filter_failed',
+          expose: false,
+        });
+      }
+
+      const extractBrandSlug = (brand: unknown): string => {
+        if (!brand) return '';
+        const one = Array.isArray(brand) ? brand[0] : brand;
+        if (one && typeof one === 'object' && 'slug' in one) {
+          const slug = (one as { slug?: unknown }).slug;
+          return typeof slug === 'string' ? slug.trim() : '';
+        }
+        return '';
+      };
+
+      const ids = (gmRows ?? [])
+        .filter((row: { id?: string; brand_name?: unknown }) => {
+          if (brandSlugs.length === 0) return true;
+          const slug = extractBrandSlug(row.brand_name);
+          return !!slug && brandSlugs.includes(slug);
+        })
+        .map((row: { id?: string }) => (typeof row.id === 'string' ? row.id : ''))
+        .filter(Boolean);
+
+      intersectGenModelIds(ids);
+    }
+
+    if (genModelIdSet !== null && genModelIdSet.size === 0) {
+      return { rows: [], total: 0 };
     }
   
-    if (runIdSet !== null) {
-      query = query.in('id', [...runIdSet]);
-    }
+    const applyRunFilters = <T>(query: T): T => {
+      let q = query as any;
+      q = q.eq('user_id', userId);
+      const genModelId = opts.gen_model_id?.trim();
+      if (genModelId) {
+        q = q.eq('gen_model_id', genModelId);
+      }
+      if (genModelIdSet !== null) {
+        q = q.in('gen_model_id', [...genModelIdSet]);
+      }
+      if (runIdSet !== null) {
+        q = q.in('id', [...runIdSet]);
+      }
+      return q as T;
+    };
+  
+    const query = applyRunFilters(
+      supabaseServerClient
+        .from('user_gen_model_runs')
+        .select(RUN_HISTORY_SELECT, { count: 'exact' })
+        .order('created_at', { ascending: false })
+    );
   
     const { data: rows, error, count } = await query.range(from, to);
   
@@ -128,7 +194,23 @@ export async function listUserGenModelRunsForUser(
       });
     }
   
-    return { rows: rows as UserGenModelRunListRow[], total: count ?? rows?.length ?? 0 };
+    let total = count ?? 0;
+    if (count == null) {
+      const countQuery = applyRunFilters(
+        supabaseServerClient.from('user_gen_model_runs').select('id', { count: 'exact', head: true })
+      );
+      const { count: fallbackCount, error: countError } = await countQuery;
+      if (countError) {
+        throw new AppError(countError.message, {
+          statusCode: 500,
+          code: 'user_gen_model_runs_count_failed',
+          expose: false,
+        });
+      }
+      total = fallbackCount ?? rows?.length ?? 0;
+    }
+
+    return { rows: rows as UserGenModelRunListRow[], total };
   }
 
   /** Embedded `user_files` from `user_gen_model_runs` (FK `gen_model_run_id`). Only active rows for thumbnails. */
