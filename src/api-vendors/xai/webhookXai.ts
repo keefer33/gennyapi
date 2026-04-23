@@ -134,6 +134,9 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       ? ((apiSchema as { vendor_model_name?: string }).vendor_model_name as string).trim()
       : '';
   const isInstantImage = vendorModelName === XAI_INSTANT_IMAGE_VENDOR_MODEL;
+  console.log('apiSchema', apiSchema);
+  console.log('vendorModelName', vendorModelName);
+  console.log('isInstantImage', isInstantImage);
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
   const apiPath =
