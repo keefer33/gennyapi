@@ -19,9 +19,14 @@ type XaiPollingResponse = {
   };
 };
 
-function normalizeXaiRequestPayload(payload: unknown): Record<string, unknown> {
+function normalizeXaiRequestPayload(
+  payload: unknown,
+  opts?: { vendorModelName?: string },
+): Record<string, unknown> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   const requestPayload: Record<string, unknown> = { ...originalPayload };
+  const vendorModelName = (opts?.vendorModelName ?? '').trim();
+  const isInstantImage = vendorModelName === XAI_INSTANT_IMAGE_VENDOR_MODEL;
 
   if (requestPayload?.image) {
     requestPayload.image = {
@@ -29,10 +34,16 @@ function normalizeXaiRequestPayload(payload: unknown): Record<string, unknown> {
     };
   }
   if (Array.isArray(requestPayload.images) && requestPayload.images.length > 0) {
-    requestPayload.reference_images = requestPayload.images
-      .filter(image => typeof image === 'string' && image.trim().length > 0)
-      .map(image => ({ url: image as string }));
-    delete requestPayload.images;
+    if (isInstantImage) {
+      requestPayload.images = requestPayload.images
+        .filter(image => typeof image === 'string' && image.trim().length > 0)
+        .map(image => ({ url: image as string }));
+    } else {
+      requestPayload.reference_images = requestPayload.images
+        .filter(image => typeof image === 'string' && image.trim().length > 0)
+        .map(image => ({ url: image as string }));
+      delete requestPayload.images;
+    }
   }
   if (requestPayload?.video) {
     requestPayload.video = { url: requestPayload.video as string };
@@ -182,7 +193,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     }
     const endpoint = `${server}${apiPath}`;
     const requestPayload = {
-      ...normalizeXaiRequestPayload(run.payload),
+      ...normalizeXaiRequestPayload(run.payload, { vendorModelName }),
       model: vendorModelName,
     };
     console.log('[webhookXai] instant image request', { endpoint, run_id: run.id, db_status: rowStatus });
@@ -199,6 +210,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
           .map((row: unknown) => (row && typeof row === 'object' ? (row as { url?: unknown }).url : null))
           .filter((u: unknown): u is string => typeof u === 'string' && u.trim().length > 0)
       : [];
+      console.log('imageUrls', imageUrls);
     finalStatus = imageUrls.length > 0 ? 'done' : 'failed';
   } else {
     if (!server || !pollingPath || !taskId) {
