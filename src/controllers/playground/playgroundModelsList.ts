@@ -31,6 +31,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     const modelId = typeof req.query.model_id === 'string' ? req.query.model_id.trim() : '';
     const brandFilters = toList(req.query.brands);
     const modelTypeFilters = toList(req.query.model_type);
+    const generationTypeFilters = toList(req.query.generation_type);
     const modelProductFilters = toList(req.query.model_product);
     const modelVariantFilters = toList(req.query.model_variant);
 
@@ -52,6 +53,9 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     // Brand filter is applied after mapping so links can use brands.slug.
     if (modelTypeFilters.length > 0) {
       query = query.in('model_type', modelTypeFilters);
+    }
+    if (generationTypeFilters.length > 0) {
+      query = query.in('generation_type', generationTypeFilters);
     }
 
     const { data: rows, error } = await query;
@@ -100,6 +104,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
         model_product: modelProductFilters,
         model_variant: modelVariantFilters,
         model_type: modelTypeFilters,
+        generation_type: generationTypeFilters,
       },
       total: filteredRows.length,
     });
