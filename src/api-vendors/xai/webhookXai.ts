@@ -42,6 +42,16 @@ function normalizeXaiRequestPayload(payload: unknown): Record<string, unknown> {
 }
 
 function xaiInstantImageUrl(responseData: unknown): string | null {
+  if (Array.isArray(responseData)) {
+    for (const item of responseData) {
+      if (typeof item === 'string' && item.trim()) return item.trim();
+      if (item && typeof item === 'object') {
+        const u = (item as Record<string, unknown>).url;
+        if (typeof u === 'string' && u.trim()) return u.trim();
+      }
+    }
+    return null;
+  }
   if (!responseData || typeof responseData !== 'object') return null;
   const data = responseData as Record<string, unknown>;
   const direct = data.url;
@@ -70,6 +80,19 @@ function xaiInstantImageUrl(responseData: unknown): string | null {
     }
   }
 
+  return null;
+}
+
+function xaiErrorMessage(responseData: unknown): string | null {
+  if (!responseData || typeof responseData !== 'object') return null;
+  const root = responseData as Record<string, unknown>;
+  const errObj = root.error;
+  if (errObj && typeof errObj === 'object') {
+    const msg = (errObj as Record<string, unknown>).message;
+    if (typeof msg === 'string' && msg.trim()) return msg.trim();
+  }
+  const errText = root.error;
+  if (typeof errText === 'string' && errText.trim()) return errText.trim();
   return null;
 }
 
@@ -171,7 +194,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       throw new Error(`xai instant image failed with status ${response.status}`);
     }
     lastResponse = (response.data ?? {}) as XaiPollingResponse;
-    imageUrl = xaiInstantImageUrl(response.data.data);
+    imageUrl = xaiInstantImageUrl(response.data);
     finalStatus = imageUrl ? 'done' : 'failed';
   } else {
     if (!server || !pollingPath || !taskId) {
@@ -221,7 +244,10 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       console.log('[webhookXai] run marked error', { run_id: run.id, duration, message });
       await updateUserGenModelRun({
         ...runRowForDbUpdate(run),
-        polling_response: { webhook: lastResponse, error: lastResponse?.error?.message || "Generation failed, please try again."  },
+        polling_response: {
+          webhook: lastResponse,
+          error: xaiErrorMessage(lastResponse) || 'Generation failed, please try again.',
+        },
         status: 'error',
         duration,
       });
@@ -247,7 +273,10 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       });
       await updateUserGenModelRun({
         ...runRowForDbUpdate(run),
-        polling_response: { webhook: lastResponse, error: lastResponse.error.message || "Generation failed, please try again." },
+        polling_response: {
+          webhook: lastResponse,
+          error: xaiErrorMessage(lastResponse) || 'Generation failed, please try again.',
+        },
         status: 'error',
         duration,
       });
