@@ -12,6 +12,7 @@ import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
 import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
+import { calculatePricingUtil } from '../../shared/calculateCosts';
 
 export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
@@ -33,13 +34,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
     switch (genModel.gen_models_apis_id?.vendor_api?.vendor_name) {
       case 'xai':
         response = await runXaiModel(genModel, payload);
-        const xaiVendorApiKey = await getVendorApiKeyByVendorName('wavespeed');
-        cost = await getWavespeedCost(
-          genModel.model_id,
-          payload,
-          xaiVendorApiKey.api_key ?? null,
-          xaiVendorApiKey.config?.cost_api_endpoint ?? null
-        );
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
         break;
       case 'wavespeed':
         response = await runWavespeedModel(genModel, payload);

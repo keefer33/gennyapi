@@ -19,7 +19,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     let cost = 0;
     switch (vendor) {
       case 'xai':
-        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});;
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
         break;
       case 'wavespeed':
         cost = await getWavespeedCost(
