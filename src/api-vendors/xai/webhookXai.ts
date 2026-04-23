@@ -195,7 +195,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     }
     lastResponse = response.data as any;
     console.log('lastResponse', lastResponse);
-    imageUrl = lastResponse?.data?.url;
+    imageUrl = lastResponse?.data[0]?.url;
     console.log('imageUrl', imageUrl);
     finalStatus = imageUrl ? 'done' : 'failed';
   } else {
