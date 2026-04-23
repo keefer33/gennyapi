@@ -9,7 +9,7 @@ import { runAgent } from './runAgent';
 const router = express.Router();
 
 // Enhance prompt
-router.post('/enhance/prompt', authenticateUser, enhancePrompt);
+router.post('/enhance/prompt', enhancePrompt);
 
 // User agents CRUD
 router.get('/', getAgentModels );

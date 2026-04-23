@@ -9,6 +9,14 @@ import { USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT } from '../../database/cons
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { processResponse } from '../../shared/webhooksUtils';
 
+function extractWavespeedErrorMessage(error: unknown): string {
+  const raw =
+    typeof error === 'string' ? error : error instanceof Error ? error.message : String(error ?? '');
+  const msgMatch = raw.match(/msg="([^"]+)"/);
+  if (msgMatch?.[1]) return msgMatch[1];
+  return raw.trim() || 'Unknown Wavespeed error';
+}
+
 export async function webhookWavespeed(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
@@ -52,9 +60,10 @@ export async function webhookWavespeed(req: Request, res: Response): Promise<voi
         throw new Error('No completion found');
       }
     } catch (error) {
+      const errorMessage = extractWavespeedErrorMessage(error);
       await updateUserGenModelRun({
         ...userGenModelRun,
-        polling_response: { webhook: body, error: error.message },
+        polling_response: { webhook: body, error: errorMessage },
         status: 'error',
         duration: duration,
       });
@@ -66,10 +75,10 @@ export async function webhookWavespeed(req: Request, res: Response): Promise<voi
         transaction_id: null,
         meta: {
           model_name: userGenModelRun.gen_model_id,
-          error: error.message,
+          error: errorMessage,
         },
       });
-      throw new Error(error.message);
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error(error);

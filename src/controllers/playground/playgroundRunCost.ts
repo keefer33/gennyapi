@@ -4,6 +4,7 @@ import { sendOk } from '../../app/response';
 import { getGenModelById } from '../../database/gen_models';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
+import { calculatePricingUtil } from '../../shared/calculateCosts';
 
 export async function playgroundRunCost(req: Request, res: Response): Promise<void> {
   try {
@@ -18,13 +19,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     let cost = 0;
     switch (vendor) {
       case 'xai':
-        const xaiVendorApiKey = await getVendorApiKeyByVendorName('wavespeed');
-        cost = await getWavespeedCost(
-          genModel.model_id,
-          payload,
-          xaiVendorApiKey.api_key ?? null,
-          xaiVendorApiKey.config?.cost_api_endpoint ?? null
-        );
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});;
         break;
       case 'wavespeed':
         cost = await getWavespeedCost(

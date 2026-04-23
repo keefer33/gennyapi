@@ -90,6 +90,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
     sendOk(res, response);
   } catch (err) {
     if (isAxiosError(err) && err.response) {
+      console.log(err);
       sendError(
         res,
         new AppError('Upstream request failed', {
