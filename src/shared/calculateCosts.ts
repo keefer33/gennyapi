@@ -128,8 +128,8 @@ const extractFormulaExpression = (formula: unknown): string | null => {
         cost = pricing.cost;
         break;
       case 'perMulti':
-        if (formValues.num_images || formValues.max_images) {
-          cost = pricing.cost * (formValues.num_images || formValues.max_images);
+        if (formValues.num_images || formValues.max_images || formValues.n) {
+          cost = pricing.cost * (formValues.num_images || formValues.max_images || formValues.n);
         }
         break;
       case 'singleField':

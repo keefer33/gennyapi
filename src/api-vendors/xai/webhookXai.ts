@@ -174,7 +174,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   let lastResponse: any = {};
   let finalStatus = 'unknown';
   let videoUrl: string | null = null;
-  let imageUrl: string | null = null;
+  let imageUrls: string[] = [];
 
   if (isInstantImage) {
     if (!server || !apiPath) {
@@ -194,10 +194,12 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       throw new Error(`xai instant image failed with status ${response.status}`);
     }
     lastResponse = response.data as any;
-    console.log('lastResponse', lastResponse);
-    imageUrl = lastResponse?.data[0]?.url;
-    console.log('imageUrl', imageUrl);
-    finalStatus = imageUrl ? 'done' : 'failed';
+    imageUrls = Array.isArray(lastResponse?.data)
+      ? lastResponse.data
+          .map((row: unknown) => (row && typeof row === 'object' ? (row as { url?: unknown }).url : null))
+          .filter((u: unknown): u is string => typeof u === 'string' && u.trim().length > 0)
+      : [];
+    finalStatus = imageUrls.length > 0 ? 'done' : 'failed';
   } else {
     if (!server || !pollingPath || !taskId) {
       throw new Error('xai api_schema missing server/polling_path or task_id');
@@ -227,9 +229,9 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
   const duration = Math.floor((Date.now() - new Date(run.created_at ?? Date.now()).getTime()) / 1000);
 
   try {
-    if (finalStatus === 'done' && (videoUrl || imageUrl)) {
-      const mediaUrl = imageUrl ?? videoUrl;
-      const savedFiles = await processResponse(mediaUrl as string, run, lastResponse);
+    if (finalStatus === 'done' && (videoUrl || imageUrls.length > 0)) {
+      const mediaOutput = imageUrls.length > 0 ? imageUrls : videoUrl;
+      const savedFiles = await processResponse(mediaOutput as string | string[], run, lastResponse);
       await updateUserGenModelRun({
         ...runRowForDbUpdate(run),
         polling_response: { webhook: lastResponse, files: savedFiles },
@@ -239,7 +241,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
       return;
     }
 
-    if (finalStatus === 'done' && !videoUrl && !imageUrl) {
+    if (finalStatus === 'done' && !videoUrl && imageUrls.length === 0) {
       const message = isInstantImage
         ? 'xai instant image completed but image url missing'
         : 'xai status done but video.url missing';
