@@ -171,7 +171,7 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     'Content-Type': 'application/json',
   };
   if (apiKey) requestHeaders.Authorization = `Bearer ${apiKey}`;
-  let lastResponse: XaiPollingResponse = {};
+  let lastResponse: any = {};
   let finalStatus = 'unknown';
   let videoUrl: string | null = null;
   let imageUrl: string | null = null;
@@ -193,8 +193,10 @@ export async function webhookXai(runRow: UserGenModelRuns): Promise<void> {
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`xai instant image failed with status ${response.status}`);
     }
-    lastResponse = (response.data ?? {}) as XaiPollingResponse;
-    imageUrl = xaiInstantImageUrl(response.data);
+    lastResponse = response.data as any;
+    console.log('lastResponse', lastResponse);
+    imageUrl = lastResponse?.data?.url;
+    console.log('imageUrl', imageUrl);
     finalStatus = imageUrl ? 'done' : 'failed';
   } else {
     if (!server || !pollingPath || !taskId) {
