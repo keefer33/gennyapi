@@ -24,9 +24,7 @@ function isMediaPayloadKey(key: string): key is MediaPayloadKey {
 }
 
 function resolveWavespeedApiKey(genModel: GenModelRow): string {
-  const key =
-    genModel.gen_models_apis_id?.vendor_api?.api_key?.trim() ||
-    process.env.WAVESPEED_API_KEY?.trim();
+  const key = genModel.gen_models_apis_id?.vendor_api?.api_key?.trim() || process.env.WAVESPEED_API_KEY?.trim();
   if (!key) {
     throw new AppError('Missing Wavespeed API key', {
       statusCode: 500,
@@ -99,8 +97,7 @@ async function downloadRemoteToBuffer(url: string): Promise<{ buffer: Buffer; mi
       expose: true,
     });
   }
-  const mime =
-    response.headers.get('content-type')?.split(';')[0]?.trim() || 'application/octet-stream';
+  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'application/octet-stream';
   const buffer = Buffer.from(await response.arrayBuffer());
   return { buffer, mime };
 }
@@ -200,7 +197,7 @@ async function uploadMediaFieldsAndReplaceUrls(
 }
 
 export async function runWavespeedModel(genModel: GenModelRow, payload: unknown) {
-  const endpoint = `${genModel.gen_models_apis_id?.vendor_api?.config?.endpoint}${genModel.model_id}?webhook=${genModel.gen_models_apis_id?.vendor_api?.config?.webhook_url}`;
+  const endpoint = `${genModel.gen_models_apis_id?.vendor_api?.config?.endpoint}${genModel.gen_models_apis_id?.api_schema?.vendor_model_name}?webhook=${genModel.gen_models_apis_id?.vendor_api?.config?.webhook_url}`;
   const apiKey = resolveWavespeedApiKey(genModel);
   const rawPayload = (payload ?? {}) as Record<string, unknown>;
   const requestPayload = await uploadMediaFieldsAndReplaceUrls(apiKey, rawPayload);
