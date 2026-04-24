@@ -1,5 +1,4 @@
-import { isValidTopUpDollars } from '../../shared/stripe';
-import Stripe from 'stripe';
+import { isValidTopUpDollars, stripe } from '../../shared/stripe';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
@@ -7,12 +6,6 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 
 export const createPaymentIntent = async (req: Request, res: Response): Promise<void> => {
   try {
-    const stripe = process.env.STRIPE_SECRET_KEY
-      ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-          apiVersion: '2025-09-30.clover',
-        })
-      : null;
-
     if (!stripe) {
       throw new AppError('Stripe not configured', {
         statusCode: 500,
@@ -23,7 +16,7 @@ export const createPaymentIntent = async (req: Request, res: Response): Promise<
 
     const userId = getAuthUserId(req);
     const raw = req.body?.amount;
-    const dollars = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
+    const dollars = typeof raw === 'string' ? Number(raw.trim()) : Number(raw);
 
     if (!Number.isFinite(dollars) || !isValidTopUpDollars(dollars)) {
       throw badRequest('Invalid top-up amount');
@@ -50,6 +43,30 @@ export const createPaymentIntent = async (req: Request, res: Response): Promise<
       paymentIntentId: paymentIntent.id,
     });
   } catch (error) {
+    // Stripe SDK errors are not AppError; map them to explicit client-facing failures.
+    if (error && typeof error === 'object' && 'type' in error) {
+      const stripeErr = error as {
+        type?: string;
+        message?: string;
+        code?: string;
+        statusCode?: number;
+        raw?: unknown;
+      };
+      const statusCode =
+        typeof stripeErr.statusCode === 'number' && stripeErr.statusCode >= 400
+          ? stripeErr.statusCode
+          : 400;
+      sendError(
+        res,
+        new AppError(stripeErr.message || 'Stripe request failed', {
+          statusCode,
+          code: stripeErr.code || stripeErr.type || 'stripe_request_failed',
+          details: stripeErr.raw ?? stripeErr,
+          expose: true,
+        })
+      );
+      return;
+    }
     sendError(res, error);
   }
 };
