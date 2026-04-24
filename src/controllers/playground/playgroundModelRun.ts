@@ -39,7 +39,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       case 'wavespeed':
         response = await runWavespeedModel(genModel, payload);
         cost = await getWavespeedCost(
-          genModel.model_id,
+          genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,
           payload,
           genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
           genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint ?? null

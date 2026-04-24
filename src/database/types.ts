@@ -19,7 +19,7 @@ export type GenModelsApisRow = {
   created_at?: string | null;
   gen_models_model_id?: GenModelRow | string | null;
   vendor_api?: VendorApisRow | null;
-  api_schema?: unknown | null;
+  api_schema?: any | unknown | null;
   function_schema?: unknown | null;
   model_pricing?: unknown | null;
 };

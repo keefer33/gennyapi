@@ -12,7 +12,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     const modelId = body.modelId ?? '';
     const payload = body.payload ?? {};
     const genModel = await getGenModelById(modelId);
-    console.log("genModel", genModel);
+    console.log('genModel', genModel);
     const vendor = genModel.gen_models_apis_id?.vendor_api?.vendor_name ?? '';
     const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key ?? '';
 
@@ -23,7 +23,7 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
         break;
       case 'wavespeed':
         cost = await getWavespeedCost(
-          genModel.model_id,
+          genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,
           payload,
           apiKey,
           genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint
