@@ -37,7 +37,8 @@ export async function getGenModelsList(): Promise<GenModelRow[]> {
   const { data: rows, error } = await supabaseServerClient
     .from('gen_models')
     .select(GEN_MODEL_DETAIL_SELECT)
-    .order('sort_order', { ascending: true, nullsFirst: false });
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('sort_order_variant', { ascending: true, nullsFirst: false });
 
   if (error) {
     throw new AppError(error.message, {

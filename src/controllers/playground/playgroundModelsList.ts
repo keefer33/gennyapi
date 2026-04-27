@@ -39,7 +39,8 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     let query = supabaseServerClient
       .from('gen_models')
       .select(PLAYGROUND_LIST_SELECT)
-      .order('sort_order', { ascending: true, nullsFirst: false });
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('sort_order_variant', { ascending: true, nullsFirst: false });
 
     if (search) {
       const escaped = search.replace(/%/g, '\\%').replace(/_/g, '\\_');

@@ -11,6 +11,7 @@ export async function listUserGenModelRunsForUser(
       gen_model_id?: string | null;
       brand_slugs?: string[];
       model_products?: string[];
+      model_types?: string[];
       file_type_filter?: 'all' | 'images' | 'videos' | 'audio' | null;
       tag_ids?: string[];
     } = {}
@@ -117,13 +118,17 @@ export async function listUserGenModelRunsForUser(
 
     const brandSlugs = (opts.brand_slugs ?? []).map(s => s.trim()).filter(Boolean);
     const modelProducts = (opts.model_products ?? []).map(s => s.trim()).filter(Boolean);
-    if (brandSlugs.length > 0 || modelProducts.length > 0) {
+    const modelTypes = (opts.model_types ?? []).map(s => s.trim()).filter(Boolean);
+    if (brandSlugs.length > 0 || modelProducts.length > 0 || modelTypes.length > 0) {
       let gmQuery = supabaseServerClient
         .from('gen_models')
-        .select('id,model_product,brand_name(id,slug,name)');
+        .select('id,model_product,model_type,brand_name(id,slug,name)');
 
       if (modelProducts.length > 0) {
         gmQuery = gmQuery.in('model_product', modelProducts);
+      }
+      if (modelTypes.length > 0) {
+        gmQuery = gmQuery.in('model_type', modelTypes);
       }
 
       const { data: gmRows, error: gmError } = await gmQuery;

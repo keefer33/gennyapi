@@ -35,6 +35,7 @@ export type GenModelRow = {
   model_variant?: string | null;
   brand_name?: BrandRow | string | null;
   sort_order?: number | null;
+  sort_order_variant?: number | null;
   gen_models_apis_id?: GenModelsApisRow | null;
 };
 
