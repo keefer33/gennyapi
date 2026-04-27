@@ -25,12 +25,21 @@ export async function runKieModel(genModel: GenModelRow, payload: unknown) {
       Authorization: `Bearer ${apiKey}`,
     },
   });
-
+  console.log('response', response.data);
   if (response.status !== 200) {
     console.error('Failed to run playground wavespeed', response.data);
     throw new AppError('Failed to run playground wavespeed', {
       statusCode: response.status,
       code: 'failed_to_run_playground_wavespeed',
+      expose: true,
+    });
+  }
+
+  if (response.data?.code !== 200) {
+    console.error('Failed to run playground kie', response.data);
+    throw new AppError('Failed to run playground kie', {
+      statusCode: response.status,
+      code: 'failed_to_run_playground_kie',
       expose: true,
     });
   }

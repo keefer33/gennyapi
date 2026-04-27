@@ -14,6 +14,7 @@ import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
 import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
 import { calculatePricingUtil } from '../../shared/calculateCosts';
 import { runKieModel } from '../../api-vendors/kie/runKieModel';
+import { runOpenaiModel } from '../../api-vendors/openai/runOpenaiModel';
 
 export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
@@ -48,12 +49,11 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
         break;
       case 'kie':
         response = await runKieModel(genModel, payload);
-        cost = await getWavespeedCost(
-          genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,
-          payload,
-          genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
-          genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint ?? null
-        );
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+        break;
+      case 'openai':
+        response = await runOpenaiModel(genModel, payload);
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
         break;
       default:
         throw new AppError('Invalid vendor', {
@@ -70,7 +70,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       payload: body.payload,
       response: response,
       cost: cost,
-      task_id: response?.id ?? null,
+      task_id: response?.id || response?.taskId || null,
       status: 'pending',
     });
 

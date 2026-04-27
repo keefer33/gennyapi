@@ -3,6 +3,7 @@ import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
 import { webhookXai } from '../../api-vendors/xai/webhookXai';
 import { GenModelRow } from '../../database/types';
 import { webhookKie } from '../../api-vendors/kie/webhookKie';
+import { webhookOpenai } from '../../api-vendors/openai/webhookOpenai';
 
 /**
  * POST /webhooks/polling
@@ -30,6 +31,9 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
         break;
       case 'kie':
         await webhookKie(runRow);
+        break;
+      case 'openai':
+        await webhookOpenai(runRow);
         break;
       case 'wavespeed':
         break;
