@@ -145,6 +145,7 @@ export async function webhookOpenai(runRow: UserGenModelRuns): Promise<void> {
   const requestPayload = {
     ...normalizeOpenaiRequestPayload(run.payload),
     model: vendorModelName,
+    moderation: 'low',
   };
   const duration = Math.floor((Date.now() - new Date(run.created_at ?? Date.now()).getTime()) / 1000);
   let lastResponse: unknown = {};
