@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
 import { webhookXai } from '../../api-vendors/xai/webhookXai';
 import { GenModelRow } from '../../database/types';
+import { webhookKie } from '../../api-vendors/kie/webhookKie';
 
 /**
  * POST /webhooks/polling
@@ -26,6 +27,9 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
     switch ((runRow.gen_model_id as GenModelRow)?.gen_models_apis_id?.vendor_api?.vendor_name) {
       case 'xai':
         await webhookXai(runRow);
+        break;
+      case 'kie':
+        await webhookKie(runRow);
         break;
       case 'wavespeed':
         break;
