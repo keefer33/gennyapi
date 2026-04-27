@@ -1,9 +1,52 @@
 import type { Request, Response } from 'express';
 import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
 import { webhookXai } from '../../api-vendors/xai/webhookXai';
-import { GenModelRow } from '../../database/types';
+import { GenModelRow, UserGenModelRuns } from '../../database/types';
 import { webhookKie } from '../../api-vendors/kie/webhookKie';
 import { webhookOpenai } from '../../api-vendors/openai/webhookOpenai';
+
+const ACTIVE_POLLING_STATUSES = new Set(['pending', 'processing', 'finalizing']);
+
+export type WebhookVendorContext<TApiSchema extends Record<string, unknown> = Record<string, unknown>> = {
+  run: UserGenModelRuns;
+  runId: string;
+  rowStatus: string;
+  genModel: GenModelRow;
+  apiSchema: TApiSchema;
+  apiKey: string;
+  vendorName: string;
+  vendorModelName: string;
+};
+
+function runStatus(runRow: UserGenModelRuns): string {
+  return (runRow.status ?? '').toLowerCase().trim();
+}
+
+function buildWebhookVendorContext(runRow: UserGenModelRuns, rowId: string, rowStatus: string): WebhookVendorContext {
+  const rawGen = runRow.gen_model_id;
+  if (!rawGen || typeof rawGen !== 'object' || Array.isArray(rawGen)) {
+    throw new Error('webhook polling: gen_model_id must be an embedded row');
+  }
+
+  const genModel = rawGen as GenModelRow;
+  const apiSchema = (genModel.gen_models_apis_id?.api_schema ?? {}) as Record<string, unknown>;
+  const vendorApi = genModel.gen_models_apis_id?.vendor_api;
+  const vendorName = typeof vendorApi?.vendor_name === 'string' ? vendorApi.vendor_name.trim() : '';
+  const apiKey = typeof vendorApi?.api_key === 'string' ? vendorApi.api_key : '';
+  const vendorModelName =
+    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+
+  return {
+    run: { ...runRow, id: rowId },
+    runId: rowId,
+    rowStatus,
+    genModel,
+    apiSchema,
+    apiKey,
+    vendorName,
+    vendorModelName,
+  };
+}
 
 /**
  * POST /webhooks/polling
@@ -25,15 +68,36 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
       return;
     }
 
-    switch ((runRow.gen_model_id as GenModelRow)?.gen_models_apis_id?.vendor_api?.vendor_name) {
+    const rowId = String(runRow.id ?? '').trim();
+    if (!rowId || !runRow.gen_model_id) {
+      res.sendStatus(400);
+      return;
+    }
+
+    const rowStatus = runStatus(runRow);
+    if (rowStatus === 'completed' || rowStatus === 'error') {
+      console.log('[webhookPolling] skip: terminal status', { task_id: runRow.task_id, status: rowStatus });
+      res.sendStatus(204);
+      return;
+    }
+
+    if (!ACTIVE_POLLING_STATUSES.has(rowStatus)) {
+      console.log('[webhookPolling] skip: unexpected status', { task_id: runRow.task_id, status: rowStatus });
+      res.sendStatus(204);
+      return;
+    }
+
+    const vendorContext = buildWebhookVendorContext(runRow, rowId, rowStatus);
+
+    switch (vendorContext.vendorName) {
       case 'xai':
-        await webhookXai(runRow);
+        await webhookXai(vendorContext);
         break;
       case 'kie':
-        await webhookKie(runRow);
+        await webhookKie(vendorContext);
         break;
       case 'openai':
-        await webhookOpenai(runRow);
+        await webhookOpenai(vendorContext);
         break;
       case 'wavespeed':
         break;
