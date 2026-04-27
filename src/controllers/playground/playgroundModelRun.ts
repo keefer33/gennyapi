@@ -1,9 +1,8 @@
-import axios, { isAxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
 import { createUserGenModelRun } from '../../database/user_gen_model_runs';
-import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { getGenModelById } from '../../database/gen_models';
 import { runWavespeedModel } from '../../api-vendors/wavespeed/runWavespeedModel';
@@ -11,10 +10,31 @@ import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
-import { getVendorApiKeyByVendorName } from '../../database/vendor_apis';
-import { calculatePricingUtil } from '../../shared/calculateCosts';
 import { runKieModel } from '../../api-vendors/kie/runKieModel';
 import { runOpenaiModel } from '../../api-vendors/openai/runOpenaiModel';
+import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
+
+type PlaygroundApiSchema = {
+  type?: unknown;
+  vendor_model_name?: unknown;
+  server?: unknown;
+  api_path?: unknown;
+};
+
+function instantModelResponse(genModel: Awaited<ReturnType<typeof getGenModelById>>) {
+  const apiSchema = (genModel.gen_models_apis_id?.api_schema ?? {}) as PlaygroundApiSchema;
+  const vendorName = genModel.gen_models_apis_id?.vendor_api?.vendor_name ?? 'instant';
+  const vendorModelName =
+    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+
+  return {
+    id: `${vendorName}-instant-${Date.now()}`,
+    request_id: null,
+    status: 'pending',
+    deferred_to_webhook: true,
+    model: vendorModelName,
+  };
+}
 
 export async function playgroundModelRun(req: Request, res: Response): Promise<void> {
   try {
@@ -30,39 +50,43 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
     }
 
     const genModel = await getGenModelById(id);
+    const apiSchema = (genModel.gen_models_apis_id?.api_schema ?? {}) as PlaygroundApiSchema;
+    const apiSchemaType = typeof apiSchema.type === 'string' ? apiSchema.type.trim().toLowerCase() : '';
 
     let response = null;
-    let cost: number = 0;
-    switch (genModel.gen_models_apis_id?.vendor_api?.vendor_name) {
-      case 'xai':
-        response = await runXaiModel(genModel, payload);
-        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
-        break;
-      case 'wavespeed':
-        response = await runWavespeedModel(genModel, payload);
-        cost = await getWavespeedCost(
-          genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,
-          payload,
-          genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
-          genModel.gen_models_apis_id?.vendor_api?.config?.cost_api_endpoint ?? null
-        );
-        break;
-      case 'kie':
-        response = await runKieModel(genModel, payload);
-        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
-        break;
-      case 'openai':
-        response = await runOpenaiModel(genModel, payload);
-        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
-        break;
-      default:
-        throw new AppError('Invalid vendor', {
-          statusCode: 400,
-          code: 'invalid_vendor',
-          expose: true,
-        });
-        break;
+    if (apiSchemaType === 'instant') {
+      response = instantModelResponse(genModel);
+    } else {
+      switch (genModel.gen_models_apis_id?.vendor_api?.vendor_name) {
+        case 'xai':
+          response = await runXaiModel({
+            payload,
+            server: typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '',
+            apiPath: typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim() : '',
+            apiKey: genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
+            vendorModelName:
+              typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '',
+          });
+          break;
+        case 'wavespeed':
+          response = await runWavespeedModel(genModel, payload);
+          break;
+        case 'kie':
+          response = await runKieModel(genModel, payload);
+          break;
+        case 'openai':
+          response = await runOpenaiModel(genModel, payload);
+          break;
+        default:
+          throw new AppError('Invalid vendor', {
+            statusCode: 400,
+            code: 'invalid_vendor',
+            expose: true,
+          });
+          break;
+      }
     }
+    const cost = await calculatePlaygroundRunCost(genModel, payload);
 
     const genModelRun = await createUserGenModelRun({
       user_id: userId,

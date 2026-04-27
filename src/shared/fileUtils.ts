@@ -199,6 +199,44 @@ export const getMimeType = (url: string): string => {
   return mimeTypes[extension] || 'application/octet-stream';
 };
 
+export const getFileExtensionFromMimeType = (mimeType: string): string => {
+  const normalized = mimeType.toLowerCase().split(';')[0]?.trim();
+  const extensionsByMimeType: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/bmp': 'bmp',
+    'image/svg+xml': 'svg',
+    'image/tiff': 'tiff',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/ogg': 'ogg',
+    'application/pdf': 'pdf',
+    'text/plain': 'txt',
+  };
+
+  return normalized ? extensionsByMimeType[normalized] || 'bin' : 'bin';
+};
+
+export const base64WithoutDataUrl = (value: string): string => {
+  const trimmed = value.trim();
+  const commaIndex = trimmed.indexOf(',');
+  if (trimmed.startsWith('data:') && commaIndex >= 0) {
+    return trimmed.slice(commaIndex + 1);
+  }
+  return trimmed;
+};
+
+export const mimeFromBase64DataUrl = (value: string, fallback = 'image/png'): string => {
+  const match = value.trim().match(/^data:([^;]+);base64,/i);
+  return match?.[1] || fallback;
+};
+
 /**
  * Get filename from URL without extension
  */

@@ -1,13 +1,12 @@
 import axios from 'axios';
 import { AppError } from '../../app/error';
-import { GenModelRow } from '../../database/types';
 
-export const XAI_INSTANT_IMAGE_VENDOR_MODEL = 'grok-imagine-image';
-
-type XaiApiSchema = {
-  server?: string;
-  api_path?: string;
-  vendor_model_name?: string;
+export type RunXaiModelInput = {
+  payload: unknown;
+  server: string;
+  apiPath: string;
+  apiKey?: string | null;
+  vendorModelName: string;
 };
 
 function normalizeXaiRequestPayload(payload: unknown): Record<string, unknown> {
@@ -34,23 +33,9 @@ function normalizeXaiRequestPayload(payload: unknown): Record<string, unknown> {
   return requestPayload;
 }
 
-export async function runXaiModel(genModel: GenModelRow, payload: unknown) {
-  const apiSchema = (genModel.gen_models_apis_id?.api_schema as XaiApiSchema | null) ?? {};
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
-  if (vendorModelName === XAI_INSTANT_IMAGE_VENDOR_MODEL) {
-    // Do not call xAI endpoint here; webhook handles the actual generation call.
-    return {
-      id: `xai-instant-${Date.now()}`,
-      request_id: null,
-      status: 'pending',
-      deferred_to_webhook: true,
-      model: vendorModelName,
-    };
-  }
-
-  const endpoint = `${apiSchema.server ?? ''}${apiSchema.api_path ?? ''}`;
-  const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key;
+export async function runXaiModel(input: RunXaiModelInput) {
+  const { payload, server, apiPath, apiKey, vendorModelName } = input;
+  const endpoint = `${server}${apiPath}`;
   const requestPayload = normalizeXaiRequestPayload(payload);
   
   const payloadData = {

@@ -1,9 +1,12 @@
 import axios from 'axios';
-import { USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT } from '../../database/const';
-import { GenModelRow, UserGenModelRuns } from '../../database/types';
-import { getUserGenModelRunById, updateUserGenModelRun } from '../../database/user_gen_model_runs';
-import { insertUserUsageLog } from '../../database/user_usage_log';
-import { saveFileFromBuffer } from '../../shared/fileUtils';
+import {
+  base64WithoutDataUrl,
+  getFileExtensionFromMimeType,
+  mimeFromBase64DataUrl,
+  saveFileFromBuffer,
+} from '../../shared/fileUtils';
+import type { WebhookVendorContext } from '../../controllers/webhooks/webhookPolling';
+import { completeWebhookRun, durationForRun, errorWebhookRun } from '../../shared/webhooksUtils';
 
 type OpenaiApiSchema = {
   server?: string;
@@ -17,41 +20,68 @@ type OpenaiImageItem = {
   image_base64?: unknown;
 };
 
-function runRowForDbUpdate(r: UserGenModelRuns): UserGenModelRuns {
-  const { gen_models: _embed, ...rest } = r as UserGenModelRuns & { gen_models?: unknown };
-  return rest as UserGenModelRuns;
+const OPENAI_SIZE_TIERS: Record<string, number> = {
+  '1K': 1024,
+  '2K': 2048,
+  '4K': 3840,
+};
+
+function parseAspectRatio(value: unknown): { width: number; height: number } | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim().toLowerCase();
+  if (!raw || raw === 'auto') return null;
+  const [rawWidth, rawHeight] = raw.split(':');
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+function roundUpToMultiple(value: number, multiple: number): number {
+  return Math.ceil(value / multiple) * multiple;
+}
+
+function openaiSizeFromAspectRatioResolution(aspectRatio: unknown, resolution: unknown): string | null {
+  if (typeof aspectRatio === 'string' && aspectRatio.trim().toLowerCase() === 'auto') {
+    return 'auto';
+  }
+
+  const ratio = parseAspectRatio(aspectRatio);
+  const resolutionKey = typeof resolution === 'string' ? resolution.trim().toUpperCase() : '';
+  const longEdge = OPENAI_SIZE_TIERS[resolutionKey];
+  if (!ratio || !longEdge) return null;
+
+  const isLandscape = ratio.width >= ratio.height;
+  const shortEdge = roundUpToMultiple(
+    (longEdge * Math.min(ratio.width, ratio.height)) / Math.max(ratio.width, ratio.height),
+    16
+  );
+  const width = isLandscape ? longEdge : shortEdge;
+  const height = isLandscape ? shortEdge : longEdge;
+
+  return `${width}x${height}`;
 }
 
 function normalizeOpenaiRequestPayload(payload: unknown): Record<string, unknown> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   const requestPayload: Record<string, unknown> = { ...originalPayload };
+  const hasSizeInputs = 'aspect_ratio' in requestPayload || 'resolution' in requestPayload;
+  const size = openaiSizeFromAspectRatioResolution(requestPayload.aspect_ratio, requestPayload.resolution);
+  if (size) {
+    requestPayload.size = size;
+  }
+  if (hasSizeInputs) {
+    delete requestPayload.aspect_ratio;
+    delete requestPayload.resolution;
+  }
   if (Array.isArray(requestPayload.images) && requestPayload.images.length > 0) {
     requestPayload.images = requestPayload.images.filter(
       image => typeof image === 'string' && image.trim().length > 0
     );
+    requestPayload.image = requestPayload.images;
+    delete requestPayload.images;
   }
   return requestPayload;
-}
-
-function base64WithoutDataUrl(value: string): string {
-  const trimmed = value.trim();
-  const commaIndex = trimmed.indexOf(',');
-  if (trimmed.startsWith('data:') && commaIndex >= 0) {
-    return trimmed.slice(commaIndex + 1);
-  }
-  return trimmed;
-}
-
-function mimeFromBase64(value: string): string {
-  const match = value.trim().match(/^data:([^;]+);base64,/i);
-  return match?.[1] || 'image/png';
-}
-
-function extensionFromMime(mimeType: string): string {
-  if (mimeType === 'image/jpeg') return 'jpg';
-  if (mimeType === 'image/webp') return 'webp';
-  if (mimeType === 'image/gif') return 'gif';
-  return 'png';
 }
 
 function collectOpenaiBase64Images(responseData: unknown): Array<{ base64: string; mimeType: string }> {
@@ -59,7 +89,7 @@ function collectOpenaiBase64Images(responseData: unknown): Array<{ base64: strin
   const visit = (value: unknown) => {
     if (!value) return;
     if (typeof value === 'string' && value.trim()) {
-      out.push({ base64: base64WithoutDataUrl(value), mimeType: mimeFromBase64(value) });
+      out.push({ base64: base64WithoutDataUrl(value), mimeType: mimeFromBase64DataUrl(value) });
       return;
     }
     if (Array.isArray(value)) {
@@ -70,7 +100,7 @@ function collectOpenaiBase64Images(responseData: unknown): Array<{ base64: strin
     const item = value as OpenaiImageItem & Record<string, unknown>;
     const direct = item.b64_json ?? item.base64 ?? item.image_base64;
     if (typeof direct === 'string' && direct.trim()) {
-      out.push({ base64: base64WithoutDataUrl(direct), mimeType: mimeFromBase64(direct) });
+      out.push({ base64: base64WithoutDataUrl(direct), mimeType: mimeFromBase64DataUrl(direct) });
       return;
     }
     if (Array.isArray(item.data)) visit(item.data);
@@ -94,60 +124,21 @@ function openaiErrorMessage(responseData: unknown): string | null {
   return null;
 }
 
-export async function webhookOpenai(runRow: UserGenModelRuns): Promise<void> {
-  if (!runRow.gen_model_id) {
-    throw new Error('openai webhook requires gen_model_id');
-  }
-
-  const runId = String(runRow.id ?? '').trim();
-  if (!runId) {
-    throw new Error('openai webhook: user_gen_model_runs id missing');
-  }
-
-  const latest = await getUserGenModelRunById(runId);
-  if (!latest) {
-    console.log('[webhookOpenai] skip: run not found', { run_id: runId });
-    return;
-  }
-
-  const dbRow = latest as UserGenModelRuns;
-  const rowStatus = (dbRow.status ?? '').toLowerCase().trim();
-  if (rowStatus === 'completed' || rowStatus === 'error') {
-    console.log('[webhookOpenai] skip: terminal status', { task_id: dbRow.task_id, status: rowStatus });
-    return;
-  }
-  if (rowStatus !== 'pending' && rowStatus !== 'processing' && rowStatus !== 'finalizing') {
-    console.log('[webhookOpenai] skip: unexpected status', { task_id: dbRow.task_id, status: rowStatus });
-    return;
-  }
-
-  const run: UserGenModelRuns = { ...dbRow, id: runId };
-  const rawGen = run.gen_model_id;
-  if (!rawGen || typeof rawGen !== 'object' || Array.isArray(rawGen)) {
-    throw new Error(
-      'openai webhook: gen_model_id must be an embedded row (use getUserGenModelRunById / RUN_HISTORY_SELECT)'
-    );
-  }
-
-  const genEmbed = rawGen as GenModelRow;
-  const apiSchema = (genEmbed.gen_models_apis_id?.api_schema ?? {}) as OpenaiApiSchema;
+export async function webhookOpenai(context: WebhookVendorContext<OpenaiApiSchema>): Promise<void> {
+  const { run, runId, rowStatus, apiSchema, apiKey, vendorModelName } = context;
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const apiPath = typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim() : '';
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
   if (!server || !apiPath) {
     throw new Error('openai api_schema missing server/api_path');
   }
 
-  const apiKeyRaw = genEmbed.gen_models_apis_id?.vendor_api?.api_key;
-  const apiKey = typeof apiKeyRaw === 'string' ? apiKeyRaw : '';
   const endpoint = `${server}${apiPath}`;
   const requestPayload = {
     ...normalizeOpenaiRequestPayload(run.payload),
     model: vendorModelName,
     moderation: 'low',
   };
-  const duration = Math.floor((Date.now() - new Date(run.created_at ?? Date.now()).getTime()) / 1000);
+  const duration = durationForRun(run);
   let lastResponse: unknown = {};
 
   try {
@@ -174,37 +165,21 @@ export async function webhookOpenai(runRow: UserGenModelRuns): Promise<void> {
     for (let index = 0; index < images.length; index++) {
       const image = images[index];
       const buffer = Buffer.from(image.base64, 'base64');
-      const ext = extensionFromMime(image.mimeType);
+      const ext = getFileExtensionFromMimeType(image.mimeType);
       const filename = `openai-${runId}-${index + 1}.${ext}`;
       const savedFile = await saveFileFromBuffer(buffer, filename, image.mimeType, run, lastResponse);
       if (savedFile) files.push(savedFile);
     }
 
-    await updateUserGenModelRun({
-      ...runRowForDbUpdate(run),
-      polling_response: { webhook: lastResponse, files },
-      status: 'completed',
-      duration,
-    });
+    await completeWebhookRun({ run, response: lastResponse, files, duration });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookOpenai] caught error while processing', { run_id: run.id, message });
-    await updateUserGenModelRun({
-      ...runRowForDbUpdate(run),
-      polling_response: { webhook: lastResponse, error: message || 'Generation failed, please try again.' },
-      status: 'error',
+    await errorWebhookRun({
+      run,
+      response: lastResponse,
+      message: message || 'Generation failed, please try again.',
       duration,
-    });
-    await insertUserUsageLog({
-      user_id: run.user_id,
-      usage_amount: run.cost,
-      type_id: USAGE_LOG_TYPE_AI_MODEL_ERROR_REFUND_CREDIT,
-      gen_model_run_id: run.id,
-      transaction_id: null,
-      meta: {
-        model_name: run.gen_model_id,
-        error: message,
-      },
     });
     throw error;
   }
