@@ -21,9 +21,12 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
       case 'xai':
         cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
         break;
-        case 'kie':
-          cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
-          break;
+      case 'kie':
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+        break;
+      case 'openai':
+        cost = await calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+        break;
       case 'wavespeed':
         cost = await getWavespeedCost(
           genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,
