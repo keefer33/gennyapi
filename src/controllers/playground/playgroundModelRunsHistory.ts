@@ -3,7 +3,7 @@ import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
 /**
- * GET /playground/runs?page=1&limit=50&gen_model_id=&brands=slug1,slug2&model_product=p1,p2&file_type_filter=all|images|videos|audio&tags=id1,id2
+ * GET /playground/runs?page=1&limit=50&gen_model_id=&brands=slug1,slug2&model_product=p1,p2&model_type=t1,t2&file_type_filter=all|images|videos|audio&tags=id1,id2
  */
 export async function playgroundModelRunsHistory(req: Request, res: Response): Promise<void> {
   try {
@@ -40,12 +40,19 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
       .map(s => s.trim())
       .filter(Boolean);
 
+    const modelTypeParam = typeof req.query.model_type === 'string' ? req.query.model_type : '';
+    const model_types = modelTypeParam
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const { rows, total } = await listUserGenModelRunsForUser(userId, {
       page,
       limit,
       gen_model_id: genModelId,
       brand_slugs,
       model_products,
+      model_types,
       file_type_filter,
       tag_ids,
     });

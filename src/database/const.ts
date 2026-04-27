@@ -29,6 +29,7 @@ export const PLAYGROUND_LIST_SELECT = `
   model_variant,
   brand_name(id, name, slug, logo),
   sort_order,
+  sort_order_variant,
   gen_models_apis_id,
   gen_models_apis!gen_models_gen_models_apis_id_fkey (
     id,
@@ -57,7 +58,7 @@ export const RUN_HISTORY_SELECT = `
   task_id,
   cost,
   duration,
-  user_files(id, file_name, thumbnail_url, file_path, file_type, created_at, status),
+  user_files(*),
   payload,
   response,
   polling_response
@@ -129,6 +130,7 @@ export const GEN_MODEL_DETAIL_SELECT = `
   model_variant,
   brand_name(id, name, slug, logo),
   sort_order,
+  sort_order_variant,
   gen_models_apis_id(
     id,
     api_schema,
