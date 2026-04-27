@@ -75,9 +75,9 @@ function normalizeOpenaiRequestPayload(payload: unknown): Record<string, unknown
     delete requestPayload.resolution;
   }
   if (Array.isArray(requestPayload.images) && requestPayload.images.length > 0) {
-    requestPayload.images = requestPayload.images.filter(
-      image => typeof image === 'string' && image.trim().length > 0
-    );
+    requestPayload.images = requestPayload.images
+      .filter(image => typeof image === 'string' && image.trim().length > 0)
+      .map(image => ({ image_url: image }));
   }
   return requestPayload;
 }
