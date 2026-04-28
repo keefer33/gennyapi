@@ -499,7 +499,6 @@ const generateThumbnail = async (
 export const saveFileFromUrl = async (
   url: string,
   pollingFileData: any,
-  pollingFileResponse: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
   try {
     const runId =
@@ -551,17 +550,9 @@ export const saveFileFromUrl = async (
     const uploadedFile = uploadResponse.files[0];
 
     const zipData = await getZipData(uploadedFile.id, authToken);
-    const callbackData =
-      pollingFileResponse &&
-      typeof pollingFileResponse === 'object' &&
-      'data' in pollingFileResponse &&
-      (pollingFileResponse as { data?: unknown }).data !== undefined
-        ? (pollingFileResponse as { data?: unknown }).data
-        : pollingFileResponse;
 
     const generatedInfo = {
-      payload: pollingFileData.payload,
-      callback_data: callbackData,
+      payload: pollingFileData.payload
     };
 
     // Generate thumbnail if file is an image or video
@@ -647,17 +638,9 @@ export const saveFileFromBuffer = async (
 
     const uploadedFile = uploadResponse.files[0];
     const zipData = await getZipData(uploadedFile.id, authToken);
-    const callbackData =
-      pollingFileResponse &&
-      typeof pollingFileResponse === 'object' &&
-      'data' in pollingFileResponse &&
-      (pollingFileResponse as { data?: unknown }).data !== undefined
-        ? (pollingFileResponse as { data?: unknown }).data
-        : pollingFileResponse;
 
     const generatedInfo = {
       payload: pollingFileData.payload,
-      callback_data: callbackData,
     };
 
     const fakeUrlForType = `https://temp/${filename.toLowerCase()}`;

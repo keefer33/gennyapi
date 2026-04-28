@@ -25,6 +25,13 @@ const OPENAI_SIZE_TIERS: Record<string, number> = {
   '2K': 2048,
   '4K': 3840,
 };
+const OPENAI_IMAGE_EDGE_MULTIPLE = 16;
+const OPENAI_IMAGE_MAX_EDGE = 3840;
+const OPENAI_IMAGE_MAX_ASPECT_RATIO = 3;
+const OPENAI_IMAGE_MIN_PIXELS = 655_360;
+const OPENAI_IMAGE_MAX_PIXELS = 8_294_400;
+
+type OpenaiImageDimensions = { width: number; height: number };
 
 function parseAspectRatio(value: unknown): { width: number; height: number } | null {
   if (typeof value !== 'string') return null;
@@ -41,6 +48,46 @@ function roundUpToMultiple(value: number, multiple: number): number {
   return Math.ceil(value / multiple) * multiple;
 }
 
+function pixelCount(dimensions: OpenaiImageDimensions): number {
+  return dimensions.width * dimensions.height;
+}
+
+function normalizeOpenaiImageDimensions(target: OpenaiImageDimensions): OpenaiImageDimensions {
+  const targetArea = Math.min(OPENAI_IMAGE_MAX_PIXELS, Math.max(OPENAI_IMAGE_MIN_PIXELS, pixelCount(target)));
+  const targetAspectRatio = target.width / target.height;
+  const targetIsLandscape = target.width >= target.height;
+  let best: { dimensions: OpenaiImageDimensions; score: number } | null = null;
+
+  for (let width = OPENAI_IMAGE_EDGE_MULTIPLE; width <= OPENAI_IMAGE_MAX_EDGE; width += OPENAI_IMAGE_EDGE_MULTIPLE) {
+    for (
+      let height = OPENAI_IMAGE_EDGE_MULTIPLE;
+      height <= OPENAI_IMAGE_MAX_EDGE;
+      height += OPENAI_IMAGE_EDGE_MULTIPLE
+    ) {
+      if (targetIsLandscape && width < height) continue;
+      if (!targetIsLandscape && height < width) continue;
+
+      const area = width * height;
+      if (area < OPENAI_IMAGE_MIN_PIXELS || area > OPENAI_IMAGE_MAX_PIXELS) continue;
+
+      const longEdge = Math.max(width, height);
+      const shortEdge = Math.min(width, height);
+      if (longEdge / shortEdge > OPENAI_IMAGE_MAX_ASPECT_RATIO) continue;
+
+      const areaScore = Math.abs(Math.log(area / targetArea)) * 10;
+      const ratioScore = Math.abs(Math.log(width / height / targetAspectRatio)) * 100;
+      const edgeScore = Math.abs(Math.log(width / target.width)) + Math.abs(Math.log(height / target.height));
+      const score = areaScore + ratioScore + edgeScore;
+
+      if (!best || score < best.score) {
+        best = { dimensions: { width, height }, score };
+      }
+    }
+  }
+
+  return best?.dimensions ?? target;
+}
+
 function openaiSizeFromAspectRatioResolution(aspectRatio: unknown, resolution: unknown): string | null {
   if (typeof aspectRatio === 'string' && aspectRatio.trim().toLowerCase() === 'auto') {
     return 'auto';
@@ -52,14 +99,18 @@ function openaiSizeFromAspectRatioResolution(aspectRatio: unknown, resolution: u
   if (!ratio || !longEdge) return null;
 
   const isLandscape = ratio.width >= ratio.height;
-  const shortEdge = roundUpToMultiple(
-    (longEdge * Math.min(ratio.width, ratio.height)) / Math.max(ratio.width, ratio.height),
-    16
+  const constrainedRatio = Math.min(
+    Math.max(ratio.width, ratio.height) / Math.min(ratio.width, ratio.height),
+    OPENAI_IMAGE_MAX_ASPECT_RATIO
   );
-  const width = isLandscape ? longEdge : shortEdge;
-  const height = isLandscape ? shortEdge : longEdge;
+  const targetLongEdge = Math.min(longEdge, OPENAI_IMAGE_MAX_EDGE);
+  const targetShortEdge = roundUpToMultiple(targetLongEdge / constrainedRatio, OPENAI_IMAGE_EDGE_MULTIPLE);
+  const dimensions = normalizeOpenaiImageDimensions({
+    width: isLandscape ? targetLongEdge : targetShortEdge,
+    height: isLandscape ? targetShortEdge : targetLongEdge,
+  });
 
-  return `${width}x${height}`;
+  return `${dimensions.width}x${dimensions.height}`;
 }
 
 function normalizeOpenaiRequestPayload(payload: unknown): Record<string, unknown> {

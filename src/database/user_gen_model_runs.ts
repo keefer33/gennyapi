@@ -18,20 +18,6 @@ export async function createUserGenModelRun(input: UserGenModelRuns): Promise<Cr
   return data;
 }
 
-// sdk/userGenModelRuns.js
-export async function getUniqueGenModelIds(userId: string) {
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('user_gen_model_runs')
-    .select('gen_model_id')
-    .not('gen_model_id', 'is', null)
-    .eq('user_id', userId)
-  if (error) throw error
-
-  // Deduplicate in JS
-  return [...new Set(data.map((row) => row.gen_model_id))]
-}
-
 export async function getUserGenModelRunByTaskId(taskId: string): Promise<UserGenModelRuns | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data: row, error } = await supabaseServerClient

@@ -10,7 +10,6 @@ export async function playgroundRunCost(req: Request, res: Response): Promise<vo
     const modelId = body.modelId ?? '';
     const payload = body.payload ?? {};
     const genModel = await getGenModelById(modelId);
-    console.log('genModel', genModel);
     const cost = await calculatePlaygroundRunCost(genModel, payload);
     sendOk(res, { cost });
   } catch (error: unknown) {

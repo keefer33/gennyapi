@@ -61,11 +61,7 @@ export async function errorWebhookRun(input: {
   });
 }
 
-export async function tickWebhookRun(input: {
-  runId: string;
-  duration: number;
-  delayMs?: number;
-}): Promise<void> {
+export async function tickWebhookRun(input: { runId: string; duration: number; delayMs?: number }): Promise<void> {
   const { runId, duration, delayMs = DEFAULT_POLL_TICK_MS } = input;
   await sleep(delayMs);
   await updateUserGenModelRun({ id: runId, duration });
@@ -101,7 +97,7 @@ export const processResponse = async (
       const url = output[index];
       if (typeof url === 'string' && url.trim()) {
         try {
-          const savedFile = await saveFileFromUrl(url.trim(), pollingFileData, pollingFileResponse);
+          const savedFile = await saveFileFromUrl(url.trim(), pollingFileData);
           if (savedFile) files.push(savedFile);
         } catch (_error) {
           await failWebhookGeneration(pollingFileData, pollingFileResponse);
@@ -114,7 +110,7 @@ export const processResponse = async (
 
   const fileUrl = typeof output === 'string' ? output : null;
   try {
-    const savedFile = await saveFileFromUrl(fileUrl, pollingFileData, pollingFileResponse);
+    const savedFile = await saveFileFromUrl(fileUrl, pollingFileData);
     if (savedFile) return { status: 'completed', files: [savedFile] };
   } catch (_error) {
     await failWebhookGeneration(pollingFileData, pollingFileResponse);

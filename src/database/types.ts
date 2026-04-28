@@ -63,6 +63,7 @@ export type UserGenModelRunListRow = UserGenModelRuns & {
   preview_urls?: string[];
   preview_file_types?: string[];
   preview_files?: Array<{ id: string; file_name: string }>;
+  user_files?: UserFileEmbed[];
 };
 
 export type UserFileEmbed = {
@@ -71,7 +72,9 @@ export type UserFileEmbed = {
   created_at?: string;
   thumbnail_url?: string | null;
   file_path?: string | null;
+  file_size?: number | null;
   file_type?: string | null;
+  status?: string | null;
 };
 
 export type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_model_id']>;
