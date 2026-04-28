@@ -49,25 +49,3 @@ export async function getGenModelsList(): Promise<GenModelRow[]> {
   }
   return rows as GenModelRow[];
 }
-
-export async function getGenModelsListByIds(ids: string[]): Promise<GenModelRow[]> {
-  if (!ids.length) {
-    return [];
-  }
-
-  const { supabaseServerClient } = await getServerClient();
-  const { data: rows, error } = await supabaseServerClient
-    .from('gen_models')
-    .select(GEN_MODEL_DETAIL_SELECT)
-    .in('id', ids);
-  if (error) {
-    console.error('gen_models_fetch_failed', error);
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'gen_models_fetch_failed',
-      expose: false,
-    });
-  }
-
-  return rows as GenModelRow[];
-}
