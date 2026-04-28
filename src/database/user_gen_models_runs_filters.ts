@@ -112,7 +112,7 @@ export async function listUserGenModelRunsForUser(
     }
   
     const countQuery = applyRunFilters(
-      supabaseServerClient.from('user_gen_model_runs').select('id', { count: 'planned', head: true })
+      supabaseServerClient.from('user_gen_model_runs').select('id', { count: 'exact', head: true })
     );
     const { count, error: countError } = await countQuery;
     if (countError) {
