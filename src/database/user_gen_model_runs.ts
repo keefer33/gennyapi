@@ -2,10 +2,17 @@ import { getServerClient } from './supabaseClient';
 import { AppError } from '../app/error';
 import { CreateUserGenModelRunResult, UserGenModelRuns } from './types';
 import { RUN_HISTORY_SELECT } from './const';
+import { sanitizeGenerationData } from '../shared/sanitizeGenerationData';
 
 export async function createUserGenModelRun(input: UserGenModelRuns): Promise<CreateUserGenModelRunResult> {
   const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient.from('user_gen_model_runs').insert(input).select('*').single();
+  const row = {
+    ...input,
+    response: input.response === undefined ? undefined : sanitizeGenerationData(input.response),
+    polling_response:
+      input.polling_response === undefined ? undefined : sanitizeGenerationData(input.polling_response),
+  };
+  const { data, error } = await supabaseServerClient.from('user_gen_model_runs').insert(row).select('*').single();
 
   if (error) {
     throw new AppError(error.message, {
@@ -110,6 +117,8 @@ function patchForUserGenModelRunUpdate(input: UserGenModelRuns): Record<string, 
     if (v === undefined) continue;
     if (key === 'gen_model_id') {
       patch.gen_model_id = normalizeGenModelIdForPatch(v);
+    } else if (key === 'response' || key === 'polling_response') {
+      patch[key] = sanitizeGenerationData(v);
     } else {
       patch[key] = v;
     }

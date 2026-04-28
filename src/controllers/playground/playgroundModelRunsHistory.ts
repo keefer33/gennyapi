@@ -42,7 +42,7 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
       model_products,
       model_types,
     });
-
+console.log({ items: rows, total, page, limit });
     sendOk(res, { items: rows, total, page, limit });
   } catch (err) {
     sendError(res, err);
