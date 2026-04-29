@@ -340,7 +340,8 @@ async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>)
     }
 
     const images = collectGoogleBase64Images(lastResponse);
-    const urls = collectStringValues(lastResponse, new Set(['url', 'uri', 'gcsUri']));
+    // Gemini image responses may include grounding/search result URLs. Those are citations, not generated files.
+    const urls = isGeminiImage ? [] : collectStringValues(lastResponse, new Set(['url', 'uri', 'gcsUri']));
     if (images.length === 0 && urls.length === 0) {
       throw new Error(googleErrorMessage(lastResponse) || 'google image response did not include images');
     }
