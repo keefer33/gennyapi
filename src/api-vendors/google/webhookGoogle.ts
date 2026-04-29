@@ -15,6 +15,8 @@ import {
 } from '../../shared/webhooksUtils';
 
 const DEFAULT_GOOGLE_GEMINI_SERVER = 'https://generativelanguage.googleapis.com/v1beta';
+const GOOGLE_IMAGE_SYSTEM_INSTRUCTION =
+  'You are an image generation model. Always return an image response for the user request. Do not return text-only output.';
 
 type GoogleApiSchema = {
   server?: unknown;
@@ -118,6 +120,18 @@ function googleSearchTools(payload: Record<string, unknown>): Record<string, unk
   return [{ google_search: googleSearch }];
 }
 
+function googleImageSystemInstruction(existing: unknown): Record<string, unknown> {
+  const instructionPart = { text: GOOGLE_IMAGE_SYSTEM_INSTRUCTION };
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
+    return { parts: [instructionPart] };
+  }
+
+  const out = { ...(existing as Record<string, unknown>) };
+  const parts = Array.isArray(out.parts) ? out.parts : [];
+  out.parts = [instructionPart, ...parts];
+  return out;
+}
+
 async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   const tools = googleSearchTools(originalPayload);
@@ -134,10 +148,10 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
         : {};
     generationConfig.responseModalities = ['IMAGE'];
     requestPayload.generationConfig = generationConfig;
+    requestPayload.systemInstruction = googleImageSystemInstruction(requestPayload.systemInstruction);
     return requestPayload;
   }
 
-  
   const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
   const parts: Record<string, unknown>[] = prompt ? [{ text: prompt }] : [];
   const images = Array.isArray(originalPayload.images)
@@ -168,6 +182,7 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
 
   return {
     contents: [{ parts }],
+    systemInstruction: googleImageSystemInstruction(originalPayload.systemInstruction),
     ...(tools ? { tools } : {}),
     ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
   };
