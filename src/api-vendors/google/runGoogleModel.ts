@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
+import { base64WithoutDataUrl, mimeFromBase64DataUrl } from '../../shared/fileUtils';
 
 const DEFAULT_GOOGLE_GEMINI_SERVER = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -42,39 +43,119 @@ function googleEndpoint(apiSchema: GoogleApiSchema, fallbackMethod: string): str
   return `${server}/models/${encodeURIComponent(vendorModelName)}:${fallbackMethod}`;
 }
 
-function googleVideoRequestPayload(payload: unknown): Record<string, unknown> {
+function trimString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeGoogleVideoParameters(parameters: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...parameters };
+  if (out.duration !== undefined && out.durationSeconds === undefined) {
+    out.durationSeconds = out.duration;
+    delete out.duration;
+  }
+  if (out.aspect_ratio !== undefined && out.aspectRatio === undefined) {
+    out.aspectRatio = out.aspect_ratio;
+    delete out.aspect_ratio;
+  }
+  if (out.negative_prompt !== undefined && out.negativePrompt === undefined) {
+    out.negativePrompt = out.negative_prompt;
+    delete out.negative_prompt;
+  }
+  return out;
+}
+
+function googleImageSource(input: unknown): string {
+  if (typeof input === 'string') return input.trim();
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
+  const item = input as Record<string, unknown>;
+  return trimString(item.url) || trimString(item.file_path) || trimString(item.filePath);
+}
+
+async function googleVideoImage(input: unknown): Promise<unknown> {
+  if (Array.isArray(input)) {
+    return input.length > 0 ? googleVideoImage(input[0]) : input;
+  }
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    const source = googleImageSource(input);
+    if (!source) return input;
+    if (/^data:/i.test(source)) {
+      return {
+        bytesBase64Encoded: base64WithoutDataUrl(source),
+        mimeType: mimeFromBase64DataUrl(source),
+      };
+    }
+    if (/^https?:\/\//i.test(source)) {
+      const response = await axios.get(source, {
+        responseType: 'arraybuffer',
+        validateStatus: () => true,
+      });
+      if (response.status < 200 || response.status >= 300) {
+        throw new AppError('Failed to fetch image for Google video input', {
+          statusCode: 502,
+          code: 'google_video_input_image_fetch_failed',
+          details: { status: response.status },
+          expose: true,
+        });
+      }
+      return {
+        bytesBase64Encoded: Buffer.from(response.data).toString('base64'),
+        mimeType: response.headers['content-type']?.split(';')[0]?.trim() || 'image/png',
+      };
+    }
+    return input;
+  }
+
+  const item = input as Record<string, unknown>;
+  if (item.bytesBase64Encoded || item.gcsUri) return item;
+  const source = googleImageSource(item);
+  return source ? googleVideoImage(source) : item;
+}
+
+async function googleVideoRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   if (Array.isArray(originalPayload.instances)) return originalPayload;
 
   const prompt = typeof originalPayload.prompt === 'string' ? originalPayload.prompt : '';
-  const parameters = { ...originalPayload };
-  delete parameters.prompt;
-  delete parameters.image;
-  delete parameters.images;
-  delete parameters.video;
-  delete parameters.videos;
-  delete parameters.instances;
-  delete parameters.parameters;
-  if (parameters.duration !== undefined && parameters.durationSeconds === undefined) {
-    parameters.durationSeconds = parameters.duration;
-    delete parameters.duration;
-  }
-  if (parameters.aspect_ratio !== undefined && parameters.aspectRatio === undefined) {
-    parameters.aspectRatio = parameters.aspect_ratio;
-    delete parameters.aspect_ratio;
-  }
+  const originalParameters =
+    originalPayload.parameters && typeof originalPayload.parameters === 'object'
+      ? (originalPayload.parameters as Record<string, unknown>)
+      : {};
+  const rawParameters =
+    originalPayload.parameters && typeof originalPayload.parameters === 'object'
+      ? { ...originalParameters }
+      : { ...originalPayload };
+  delete rawParameters.prompt;
+  delete rawParameters.image;
+  delete rawParameters.images;
+  delete rawParameters.last_image;
+  delete rawParameters.lastImage;
+  delete rawParameters.lastFrame;
+  delete rawParameters.video;
+  delete rawParameters.videos;
+  delete rawParameters.instances;
+  delete rawParameters.parameters;
+  const parameters = normalizeGoogleVideoParameters(rawParameters);
 
   const instance: Record<string, unknown> = {};
   if (prompt) instance.prompt = prompt;
-  if (originalPayload.image) instance.image = originalPayload.image;
+  if (originalPayload.image) instance.image = await googleVideoImage(originalPayload.image);
+  else if (Array.isArray(originalPayload.images) && originalPayload.images.length > 0) {
+    instance.image = await googleVideoImage(originalPayload.images[0]);
+  }
+  const lastFrame =
+    originalPayload.lastFrame ??
+    originalPayload.lastImage ??
+    originalPayload.last_image ??
+    originalParameters.lastFrame ??
+    originalParameters.lastImage ??
+    originalParameters.last_image;
+  if (lastFrame) instance.lastFrame = await googleVideoImage(lastFrame);
   if (originalPayload.video) instance.video = originalPayload.video;
 
   return {
     instances: [instance],
-    parameters:
-      originalPayload.parameters && typeof originalPayload.parameters === 'object'
-        ? originalPayload.parameters
-        : parameters,
+    parameters,
   };
 }
 
@@ -98,7 +179,7 @@ export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
 
   const response = await axios.post(
     googleEndpoint(apiSchema, 'predictLongRunning'),
-    googleVideoRequestPayload(payload),
+    await googleVideoRequestPayload(payload),
     {
       headers: {
         'Content-Type': 'application/json',
