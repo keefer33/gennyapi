@@ -173,9 +173,16 @@ function collectGoogleBase64Images(responseData: unknown): GoogleImage[] {
       trimString(item.imageBytes) ||
       trimString(item.b64_json) ||
       trimString(item.base64) ||
-      trimString(item.data);
+      trimString(item.data) ||
+      trimString(item.Data);
+    const hasImageData =
+      item.bytesBase64Encoded ||
+      item.imageBytes ||
+      item.b64_json ||
+      item.base64 ||
+      ((item.data || item.Data) && mimeType.toLowerCase().startsWith('image/'));
 
-    if (base64 && (item.bytesBase64Encoded || item.imageBytes || item.b64_json || item.base64 || item.inlineData)) {
+    if (base64 && hasImageData) {
       out.push({ base64: base64WithoutDataUrl(base64), mimeType: mimeFromBase64DataUrl(base64, mimeType) });
       return;
     }
