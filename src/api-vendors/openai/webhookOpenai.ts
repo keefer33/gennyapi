@@ -184,8 +184,7 @@ export async function webhookOpenai(context: WebhookVendorContext<OpenaiApiSchem
   const endpoint = `${server}${apiPath}`;
   const requestPayload = {
     ...normalizeOpenaiRequestPayload(run.payload),
-    model: vendorModelName,
-    moderation: 'low',
+    model: vendorModelName
   };
   const duration = durationForRun(run);
   let lastResponse: unknown = {};

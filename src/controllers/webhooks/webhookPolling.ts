@@ -4,6 +4,7 @@ import { webhookXai } from '../../api-vendors/xai/webhookXai';
 import { GenModelRow, UserGenModelRuns } from '../../database/types';
 import { webhookKie } from '../../api-vendors/kie/webhookKie';
 import { webhookOpenai } from '../../api-vendors/openai/webhookOpenai';
+import { webhookGoogle } from '../../api-vendors/google/webhookGoogle';
 
 const ACTIVE_POLLING_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 
@@ -33,8 +34,7 @@ function buildWebhookVendorContext(runRow: UserGenModelRuns, rowId: string, rowS
   const vendorApi = genModel.gen_models_apis_id?.vendor_api;
   const vendorName = typeof vendorApi?.vendor_name === 'string' ? vendorApi.vendor_name.trim() : '';
   const apiKey = typeof vendorApi?.api_key === 'string' ? vendorApi.api_key : '';
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+  const vendorModelName = typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
 
   return {
     run: { ...runRow, id: rowId },
@@ -98,6 +98,9 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
         break;
       case 'openai':
         await webhookOpenai(vendorContext);
+        break;
+      case 'google':
+        await webhookGoogle(vendorContext);
         break;
       case 'wavespeed':
         break;

@@ -12,6 +12,7 @@ import { updateUserUsageBalance } from '../../database/user_profiles';
 import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
 import { runKieModel } from '../../api-vendors/kie/runKieModel';
 import { runOpenaiModel } from '../../api-vendors/openai/runOpenaiModel';
+import { runGoogleModel } from '../../api-vendors/google/runGoogleModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -24,8 +25,7 @@ type PlaygroundApiSchema = {
 function instantModelResponse(genModel: Awaited<ReturnType<typeof getGenModelById>>) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema ?? {}) as PlaygroundApiSchema;
   const vendorName = genModel.gen_models_apis_id?.vendor_api?.vendor_name ?? 'instant';
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+  const vendorModelName = typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
 
   return {
     id: `${vendorName}-instant-${Date.now()}`,
@@ -64,8 +64,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
             server: typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '',
             apiPath: typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim() : '',
             apiKey: genModel.gen_models_apis_id?.vendor_api?.api_key ?? null,
-            vendorModelName:
-              typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '',
+            vendorModelName: typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '',
           });
           break;
         case 'wavespeed':
@@ -76,6 +75,9 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
           break;
         case 'openai':
           response = await runOpenaiModel(genModel, payload);
+          break;
+        case 'google':
+          response = await runGoogleModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {
