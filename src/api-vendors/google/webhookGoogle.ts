@@ -102,9 +102,34 @@ async function imageInputToGeminiPart(input: unknown): Promise<Record<string, un
   return null;
 }
 
+function googleSearchTools(payload: Record<string, unknown>): Record<string, unknown>[] | undefined {
+  const enableWebSearch = payload.enable_web_search === true || payload.enableWebSearch === true;
+  const enableImageSearch = payload.enable_image_search === true || payload.enableImageSearch === true;
+  if (!enableWebSearch && !enableImageSearch) return undefined;
+
+  const googleSearch: Record<string, unknown> = {};
+  if (enableImageSearch) {
+    googleSearch.searchTypes = {
+      ...(enableWebSearch ? { webSearch: {} } : {}),
+      imageSearch: {},
+    };
+  }
+
+  return [{ google_search: googleSearch }];
+}
+
 async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
-  if (Array.isArray(originalPayload.contents)) return originalPayload;
+  const tools = googleSearchTools(originalPayload);
+  if (Array.isArray(originalPayload.contents)) {
+    const requestPayload = { ...originalPayload };
+    delete requestPayload.enable_web_search;
+    delete requestPayload.enableWebSearch;
+    delete requestPayload.enable_image_search;
+    delete requestPayload.enableImageSearch;
+    if (tools) requestPayload.tools = tools;
+    return requestPayload;
+  }
 
   const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
   const parts: Record<string, unknown>[] = prompt ? [{ text: prompt }] : [];
@@ -119,16 +144,29 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
     if (part) parts.push(part);
   }
 
-  const generationConfig: Record<string, unknown> = {};
-  const imageConfig: Record<string, unknown> = {};
+  const generationConfig: Record<string, unknown> =
+    originalPayload.generationConfig && typeof originalPayload.generationConfig === 'object'
+      ? { ...(originalPayload.generationConfig as Record<string, unknown>) }
+      : {};
+  const imageConfig: Record<string, unknown> =
+    generationConfig.imageConfig && typeof generationConfig.imageConfig === 'object'
+      ? { ...(generationConfig.imageConfig as Record<string, unknown>) }
+      : {};
   const aspectRatio = trimString(originalPayload.aspect_ratio) || trimString(originalPayload.aspectRatio);
   const resolution = trimString(originalPayload.resolution);
   if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
   if (resolution) imageConfig.imageSize = resolution;
   if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
+  if (tools && !Array.isArray(generationConfig.responseModalities)) {
+    generationConfig.responseModalities =
+      originalPayload.enable_image_search === true || originalPayload.enableImageSearch === true
+        ? ['IMAGE']
+        : ['TEXT', 'IMAGE'];
+  }
 
   return {
     contents: [{ parts }],
+    ...(tools ? { tools } : {}),
     ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
   };
 }
