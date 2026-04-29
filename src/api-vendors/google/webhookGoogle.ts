@@ -137,6 +137,7 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
     return requestPayload;
   }
 
+  
   const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
   const parts: Record<string, unknown>[] = prompt ? [{ text: prompt }] : [];
   const images = Array.isArray(originalPayload.images)
