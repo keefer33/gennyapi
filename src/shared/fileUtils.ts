@@ -498,13 +498,11 @@ const generateThumbnail = async (
 
 export const saveFileFromUrl = async (
   url: string,
-  pollingFileData: any,
+  pollingFileData: any
 ): Promise<{ file_id: string | null; file_url: string }> => {
   try {
     const runId =
-      pollingFileData?.id != null && typeof pollingFileData.id === 'string'
-        ? pollingFileData.id.trim()
-        : '';
+      pollingFileData?.id != null && typeof pollingFileData.id === 'string' ? pollingFileData.id.trim() : '';
     if (!runId) {
       throw new Error('saveFileFromUrl: missing user_gen_model_runs id on pollingFileData');
     }
@@ -552,7 +550,7 @@ export const saveFileFromUrl = async (
     const zipData = await getZipData(uploadedFile.id, authToken);
 
     const generatedInfo = {
-      payload: pollingFileData.payload
+      payload: pollingFileData.payload,
     };
 
     // Generate thumbnail if file is an image or video
@@ -645,7 +643,12 @@ export const saveFileFromBuffer = async (
 
     const fakeUrlForType = `https://temp/${filename.toLowerCase()}`;
     let thumbnailUrl: string | undefined;
-    if (isImageUrl(fakeUrlForType) || mimeType.startsWith('image/')) {
+    if (
+      isImageUrl(fakeUrlForType) ||
+      isVideoUrl(fakeUrlForType) ||
+      mimeType.startsWith('image/') ||
+      mimeType.startsWith('video/')
+    ) {
       const thumbnailBuffer = await generateThumbnail(buffer, fakeUrlForType);
       if (thumbnailBuffer) {
         try {

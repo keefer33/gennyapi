@@ -55,6 +55,14 @@ function googleVideoRequestPayload(payload: unknown): Record<string, unknown> {
   delete parameters.videos;
   delete parameters.instances;
   delete parameters.parameters;
+  if (parameters.duration !== undefined && parameters.durationSeconds === undefined) {
+    parameters.durationSeconds = parameters.duration;
+    delete parameters.duration;
+  }
+  if (parameters.aspect_ratio !== undefined && parameters.aspectRatio === undefined) {
+    parameters.aspectRatio = parameters.aspect_ratio;
+    delete parameters.aspect_ratio;
+  }
 
   const instance: Record<string, unknown> = {};
   if (prompt) instance.prompt = prompt;
