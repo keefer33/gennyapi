@@ -329,7 +329,6 @@ async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>)
   const requestPayload = isGeminiImage
     ? await googleGeminiImageRequestPayload(run.payload)
     : googleImagenRequestPayload(run.payload);
-  const duration = durationForRun(run);
   let lastResponse: unknown = {};
 
   try {
@@ -365,16 +364,16 @@ async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>)
         );
         if (savedFile) files.push(savedFile);
       }
-      await completeWebhookRun({ run, response: lastResponse, files, duration });
+      await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
       return;
     }
 
     const savedFiles = await processResponse(urls, run, lastResponse);
-    await completeWebhookRun({ run, response: lastResponse, files: savedFiles, duration });
+    await completeWebhookRun({ run, response: lastResponse, files: savedFiles, duration: durationForRun(run) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookGoogle] image error', { run_id: run.id, message });
-    await errorWebhookRun({ run, response: lastResponse, message, duration });
+    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
     throw error;
   }
 }
@@ -382,7 +381,6 @@ async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>)
 async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
   const { run, runId, rowStatus, apiSchema, apiKey, vendorModelName } = context;
   const taskId = typeof run.task_id === 'string' ? run.task_id.trim() : '';
-  const duration = durationForRun(run);
   let lastResponse: unknown = {};
 
   if (!taskId) {
@@ -412,7 +410,12 @@ async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>)
     }
 
     if ((lastResponse as Record<string, unknown>).error) {
-      await errorWebhookRun({ run, response: lastResponse, message: googleErrorMessage(lastResponse), duration });
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse),
+        duration: durationForRun(run),
+      });
       return;
     }
 
@@ -424,7 +427,7 @@ async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>)
         const savedFile = await saveGoogleUrlFile(urls[index], apiKey, `${runId}-${index + 1}`, run, lastResponse);
         if (savedFile) files.push(savedFile);
       }
-      await completeWebhookRun({ run, response: lastResponse, files, duration });
+      await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
       return;
     }
 
@@ -433,16 +436,16 @@ async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>)
         run,
         response: lastResponse,
         message: 'google video operation completed but no video URI was returned',
-        duration,
+        duration: durationForRun(run),
       });
       return;
     }
 
-    await tickWebhookRun({ runId, duration, delayMs: 5000 });
+    await tickWebhookRun({ runId, duration: durationForRun(run), delayMs: 5000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookGoogle] video error', { run_id: run.id, message });
-    await errorWebhookRun({ run, response: lastResponse, message, duration });
+    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
     throw error;
   }
 }
