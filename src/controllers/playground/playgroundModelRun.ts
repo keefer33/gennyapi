@@ -13,6 +13,7 @@ import { runXaiModel } from '../../api-vendors/xai/runXaiModel';
 import { runKieModel } from '../../api-vendors/kie/runKieModel';
 import { runOpenaiModel } from '../../api-vendors/openai/runOpenaiModel';
 import { runGoogleModel } from '../../api-vendors/google/runGoogleModel';
+import { runAlibabaModel } from '../../api-vendors/alibaba/runAlibabaModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -78,6 +79,9 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
           break;
         case 'google':
           response = await runGoogleModel(genModel, payload);
+          break;
+        case 'alibaba':
+          response = await runAlibabaModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {

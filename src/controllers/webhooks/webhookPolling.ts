@@ -5,6 +5,7 @@ import { GenModelRow, UserGenModelRuns } from '../../database/types';
 import { webhookKie } from '../../api-vendors/kie/webhookKie';
 import { webhookOpenai } from '../../api-vendors/openai/webhookOpenai';
 import { webhookGoogle } from '../../api-vendors/google/webhookGoogle';
+import { webhookAlibaba } from '../../api-vendors/alibaba/webhookAlibaba';
 
 const ACTIVE_POLLING_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 
@@ -101,6 +102,9 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
         break;
       case 'google':
         await webhookGoogle(vendorContext);
+        break;
+      case 'alibaba':
+        await webhookAlibaba(vendorContext);
         break;
       case 'wavespeed':
         break;
