@@ -128,14 +128,12 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
     delete requestPayload.enable_image_search;
     delete requestPayload.enableImageSearch;
     if (tools) requestPayload.tools = tools;
-    if (tools) {
-      const generationConfig =
-        requestPayload.generationConfig && typeof requestPayload.generationConfig === 'object'
-          ? { ...(requestPayload.generationConfig as Record<string, unknown>) }
-          : {};
-      generationConfig.responseModalities = ['IMAGE'];
-      requestPayload.generationConfig = generationConfig;
-    }
+    const generationConfig =
+      requestPayload.generationConfig && typeof requestPayload.generationConfig === 'object'
+        ? { ...(requestPayload.generationConfig as Record<string, unknown>) }
+        : {};
+    generationConfig.responseModalities = ['IMAGE'];
+    requestPayload.generationConfig = generationConfig;
     return requestPayload;
   }
 
@@ -165,9 +163,7 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
   if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
   if (resolution) imageConfig.imageSize = resolution;
   if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
-  if (tools) {
-    generationConfig.responseModalities = ['IMAGE'];
-  }
+  generationConfig.responseModalities = ['IMAGE'];
 
   return {
     contents: [{ parts }],
