@@ -48,6 +48,12 @@ function isMediaField(key: string, value: unknown): boolean {
   return /(image|frame|audio|video|reference)/i.test(normalized);
 }
 
+function alibabaVideoMediaType(key: string): string {
+  if (key === 'image') return 'first_frame';
+  if (key === 'images') return 'reference_image';
+  return key;
+}
+
 function mediaItemsFromField(key: string, value: unknown): Record<string, string>[] {
   if (Array.isArray(value)) {
     return value.flatMap(item => mediaItemsFromField(key, item));
@@ -61,7 +67,7 @@ function mediaItemsFromField(key: string, value: unknown): Record<string, string
   }
 
   const url = mediaSource(value);
-  return url ? [{ type: key, url }] : [];
+  return url ? [{ type: alibabaVideoMediaType(key), url }] : [];
 }
 
 function buildAlibabaVideoPayload(payload: unknown, model: string): Record<string, unknown> {

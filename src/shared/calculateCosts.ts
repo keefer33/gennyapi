@@ -1,3 +1,11 @@
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
+// ffprobe-static has no bundled TypeScript declarations.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ffprobeStatic = require('ffprobe-static') as { path?: string };
+
 /** Pull the expression from `formula` (string or `{"total_price": <expr>}` shape). */
 const extractFormulaExpression = (formula: unknown): string | null => {
   if (formula == null) return null;
@@ -78,9 +86,36 @@ export const evaluatePricingFormula = (formValues: any, pricing: any): number =>
   }
 };
 
+const mediaSource = (input: unknown): string => {
+  if (Array.isArray(input)) return input.length > 0 ? mediaSource(input[0]) : '';
+  if (typeof input === 'string') return input.trim();
+  if (!input || typeof input !== 'object') return '';
+  const item = input as Record<string, unknown>;
+  const source = item.url ?? item.file_url ?? item.file_path ?? item.filePath;
+  return typeof source === 'string' ? source.trim() : '';
+};
+
+const getVideoDurationSeconds = async (input: unknown): Promise<number> => {
+  const source = mediaSource(input);
+  if (!source || !ffprobeStatic.path) return 0;
+
+  try {
+    const { stdout } = await execFileAsync(
+      ffprobeStatic.path,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', source],
+      { timeout: 30000 }
+    );
+    const duration = Number(String(stdout).trim());
+    return Number.isFinite(duration) && duration > 0 ? Math.ceil(duration) : 0;
+  } catch (error) {
+    console.warn('[calculatePricingUtil] ffprobe duration lookup failed', error);
+    return 0;
+  }
+};
+
 export const calculatePricingUtil = async (formValues: any, pricing: any) => {
   let cost: number = 0;
-  const lookupMultiFields = (config: any, formValuesInput: any): number => {
+  const lookupMultiFields = async (config: any, formValuesInput: any): Promise<number> => {
     const safeFormValues = formValuesInput && typeof formValuesInput === 'object' ? formValuesInput : {};
     let current = config;
     let depth = 0;
@@ -96,7 +131,12 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
 
       const field = typeof current?.field === 'string' ? current.field : undefined;
       const selectedValue = field ? safeFormValues[field] : undefined;
-      const next = selectedValue !== undefined ? current?.values?.[selectedValue] : undefined;
+      const values = current?.values;
+      const next =
+        selectedValue !== undefined && values && typeof values === 'object'
+          ? (values[selectedValue] ??
+            Object.entries(values).find(([key]) => key.toLowerCase() === String(selectedValue).toLowerCase())?.[1])
+          : undefined;
       const data = next ?? current;
 
       const numeric = Number(data);
@@ -109,6 +149,20 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
         const multiplier = Number(safeFormValues[data.field]);
         if (!Number.isFinite(unitCost) || !Number.isFinite(multiplier)) return 0;
         return unitCost * multiplier;
+      }
+
+      if (data?.type === 'multiConvert') {
+        const unitCost = Number(data.cost);
+        if (!Number.isFinite(unitCost)) return 0;
+        const convertField = typeof data.field === 'string' ? data.field : undefined;
+        const sourceValue = convertField ? safeFormValues[convertField] : undefined;
+        const durationSeconds = await getVideoDurationSeconds(sourceValue);
+        return unitCost * durationSeconds;
+      }
+
+      if (data && typeof data === 'object' && data.cost !== undefined && !data.type) {
+        const leafCost = Number(data.cost);
+        return Number.isFinite(leafCost) ? leafCost : 0;
       }
 
       // No deeper branch available or malformed branch: stop safely.
@@ -145,7 +199,7 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
     }
     case 'multiFields':
       if (pricing.cost) {
-        cost = lookupMultiFields(pricing.cost, formValues);
+        cost = await lookupMultiFields(pricing.cost, formValues);
       }
       break;
     case 'formula':

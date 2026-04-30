@@ -68,7 +68,7 @@ function googleImageSource(input: unknown): string {
   if (typeof input === 'string') return input.trim();
   if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
   const item = input as Record<string, unknown>;
-  return trimString(item.url) || trimString(item.file_path) || trimString(item.filePath);
+  return trimString(item.url) || trimString(item.file_url) || trimString(item.file_path) || trimString(item.filePath);
 }
 
 async function googleVideoImage(input: unknown): Promise<unknown> {
@@ -112,9 +112,72 @@ async function googleVideoImage(input: unknown): Promise<unknown> {
   return source ? googleVideoImage(source) : item;
 }
 
+async function googleVideoInput(input: unknown): Promise<unknown> {
+  if (Array.isArray(input)) {
+    return input.length > 0 ? googleVideoInput(input[0]) : input;
+  }
+
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const item = input as Record<string, unknown>;
+    if (item.inlineData || item.inline_data || item.bytesBase64Encoded || item.gcsUri) return item;
+    const source = googleImageSource(item);
+    return source ? googleVideoInput(source) : item;
+  }
+
+  const source = googleImageSource(input);
+  if (!source) return input;
+
+  if (/^data:/i.test(source)) {
+    return {
+      inlineData: {
+        mimeType: mimeFromBase64DataUrl(source, 'video/mp4'),
+        data: base64WithoutDataUrl(source),
+      },
+    };
+  }
+  
+
+  if (/^https?:\/\//i.test(source)) {
+    const response = await axios.get(source, {
+      responseType: 'arraybuffer',
+      validateStatus: () => true,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throw new AppError('Failed to fetch video for Google video input', {
+        statusCode: 502,
+        code: 'google_video_input_video_fetch_failed',
+        details: { status: response.status },
+        expose: true,
+      });
+    }
+    return {
+      inlineData: {
+        mimeType: response.headers['content-type']?.split(';')[0]?.trim() || 'video/mp4',
+        data: Buffer.from(response.data).toString('base64'),
+      },
+    };
+  }
+
+  return input;
+}
+
 async function googleVideoRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
-  if (Array.isArray(originalPayload.instances)) return originalPayload;
+  if (Array.isArray(originalPayload.instances)) {
+    const instances: unknown[] = [];
+    for (const originalInstance of originalPayload.instances) {
+      if (!originalInstance || typeof originalInstance !== 'object' || Array.isArray(originalInstance)) {
+        instances.push(originalInstance);
+        continue;
+      }
+      const instance = { ...(originalInstance as Record<string, unknown>) };
+      if (instance.image) instance.image = await googleVideoImage(instance.image);
+      if (instance.lastFrame) instance.lastFrame = await googleVideoImage(instance.lastFrame);
+      if (instance.video) instance.video = await googleVideoInput(instance.video);
+      instances.push(instance);
+    }
+    return { ...originalPayload, instances };
+  }
 
   const prompt = typeof originalPayload.prompt === 'string' ? originalPayload.prompt : '';
   const originalParameters =
@@ -151,7 +214,10 @@ async function googleVideoRequestPayload(payload: unknown): Promise<Record<strin
     originalParameters.lastImage ??
     originalParameters.last_image;
   if (lastFrame) instance.lastFrame = await googleVideoImage(lastFrame);
-  if (originalPayload.video) instance.video = originalPayload.video;
+  if (originalPayload.video) instance.video = await googleVideoInput(originalPayload.video);
+  else if (Array.isArray(originalPayload.videos) && originalPayload.videos.length > 0) {
+    instance.video = await googleVideoInput(originalPayload.videos[0]);
+  }
 
   return {
     instances: [instance],
