@@ -1,32 +1,71 @@
 import { experimental_createTool, experimental_createToolkit } from '@composio/core';
 import { z } from 'zod/v3';
 import {
-  toSnakeCase,
   jsonSchemaInputToZodObject,
   createGenerationRequest,
   agentCalculateCostRequest,
   buildGennyBotSystemPrompt,
 } from './agentUtils';
 import { getGenModelsList } from '../../database/gen_models';
+import type { GenModelRow } from '../../database/types';
+
+function getModelFunctionSchema(model: GenModelRow & { function_schema?: unknown }): Record<string, unknown> | null {
+  const apiFunctionSchema = model.gen_models_apis_id?.function_schema;
+  if (apiFunctionSchema && typeof apiFunctionSchema === 'object' && !Array.isArray(apiFunctionSchema)) {
+    return apiFunctionSchema as Record<string, unknown>;
+  }
+  if (model.function_schema && typeof model.function_schema === 'object' && !Array.isArray(model.function_schema)) {
+    return model.function_schema as Record<string, unknown>;
+  }
+  return null;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getToolInputSchema(functionSchema: Record<string, unknown> | null): Record<string, unknown> | null {
+  const schema =
+    objectRecord(functionSchema?.inputSchema) ?? objectRecord(functionSchema?.parameters) ?? functionSchema;
+  if (!schema) return null;
+  if (schema.type === 'object' && objectRecord(schema.properties)) return schema;
+
+  const nestedProperties = objectRecord(schema.properties);
+  if (nestedProperties?.type === 'object' && objectRecord(nestedProperties.properties)) return nestedProperties;
+
+  return null;
+}
+
+function slugPart(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/[-.]/g, '_').replace(/\s+/g, '_') : '';
+}
+
+function buildToolSlug(model: GenModelRow, functionSchema: Record<string, unknown> | null): string {
+  const modelProduct = slugPart(model.model_product);
+  const modelVariant = slugPart(model.model_variant);
+  const productVariantSlug = [modelProduct, modelVariant].filter(Boolean).join('_');
+  const fallbackSlug =
+    typeof functionSchema?.name === 'string'
+      ? slugPart(functionSchema.name)
+      : slugPart(model.model_id) || slugPart(model.model_name);
+  return (productVariantSlug || fallbackSlug).slice(0, 44);
+}
 
 export default async function getAgentCustomTools(authToken: string) {
   const models = await getGenModelsList();
   const toolPromptMeta = [];
   const modelNames: string[] = [];
-  const dynamicTools = models.flatMap((model: any) => {
-    const rawToolSlug: string | undefined = model?.function_schema?.name;
-    const hasCamelCase = typeof rawToolSlug === 'string' ? /[a-z0-9][A-Z]/.test(rawToolSlug) : false;
-    const hasUnderscore = typeof rawToolSlug === 'string' ? rawToolSlug.includes('_') : false;
-    const toolSlug: string | undefined =
-      rawToolSlug && hasCamelCase && !hasUnderscore ? toSnakeCase(rawToolSlug) : rawToolSlug;
-    const rawInputSchema = model?.function_schema?.properties;
+  const dynamicTools = models.flatMap(model => {
+    const functionSchema = getModelFunctionSchema(model);
+    const toolSlug = buildToolSlug(model, functionSchema);
+    const rawInputSchema = getToolInputSchema(functionSchema);
 
-    if (!toolSlug || !rawInputSchema || rawInputSchema?.type !== 'object') return [];
+    if (!toolSlug || !rawInputSchema) return [];
     const toolName = String(model?.model_name ?? toolSlug);
     if (!modelNames.includes(toolName)) {
       modelNames.push(toolName);
     }
-    const toolDescription = String(model?.function_schema?.description ?? `Generate content using ${toolName} model.`);
+    const toolDescription = String(functionSchema?.description ?? `Generate content using ${toolName} model.`);
     const costHelperText = `Use "${model.id}" as the modelId when calculating model costs.`;
     const toolDescriptionWithCostHint = `${toolDescription} ${costHelperText}`;
     toolPromptMeta.push({

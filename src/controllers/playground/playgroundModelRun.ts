@@ -122,7 +122,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
 
     await updateUserUsageBalance(userId, cost, 'debit');
 
-    sendOk(res, response);
+    sendOk(res, genModelRun);
   } catch (err) {
     if (isAxiosError(err) && err.response) {
       console.log(err);
