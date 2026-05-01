@@ -72,7 +72,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     res.flushHeaders();
 
     writeSSE = createSSEWriter(res);
-
+console.log('messages', messages);
     const result = streamText({
       model,
       system: systemPrompt,
