@@ -153,20 +153,19 @@ export default async function getAgentCustomTools(authToken: string) {
           const item = data?.data?.item;
           const status = item?.status;
           const userFiles = Array.isArray(item?.user_files) ? item.user_files : [];
-          const firstFile = userFiles[0];
-          const firstFilePath = firstFile?.file_path ?? firstFile?.thumbnail_url ?? null;
           if (status === 'completed') {
             return {
               message: 'Generation completed successfully',
-              image_url: firstFilePath,
+              generation_files: userFiles,
               generation_id: item?.id ?? generation_id,
               cost: item?.cost ?? 0,
+              status: "completed",
             };
           }
           if (status === 'error') {
-            return { message: 'Generation failed', generation_id: item?.id ?? generation_id };
+            return { message: 'Generation failed', generation_id: item?.id ?? generation_id, status: "error" };
           }
-          return { message: 'Generation is still processing', generation_id: item?.id ?? generation_id };
+          return { message: 'Generation is still processing', generation_id: item?.id ?? generation_id, status: "processing" };
         },
       }),
     ],

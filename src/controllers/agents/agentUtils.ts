@@ -104,7 +104,7 @@ export async function loadComposioTools(
       experimental: {
         customToolkits: [customToolkit],
       },
-      manageConnections: false,
+      manageConnections: true,
     });
     const composioTools = await session.tools();
     return (composioTools ?? {}) as Record<string, unknown>;

@@ -100,7 +100,7 @@ export const RUN_AGENT_SELECT = `
     generation_type,
     gen_models_apis!gen_models_gen_models_apis_id_fkey (vendor_api)
   ),
-  user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at, status),
+  user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at),
   payload,
   response,
   polling_response
