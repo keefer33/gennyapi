@@ -194,7 +194,8 @@ export default async function getAgentCustomTools(authToken: string) {
       }),
       experimental_createTool('GET_GENERATION_STATUS', {
         name: 'Get Generation Status',
-        description: 'Get the status and cost (when available) of a generation.  When the result status is "completed" you can use the markdown field to display the toll results.',
+        description:
+          'Get the status and cost (when available) of a generation. When the result status is "completed", the result includes markdown that MUST be displayed to the user exactly as provided.',
         inputParams: z.object({
           generation_id: z.string().describe('The ID of the generation to get the status of'),
         }),
@@ -219,8 +220,10 @@ export default async function getAgentCustomTools(authToken: string) {
               userFiles,
             });
             return {
-              message: "Generation completed successfully",
+              message: markdown,
               markdown,
+              display_markdown: markdown,
+              display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
               generation_files: userFiles,
               generation_id: generationId,
               cost,
