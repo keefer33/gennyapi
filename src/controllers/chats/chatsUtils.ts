@@ -1,7 +1,36 @@
 
 import { MessageRow } from "../../database/types";
 
-/** Build { role, content }[] from message rows for streamText (text + reasoning only). */
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function compactToolResultContext(part: Record<string, unknown>): string | null {
+  if (part.type !== 'tool-result') return null;
+
+  const result = objectRecord(part.result);
+  if (!result) return null;
+
+  const generationId = typeof result.generation_id === 'string' ? result.generation_id.trim() : '';
+  const status = typeof result.status === 'string' ? result.status.trim() : '';
+  const cost = typeof result.cost === 'number' ? result.cost : null;
+  const message = typeof result.message === 'string' ? result.message.trim() : '';
+  const files = Array.isArray(result.generation_files) ? result.generation_files : [];
+
+  if (!generationId && !status && !cost && files.length === 0) return null;
+
+  const toolName = typeof part.toolName === 'string' && part.toolName.trim() ? part.toolName.trim() : 'tool';
+  const lines = [`Tool result context from ${toolName}:`];
+  if (generationId) lines.push(`- generation_id: ${generationId}`);
+  if (status) lines.push(`- status: ${status}`);
+  if (cost != null) lines.push(`- cost: ${cost}`);
+  if (files.length > 0) lines.push(`- generated_files_count: ${files.length}`);
+  if (message && message.length < 300) lines.push(`- message: ${message}`);
+
+  return lines.join('\n');
+}
+
+/** Build { role, content }[] from message rows for streamText. */
 export function messageRowsToModelMessages(rows: MessageRow[]) {
     return rows
       .map(row => {
@@ -23,6 +52,7 @@ export function messageRowsToModelMessages(rows: MessageRow[]) {
         // - AI SDK parts: { type: 'image'|'video'|'file', image|videoUrl|fileUrl, ... }
         // - persisted attachment inputs: { type: '<mime>', url, thumbnail_url, ... }
         const attachmentLines: string[] = [];
+        const toolResultContextLines: string[] = [];
 
         for (const p of contentArray) {
           const partType = typeof (p as any).type === 'string' ? (p as any).type : undefined;
@@ -31,6 +61,12 @@ export function messageRowsToModelMessages(rows: MessageRow[]) {
           const image = typeof (p as any).image === 'string' ? (p as any).image : undefined;
           const videoUrl = typeof (p as any).videoUrl === 'string' ? (p as any).videoUrl : undefined;
           const fileUrl = typeof (p as any).fileUrl === 'string' ? (p as any).fileUrl : undefined;
+          const toolResultContext = compactToolResultContext(p);
+
+          if (toolResultContext) {
+            toolResultContextLines.push(toolResultContext);
+            continue;
+          }
 
           if (partType === 'image' && (image || imageUrl)) {
             attachmentLines.push(`- ${(p as any).mediaType ?? 'image'} - ${image ?? imageUrl}`);
@@ -53,8 +89,12 @@ export function messageRowsToModelMessages(rows: MessageRow[]) {
 
         const attachmentsAsText =
           attachmentLines.length > 0 ? `\n\nAttached files:\n${attachmentLines.join('\n')}` : '';
+        const toolResultsAsText =
+          toolResultContextLines.length > 0
+            ? `\n\nPrevious tool results:\n${toolResultContextLines.join('\n\n')}`
+            : '';
 
-        const mergedText = `${textContent}${attachmentsAsText}`;
+        const mergedText = `${textContent}${attachmentsAsText}${toolResultsAsText}`;
 
         return {
           role: (row.message?.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',

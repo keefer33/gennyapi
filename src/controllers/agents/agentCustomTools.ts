@@ -94,13 +94,13 @@ function getModelBrand(modelInfo: GenerationModelInfo | null | undefined): {
 }
 
 function buildGenerationCompletedMarkdown({
-  generationId,
+  generation_id,
   cost,
   runStatus,
   modelInfo,
   userFiles,
 }: {
-  generationId: string;
+  generation_id: string;
   cost: number;
   runStatus: string;
   modelInfo?: GenerationModelInfo | null;
@@ -112,7 +112,7 @@ function buildGenerationCompletedMarkdown({
   const lines = [
     '## Generation completed successfully',
     '',
-    `- **Generation ID:** \`${generationId}\``,
+    `- **Generation id:** \`${generation_id}\``,
     `- **Status:** ${markdownCell(runStatus)}`,
     `- **Cost:** ${cost}`,
     '',
@@ -242,7 +242,7 @@ export default async function getAgentCustomTools(authToken: string) {
         description:
           'Get the status and cost (when available) of a generation. When the result status is "completed", the result includes markdown that MUST be displayed to the user exactly as provided.',
         inputParams: z.object({
-          generation_id: z.string().describe('The ID of the generation to get the status of'),
+          generation_id: z.string().describe('The generation_id of the generation to get the status of'),
         }),
         execute: async ({ generation_id }: { generation_id: string }): Promise<Record<string, unknown>> => {
           const result = await fetch(`https://api.genny.one/playground/runs/${generation_id}/agent`, {
@@ -278,7 +278,7 @@ export default async function getAgentCustomTools(authToken: string) {
             const cost = item?.cost ?? 0;
             const generationFiles = userFiles.map(({ status: _status, ...file }) => file);
             const markdown = buildGenerationCompletedMarkdown({
-              generationId,
+              generation_id: generationId,
               cost,
               runStatus: rawStatus || 'completed',
               modelInfo: item?.gen_models,
@@ -301,7 +301,7 @@ export default async function getAgentCustomTools(authToken: string) {
           return {
             message: 'Generation is still processing',
             generation_id: item?.id ?? generation_id,
-            status: rawStatus || 'processing',
+            status: status || 'processing',
           };
         },
       }),
