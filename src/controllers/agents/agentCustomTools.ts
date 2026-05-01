@@ -51,6 +51,63 @@ function buildToolSlug(model: GenModelRow, functionSchema: Record<string, unknow
   return (productVariantSlug || fallbackSlug).slice(0, 44);
 }
 
+type GenerationUserFile = {
+  id?: string | null;
+  file_name?: string | null;
+  thumbnail_url?: string | null;
+  file_path?: string | null;
+  file_size?: number | null;
+  file_type?: string | null;
+  status?: string | null;
+};
+
+function markdownCell(value: unknown): string {
+  return String(value ?? '—').replace(/\|/g, '\\|').replace(/\n/g, '<br />');
+}
+
+function markdownLink(label: string, url: string | null | undefined): string {
+  return url ? `[${markdownCell(label)}](${url})` : markdownCell(label);
+}
+
+function buildGenerationCompletedMarkdown({
+  generationId,
+  cost,
+  userFiles,
+}: {
+  generationId: string;
+  cost: number;
+  userFiles: GenerationUserFile[];
+}): string {
+  const lines = [
+    '## Generation completed successfully',
+    '',
+    `- **Generation ID:** \`${generationId}\``,
+    `- **Status:** completed`,
+    `- **Cost:** ${cost}`,
+  ];
+
+  if (userFiles.length === 0) {
+    return [...lines, '', 'No generated files were returned.'].join('\n');
+  }
+
+  lines.push('', '### Generated files', '', '| Preview | File | Type | Status |', '| --- | --- | --- | --- |');
+
+  for (const [index, file] of userFiles.entries()) {
+    const fileName = file.file_name?.trim() || `Generated file ${index + 1}`;
+    const fileUrl = file.file_path?.trim() || file.thumbnail_url?.trim() || null;
+    const thumbnailUrl = file.thumbnail_url?.trim() || file.file_path?.trim() || null;
+    const preview = thumbnailUrl
+      ? `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`
+      : markdownLink(fileName, fileUrl);
+
+    lines.push(
+      `| ${preview} | ${markdownLink(fileName, fileUrl)} | ${markdownCell(file.file_type)} | ${markdownCell(file.status)} |`
+    );
+  }
+
+  return lines.join('\n');
+}
+
 export default async function getAgentCustomTools(authToken: string) {
   const models = await getGenModelsList();
   const toolPromptMeta = [];
@@ -154,18 +211,26 @@ export default async function getAgentCustomTools(authToken: string) {
           const status = item?.status;
           const userFiles = Array.isArray(item?.user_files) ? item.user_files : [];
           if (status === 'completed') {
+            const generationId = item?.id ?? generation_id;
+            const cost = item?.cost ?? 0;
+            const markdown = buildGenerationCompletedMarkdown({
+              generationId,
+              cost,
+              userFiles,
+            });
             return {
-              message: 'Generation completed successfully',
+              message: markdown,
+              markdown,
               generation_files: userFiles,
-              generation_id: item?.id ?? generation_id,
-              cost: item?.cost ?? 0,
-              status: "completed",
+              generation_id: generationId,
+              cost,
+              status: 'completed',
             };
           }
           if (status === 'error') {
-            return { message: 'Generation failed', generation_id: item?.id ?? generation_id, status: "error" };
+            return { message: 'Generation failed', generation_id: item?.id ?? generation_id, status: 'error' };
           }
-          return { message: 'Generation is still processing', generation_id: item?.id ?? generation_id, status: "processing" };
+          return { message: 'Generation is still processing', generation_id: item?.id ?? generation_id, status: 'processing' };
         },
       }),
     ],
