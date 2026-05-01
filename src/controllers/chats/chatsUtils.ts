@@ -5,11 +5,41 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function unwrapToolResultPayload(result: Record<string, unknown>): Record<string, unknown> {
+  const data = objectRecord(result.data);
+  return data ?? result;
+}
+
+function compactToolCallContext(part: Record<string, unknown>): string | null {
+  if (part.type !== 'tool-call') return null;
+
+  const input = objectRecord(part.input);
+  if (!input) return null;
+
+  const directGenerationId = typeof input.generation_id === 'string' ? input.generation_id.trim() : '';
+  const toolCalls = Array.isArray(input.tools) ? input.tools : [];
+  const nestedGenerationIds = toolCalls
+    .map(tool => {
+      const toolRecord = objectRecord(tool);
+      const args = objectRecord(toolRecord?.arguments);
+      return typeof args?.generation_id === 'string' ? args.generation_id.trim() : '';
+    })
+    .filter(Boolean);
+  const generationIds = [...new Set([directGenerationId, ...nestedGenerationIds].filter(Boolean))];
+
+  if (generationIds.length === 0) return null;
+
+  const toolName = typeof part.toolName === 'string' && part.toolName.trim() ? part.toolName.trim() : 'tool';
+  return [`Tool call context from ${toolName}:`, `- generation_id: ${generationIds.join(', ')}`].join('\n');
+}
+
 function compactToolResultContext(part: Record<string, unknown>): string | null {
   if (part.type !== 'tool-result') return null;
 
-  const result = objectRecord(part.result);
-  if (!result) return null;
+  const wrappedResult = objectRecord(part.result);
+  if (!wrappedResult) return null;
+
+  const result = unwrapToolResultPayload(wrappedResult);
 
   const generationId = typeof result.generation_id === 'string' ? result.generation_id.trim() : '';
   const status = typeof result.status === 'string' ? result.status.trim() : '';
@@ -61,7 +91,13 @@ export function messageRowsToModelMessages(rows: MessageRow[]) {
           const image = typeof (p as any).image === 'string' ? (p as any).image : undefined;
           const videoUrl = typeof (p as any).videoUrl === 'string' ? (p as any).videoUrl : undefined;
           const fileUrl = typeof (p as any).fileUrl === 'string' ? (p as any).fileUrl : undefined;
+          const toolCallContext = compactToolCallContext(p);
           const toolResultContext = compactToolResultContext(p);
+
+          if (toolCallContext) {
+            toolResultContextLines.push(toolCallContext);
+            continue;
+          }
 
           if (toolResultContext) {
             toolResultContextLines.push(toolResultContext);

@@ -108,6 +108,28 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    function objectRecord(value: unknown): Record<string, unknown> | null {
+      return value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+    }
+
+    function normalizeToolOutput(output: unknown): unknown {
+      const wrapper = objectRecord(output);
+      if (!wrapper) return output;
+
+      const data = objectRecord(wrapper.data);
+      const isComposioWrapper = 'successful' in wrapper || 'error' in wrapper || 'logId' in wrapper;
+      if (!data || !isComposioWrapper) return output;
+
+      return {
+        ...data,
+        ...(typeof wrapper.error === 'string' && wrapper.error.trim() ? { error: wrapper.error } : {}),
+        ...(typeof wrapper.successful === 'boolean' ? { successful: wrapper.successful } : {}),
+        ...(typeof wrapper.logId === 'string' && wrapper.logId.trim() ? { logId: wrapper.logId } : {}),
+      };
+    }
+
     try {
       for await (const part of result.fullStream) {
         switch (part.type) {
@@ -225,6 +247,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
               output?: unknown;
               isError?: boolean;
             };
+            const normalizedOutput = normalizeToolOutput(tr.output);
             if (writeSSE) {
               writeSSE({
                 type: 'stream_status',
@@ -236,14 +259,14 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
                 tool_name: tr.toolName,
                 tool_call_id: tr.toolCallId,
                 input: tr.input,
-                output: tr.output,
+                output: normalizedOutput,
               });
             }
             collectedParts.push({
               type: 'tool-result',
               toolCallId: tr.toolCallId ?? '',
               toolName: tr.toolName ?? '',
-              result: tr.output,
+              result: normalizedOutput,
               isError: tr.isError,
             });
             break;
