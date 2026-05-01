@@ -61,6 +61,15 @@ type GenerationUserFile = {
   status?: string | null;
 };
 
+type GenerationModelInfo = {
+  model_name?: string | null;
+  model_id?: string | null;
+  model_product?: string | null;
+  model_variant?: string | null;
+  generation_type?: string | null;
+  brand_name?: { name?: string | null; logo?: string | null } | string | null;
+};
+
 function markdownCell(value: unknown): string {
   return String(value ?? '—').replace(/\|/g, '\\|').replace(/\n/g, '<br />');
 }
@@ -69,39 +78,74 @@ function markdownLink(label: string, url: string | null | undefined): string {
   return url ? `[${markdownCell(label)}](${url})` : markdownCell(label);
 }
 
+function getModelBrand(modelInfo: GenerationModelInfo | null | undefined): {
+  name: string | null;
+  logo: string | null;
+} {
+  const brand = modelInfo?.brand_name;
+  if (typeof brand === 'string') {
+    return { name: brand.trim() || null, logo: null };
+  }
+
+  return {
+    name: brand?.name?.trim() || null,
+    logo: brand?.logo?.trim() || null,
+  };
+}
+
 function buildGenerationCompletedMarkdown({
   generationId,
   cost,
+  modelInfo,
   userFiles,
 }: {
   generationId: string;
   cost: number;
+  modelInfo?: GenerationModelInfo | null;
   userFiles: GenerationUserFile[];
 }): string {
+  const brand = getModelBrand(modelInfo);
+  const modelName = modelInfo?.model_name?.trim() || modelInfo?.model_id?.trim() || 'Unknown model';
+  const modelTitle = [brand.name, modelName].filter(Boolean).join(' - ');
   const lines = [
     '## Generation completed successfully',
     '',
     `- **Generation ID:** \`${generationId}\``,
     `- **Status:** completed`,
     `- **Cost:** ${cost}`,
+    '',
+    '### Model',
+    '',
+    brand.logo ? `<img src="${brand.logo}" alt="${markdownCell(brand.name ?? 'Brand logo')}" width="32" />` : '',
+    `**${markdownCell(modelTitle)}**`,
+    '',
+    `- **Product:** ${markdownCell(modelInfo?.model_product)}`,
+    `- **Variant:** ${markdownCell(modelInfo?.model_variant)}`,
+    `- **Generation type:** ${markdownCell(modelInfo?.generation_type)}`,
   ];
 
   if (userFiles.length === 0) {
     return [...lines, '', 'No generated files were returned.'].join('\n');
   }
 
-  lines.push('', '### Generated files', '', '| Preview | File | Type | Status |', '| --- | --- | --- | --- |');
+  lines.push('', '### Generated files');
 
   for (const [index, file] of userFiles.entries()) {
     const fileName = file.file_name?.trim() || `Generated file ${index + 1}`;
     const fileUrl = file.file_path?.trim() || file.thumbnail_url?.trim() || null;
     const thumbnailUrl = file.thumbnail_url?.trim() || file.file_path?.trim() || null;
-    const preview = thumbnailUrl
-      ? `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`
-      : markdownLink(fileName, fileUrl);
+
+    lines.push('', `#### ${index + 1}. ${markdownLink(fileName, fileUrl)}`);
+
+    if (thumbnailUrl) {
+      lines.push('', `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`);
+    }
 
     lines.push(
-      `| ${preview} | ${markdownLink(fileName, fileUrl)} | ${markdownCell(file.file_type)} | ${markdownCell(file.status)} |`
+      '',
+      `- **Type:** ${markdownCell(file.file_type)}`,
+      `- **Status:** ${markdownCell(file.status)}`,
+      fileUrl ? `- **URL:** ${markdownLink('Open file', fileUrl)}` : '- **URL:** —'
     );
   }
 
@@ -217,6 +261,7 @@ export default async function getAgentCustomTools(authToken: string) {
             const markdown = buildGenerationCompletedMarkdown({
               generationId,
               cost,
+              modelInfo: item?.gen_models,
               userFiles,
             });
             return {
