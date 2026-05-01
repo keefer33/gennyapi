@@ -96,11 +96,13 @@ function getModelBrand(modelInfo: GenerationModelInfo | null | undefined): {
 function buildGenerationCompletedMarkdown({
   generationId,
   cost,
+  runStatus,
   modelInfo,
   userFiles,
 }: {
   generationId: string;
   cost: number;
+  runStatus: string;
   modelInfo?: GenerationModelInfo | null;
   userFiles: GenerationUserFile[];
 }): string {
@@ -111,12 +113,12 @@ function buildGenerationCompletedMarkdown({
     '## Generation completed successfully',
     '',
     `- **Generation ID:** \`${generationId}\``,
-    `- **Status:** completed`,
+    `- **Status:** ${markdownCell(runStatus)}`,
     `- **Cost:** ${cost}`,
     '',
     '### Model',
     '',
-    brand.logo ? `<img src="${brand.logo}" alt="${markdownCell(brand.name ?? 'Brand logo')}" width="32" />` : '',
+    brand.logo ? `![${markdownCell(brand.name ?? 'Brand logo')}](${brand.logo})` : '',
     `**${markdownCell(modelTitle)}**`,
     '',
     `- **Product:** ${markdownCell(modelInfo?.model_product)}`,
@@ -144,7 +146,6 @@ function buildGenerationCompletedMarkdown({
     lines.push(
       '',
       `- **Type:** ${markdownCell(file.file_type)}`,
-      `- **Status:** ${markdownCell(file.status)}`,
       fileUrl ? `- **URL:** ${markdownLink('Open file', fileUrl)}` : '- **URL:** —'
     );
   }
@@ -252,24 +253,43 @@ export default async function getAgentCustomTools(authToken: string) {
             },
           });
           const data = (await result.json()) as any;
-          const item = data?.data?.item;
-          const status = item?.status;
+          if (!result.ok || data?.success === false) {
+            return {
+              message: data?.error?.message ?? 'Failed to get generation status',
+              generation_id,
+              status: 'error',
+            };
+          }
+
+          const item = data?.data?.item ?? data?.item;
+          if (!item) {
+            return {
+              message: 'Generation status response did not include a run item',
+              generation_id,
+              status: 'error',
+            };
+          }
+
+          const rawStatus = typeof item?.status === 'string' ? item.status : '';
+          const status = rawStatus.trim().toLowerCase();
           const userFiles = Array.isArray(item?.user_files) ? item.user_files : [];
           if (status === 'completed') {
             const generationId = item?.id ?? generation_id;
             const cost = item?.cost ?? 0;
+            const generationFiles = userFiles.map(({ status: _status, ...file }) => file);
             const markdown = buildGenerationCompletedMarkdown({
               generationId,
               cost,
+              runStatus: rawStatus || 'completed',
               modelInfo: item?.gen_models,
-              userFiles,
+              userFiles: generationFiles,
             });
             return {
               message: markdown,
               markdown,
               display_markdown: markdown,
               display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
-              generation_files: userFiles,
+              generation_files: generationFiles,
               generation_id: generationId,
               cost,
               status: 'completed',
@@ -278,7 +298,11 @@ export default async function getAgentCustomTools(authToken: string) {
           if (status === 'error') {
             return { message: 'Generation failed', generation_id: item?.id ?? generation_id, status: 'error' };
           }
-          return { message: 'Generation is still processing', generation_id: item?.id ?? generation_id, status: 'processing' };
+          return {
+            message: 'Generation is still processing',
+            generation_id: item?.id ?? generation_id,
+            status: rawStatus || 'processing',
+          };
         },
       }),
     ],
