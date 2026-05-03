@@ -5,6 +5,7 @@ import {
   createGenerationRequest,
   agentCalculateCostRequest,
   buildGennyBotSystemPrompt,
+  getInternalApiBaseUrl,
 } from './agentUtils';
 import { getGenModelsList } from '../../database/gen_models';
 import type { GenModelRow } from '../../database/types';
@@ -245,13 +246,16 @@ export default async function getAgentCustomTools(authToken: string) {
           generation_id: z.string().describe('The generation_id of the generation to get the status of'),
         }),
         execute: async ({ generation_id }: { generation_id: string }): Promise<Record<string, unknown>> => {
-          const result = await fetch(`https://api.genny.one/playground/runs/${generation_id}/agent`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${authToken}`,
-            },
-          });
+          const result = await fetch(
+            `${getInternalApiBaseUrl()}/playground/runs/${encodeURIComponent(generation_id)}/agent`,
+            {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`,
+              },
+            }
+          );
           const data = (await result.json()) as any;
           if (!result.ok || data?.success === false) {
             return {

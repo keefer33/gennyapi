@@ -18,6 +18,24 @@ import {
   GennyToolPromptMeta,
 } from './types';
 
+/**
+ * Base URL when this server calls its own HTTP routes (playground/* from agent tools).
+ *
+ * Priority:
+ * 1. INTERNAL_API_BASE_URL — full override (no trailing slash), any environment
+ * 2. NODE_ENV === "production" — http://INTERNAL_API_HOST:PORT (INTERNAL_API_HOST defaults to gennyapi)
+ * 3. Otherwise — http://127.0.0.1:PORT (local dev)
+ */
+export function getInternalApiBaseUrl(): string {
+
+  if (process.env.NODE_ENV === 'production') {
+    const host = process.env.INTERNAL_API_HOST?.trim() || 'gennyapi';
+    return `http://gennyapi:3000`;
+  }
+
+  return `http://localhost:3000`;
+}
+
 export function createSSEWriter(res: Response): SSEWriter {
   return (data: Record<string, unknown>) => {
     try {
@@ -120,7 +138,7 @@ export async function agentCalculateCostRequest(
   formValues: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
-    const result = await fetch('https://api.genny.one/playground/cost', {
+    const result = await fetch(`${getInternalApiBaseUrl()}/playground/cost`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -176,8 +194,7 @@ export async function createGenerationRequest(
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
-    console.log('createGenerationRequest', authToken, model_id, payload);
-    const result = await fetch('http://gennyapi:3000/playground/run', {
+    const result = await fetch(`${getInternalApiBaseUrl()}/playground/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -188,7 +205,6 @@ export async function createGenerationRequest(
         payload,
       }),
     });
-    console.log('createGenerationRequest result', result);
     let data: GenerationRequestResponse | null = null;
     try {
       data = (await result.json()) as GenerationRequestResponse;
