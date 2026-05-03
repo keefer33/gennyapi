@@ -9,6 +9,7 @@ export async function listUserGenModelRunsForUser(
       page?: number;
       limit?: number;
       gen_model_id?: string | null;
+      generation_ids?: string[];
       brand_slugs?: string[];
       model_products?: string[];
       model_types?: string[];
@@ -88,6 +89,10 @@ export async function listUserGenModelRunsForUser(
       const genModelId = opts.gen_model_id?.trim();
       if (genModelId) {
         q = q.eq('gen_model_id', genModelId);
+      }
+      const generationIds = (opts.generation_ids ?? []).map(s => s.trim()).filter(Boolean);
+      if (generationIds.length > 0) {
+        q = q.in('id', generationIds);
       }
       if (genModelIdSet !== null) {
         q = q.in('gen_model_id', [...genModelIdSet]);

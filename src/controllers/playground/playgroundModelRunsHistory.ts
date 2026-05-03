@@ -3,7 +3,7 @@ import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
 /**
- * GET /playground/runs?page=1&limit=50&gen_model_id=&brands=slug1,slug2&model_product=p1,p2&model_type=t1,t2
+ * GET /playground/runs?page=1&limit=50&gen_model_id=&generation_ids=id1,id2&brands=slug1,slug2&model_product=p1,p2&model_type=t1,t2
  */
 export async function playgroundModelRunsHistory(req: Request, res: Response): Promise<void> {
   try {
@@ -14,6 +14,12 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
       typeof req.query.gen_model_id === 'string' && req.query.gen_model_id.trim() !== ''
         ? req.query.gen_model_id.trim()
         : null;
+
+    const generationIdsParam = typeof req.query.generation_ids === 'string' ? req.query.generation_ids : '';
+    const generation_ids = generationIdsParam
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
 
     const brandsParam = typeof req.query.brands === 'string' ? req.query.brands : '';
     const brand_slugs = brandsParam
@@ -38,11 +44,11 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
       page,
       limit,
       gen_model_id: genModelId,
+      generation_ids,
       brand_slugs,
       model_products,
       model_types,
     });
-console.log({ items: rows, total, page, limit });
     sendOk(res, { items: rows, total, page, limit });
   } catch (err) {
     sendError(res, err);

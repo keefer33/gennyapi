@@ -2,16 +2,162 @@ import { Request, Response } from 'express';
 import { streamText, createGateway, stepCountIs, type ModelMessage } from 'ai';
 import { isAppError } from '../../app/error';
 import { saveAgentGeneratedFile } from '../../shared/fileUtils';
-import { handleListChatMessages, saveRunChatMessages } from "../../database/user_models_chats_messages";
-import { messageRowsToModelMessages } from "../chats/chatsUtils";
-import { MessageRow } from "../../database/types";
+import { handleListChatMessages, saveRunChatMessages } from '../../database/user_models_chats_messages';
+import {
+  handleGetChatMetadata,
+  mergeChatGenerationMetadata,
+  type ChatGenerationMetadata,
+} from '../../database/user_models_chats';
+import { messageRowsToModelMessages } from '../chats/chatsUtils';
+import { MessageRow } from '../../database/types';
 import getAgentCustomTools from './agentCustomTools';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { RunAgentHttpError, SSEWriter, ApiType, ChatMessage, StoredPart, RunAgentBody } from './types';
-import { loadComposioTools, parseRunAgentInput, createSSEWriter, sendRunAgentError, getSelectedModelRow, normalizeAttachments } from './agentUtils';
+import {
+  loadComposioTools,
+  parseRunAgentInput,
+  createSSEWriter,
+  sendRunAgentError,
+  getSelectedModelRow,
+  normalizeAttachments,
+} from './agentUtils';
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
+
+const GENNY_STATUS_TOOL_SLUG = 'LOCAL_GENNY_BOT_GET_GENERATION_STATUS';
+const GENNY_COST_TOOL_SLUG = 'LOCAL_GENNY_BOT_CALCULATE_MODEL_COST';
+
+type LocalGennyToolCall = {
+  tool_slug: string;
+  arguments: Record<string, unknown>;
+};
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function isLocalGennyToolSlug(toolSlug: string): boolean {
+  return toolSlug.startsWith('LOCAL_GENNY_BOT_');
+}
+
+function isGenerationToolSlug(toolSlug: string): boolean {
+  return (
+    isLocalGennyToolSlug(toolSlug) &&
+    toolSlug !== GENNY_STATUS_TOOL_SLUG &&
+    toolSlug !== GENNY_COST_TOOL_SLUG
+  );
+}
+
+function extractLocalGennyToolCalls(input: unknown): LocalGennyToolCall[] {
+  const inputRecord = objectRecord(input);
+  if (!inputRecord) return [];
+
+  const tools = Array.isArray(inputRecord.tools) ? inputRecord.tools : [];
+  return tools
+    .map(tool => {
+      const toolRecord = objectRecord(tool);
+      const toolSlug = stringValue(toolRecord?.tool_slug);
+      const args = objectRecord(toolRecord?.arguments) ?? {};
+      if (!toolSlug || !isLocalGennyToolSlug(toolSlug)) return null;
+      return { tool_slug: toolSlug, arguments: args };
+    })
+    .filter((tool): tool is LocalGennyToolCall => tool != null);
+}
+
+function normalizeToolOutput(output: unknown): unknown {
+  const wrapper = objectRecord(output);
+  if (!wrapper) return output;
+
+  const data = objectRecord(wrapper.data);
+  const isComposioWrapper = 'successful' in wrapper || 'error' in wrapper || 'logId' in wrapper;
+  if (!data || !isComposioWrapper) return output;
+
+  return {
+    ...data,
+    ...(typeof wrapper.error === 'string' && wrapper.error.trim() ? { error: wrapper.error } : {}),
+    ...(typeof wrapper.successful === 'boolean' ? { successful: wrapper.successful } : {}),
+    ...(typeof wrapper.logId === 'string' && wrapper.logId.trim() ? { logId: wrapper.logId } : {}),
+  };
+}
+
+function generationFilesFromOutput(
+  output: Record<string, unknown>
+): NonNullable<NonNullable<ChatGenerationMetadata['tool_result']>['files']> {
+  const files = Array.isArray(output.generation_files) ? output.generation_files : [];
+  return files
+    .map(file => {
+      const fileRecord = objectRecord(file);
+      if (!fileRecord) return null;
+      const url = stringValue(fileRecord.file_path) || stringValue(fileRecord.url);
+      const thumbnailUrl = stringValue(fileRecord.thumbnail_url);
+      const fileName = stringValue(fileRecord.file_name);
+      const fileType = stringValue(fileRecord.file_type);
+      return {
+        ...(url ? { url } : {}),
+        ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}),
+        ...(fileName ? { file_name: fileName } : {}),
+        ...(fileType ? { file_type: fileType } : {}),
+      };
+    })
+    .filter((file): file is NonNullable<NonNullable<ChatGenerationMetadata['tool_result']>['files']>[number] => file != null);
+}
+
+function metadataEntriesFromToolResult(
+  toolCalls: LocalGennyToolCall[],
+  output: unknown
+): ChatGenerationMetadata[] {
+  const outputRecord = objectRecord(output);
+  if (!outputRecord) return [];
+
+  const generationId = stringValue(outputRecord.generation_id);
+  if (!generationId) return [];
+
+  const generationCall = toolCalls.find(call => isGenerationToolSlug(call.tool_slug));
+  const statusCall = toolCalls.find(call => call.tool_slug === GENNY_STATUS_TOOL_SLUG);
+  const status = stringValue(outputRecord.status) || (generationCall ? 'processing' : undefined);
+  const cost = numberValue(outputRecord.cost);
+  const markdown = stringValue(outputRecord.markdown);
+  const files = generationFilesFromOutput(outputRecord);
+
+  return [
+    {
+      generation_id: generationId,
+      ...(generationCall ? { tool_call: generationCall } : {}),
+      tool_result: {
+        ...(status ? { status } : statusCall ? { status: 'processing' } : {}),
+        ...(cost != null ? { cost } : {}),
+        ...(markdown ? { markdown } : {}),
+        ...(files.length > 0 ? { files } : {}),
+      },
+    },
+  ];
+}
+
+function mergeGenerationEntries(
+  metadataById: Map<string, ChatGenerationMetadata>,
+  entries: ChatGenerationMetadata[]
+): void {
+  for (const entry of entries) {
+    const existing = metadataById.get(entry.generation_id);
+    metadataById.set(entry.generation_id, {
+      generation_id: entry.generation_id,
+      tool_call: entry.tool_call ?? existing?.tool_call,
+      tool_result: {
+        ...(existing?.tool_result ?? {}),
+        ...(entry.tool_result ?? {}),
+      },
+    });
+  }
+}
 
 export const runAgent = async (req: Request, res: Response): Promise<void> => {
   let writeSSE: SSEWriter | null = null;
@@ -43,10 +189,12 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     const hasTools = Object.keys(allTools).length > 0;
 
     let sessionMessages: ChatMessage[] = [];
+    let chatMetadata: unknown = null;
     if (chat_id) {
+      chatMetadata = await handleGetChatMetadata(userId, chat_id);
       const msgResult = await handleListChatMessages(userId, chat_id, { order: 'asc' });
       if (!('error' in msgResult)) {
-        sessionMessages = messageRowsToModelMessages(msgResult?.data as unknown as MessageRow[]);
+        sessionMessages = messageRowsToModelMessages(msgResult?.data as unknown as MessageRow[], chatMetadata);
       }
     }
 
@@ -72,7 +220,6 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     res.flushHeaders();
 
     writeSSE = createSSEWriter(res);
-console.log('messages', messages);
     const result = streamText({
       model,
       system: systemPrompt,
@@ -92,6 +239,8 @@ console.log('messages', messages);
     let currentText = '';
     let currentReasoning = '';
     const collectedParts: StoredPart[] = [];
+    const localGennyToolCallsById = new Map<string, LocalGennyToolCall[]>();
+    const generationMetadataById = new Map<string, ChatGenerationMetadata>();
     let generatedFileIndex = 0;
 
     function flushText() {
@@ -106,28 +255,6 @@ console.log('messages', messages);
         //collectedParts.push({ type: 'reasoning', text: currentReasoning });
         currentReasoning = '';
       }
-    }
-
-    function objectRecord(value: unknown): Record<string, unknown> | null {
-      return value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-    }
-
-    function normalizeToolOutput(output: unknown): unknown {
-      const wrapper = objectRecord(output);
-      if (!wrapper) return output;
-
-      const data = objectRecord(wrapper.data);
-      const isComposioWrapper = 'successful' in wrapper || 'error' in wrapper || 'logId' in wrapper;
-      if (!data || !isComposioWrapper) return output;
-
-      return {
-        ...data,
-        ...(typeof wrapper.error === 'string' && wrapper.error.trim() ? { error: wrapper.error } : {}),
-        ...(typeof wrapper.successful === 'boolean' ? { successful: wrapper.successful } : {}),
-        ...(typeof wrapper.logId === 'string' && wrapper.logId.trim() ? { logId: wrapper.logId } : {}),
-      };
     }
 
     try {
@@ -218,6 +345,10 @@ console.log('messages', messages);
             flushReasoning();
             const tc = part as { toolCallId?: string; toolName?: string; input?: unknown };
             if (tc.toolName) {
+              const localGennyToolCalls = extractLocalGennyToolCalls(tc.input);
+              if (tc.toolCallId && localGennyToolCalls.length > 0) {
+                localGennyToolCallsById.set(tc.toolCallId, localGennyToolCalls);
+              }
               if (writeSSE) {
                 writeSSE({
                   type: 'stream_status',
@@ -230,12 +361,6 @@ console.log('messages', messages);
                   tool_call_id: tc.toolCallId,
                 });
               }
-              collectedParts.push({
-                type: 'tool-call',
-                toolCallId: tc.toolCallId ?? '',
-                toolName: tc.toolName,
-                input: tc.input ?? {},
-              });
             }
             break;
           }
@@ -248,6 +373,11 @@ console.log('messages', messages);
               isError?: boolean;
             };
             const normalizedOutput = normalizeToolOutput(tr.output);
+            const localGennyToolCalls = tr.toolCallId ? (localGennyToolCallsById.get(tr.toolCallId) ?? []) : [];
+            mergeGenerationEntries(
+              generationMetadataById,
+              metadataEntriesFromToolResult(localGennyToolCalls, normalizedOutput)
+            );
             if (writeSSE) {
               writeSSE({
                 type: 'stream_status',
@@ -262,13 +392,6 @@ console.log('messages', messages);
                 output: normalizedOutput,
               });
             }
-            collectedParts.push({
-              type: 'tool-result',
-              toolCallId: tr.toolCallId ?? '',
-              toolName: tr.toolName ?? '',
-              result: normalizedOutput,
-              isError: tr.isError,
-            });
             break;
           }
           default:
@@ -326,6 +449,10 @@ console.log('messages', messages);
           usage: usagePayload,
           gateway: gatewayData,
         });
+        const generations = Array.from(generationMetadataById.values());
+        if (generations.length > 0) {
+          await mergeChatGenerationMetadata(userId, chat_id, generations);
+        }
         await insertUserUsageLog({
           user_id: userId,
           usage_amount: totalCost,
@@ -338,7 +465,7 @@ console.log('messages', messages);
             usage: usagePayload,
           },
         });
-          await updateUserUsageBalance(userId, totalCost, 'debit');
+        await updateUserUsageBalance(userId, totalCost, 'debit');
       } catch (e) {
         console.error('[runChat] Error inserting user usage log:', e);
       }

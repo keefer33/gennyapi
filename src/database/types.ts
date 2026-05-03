@@ -40,7 +40,7 @@ export type GenModelRow = {
 };
 
 export type CreateUserGenModelRunResult = {
-  id?: string | null ;
+  id?: string | null;
   created_at: string;
 };
 
@@ -156,7 +156,7 @@ export type UserProfileRow = {
 };
 
 /** `user_models_chats` / `user_models_chats_messages` */
-export type SortOrder = "asc" | "desc";
+export type SortOrder = 'asc' | 'desc';
 
 export interface ChatRow {
   id?: string | null;
@@ -164,6 +164,7 @@ export interface ChatRow {
   updated_at?: string | null;
   user_id?: string | null;
   chat_name?: string | null;
+  metadata?: unknown | null;
 }
 
 export interface ChatMessageContentPart {
