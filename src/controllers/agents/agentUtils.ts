@@ -176,6 +176,7 @@ export async function createGenerationRequest(
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
+    console.log('createGenerationRequest', authToken, model_id, payload);
     const result = await fetch('https://api.genny.one/playground/run', {
       method: 'POST',
       headers: {
@@ -187,7 +188,7 @@ export async function createGenerationRequest(
         payload,
       }),
     });
-
+    console.log('createGenerationRequest result', result);
     let data: GenerationRequestResponse | null = null;
     try {
       data = (await result.json()) as GenerationRequestResponse;
