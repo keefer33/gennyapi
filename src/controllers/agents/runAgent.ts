@@ -183,7 +183,8 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
 
     //leave this here, it connects users to the composio tools
     const { gennyBotAigenTools, systemPrompt: gennyBotSystemPrompt } = await getAgentCustomTools(
-      (req as any).user.authToken
+      (req as any).user.authToken,
+      userId
     );
     const allTools = await loadComposioTools(userId, gennyBotAigenTools);
     const hasTools = Object.keys(allTools).length > 0;

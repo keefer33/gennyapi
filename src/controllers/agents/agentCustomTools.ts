@@ -3,158 +3,17 @@ import { z } from 'zod/v3';
 import {
   jsonSchemaInputToZodObject,
   createGenerationRequest,
-  agentCalculateCostRequest,
   buildGennyBotSystemPrompt,
-  getInternalApiBaseUrl,
+  getModelFunctionSchema,
+  getToolInputSchema,
+  buildToolSlug,
+  calculateModelCostToolResult,
+  getGenerationStatusToolResult,
 } from './agentUtils';
 import { getGenModelsList } from '../../database/gen_models';
-import type { GenModelRow } from '../../database/types';
+import { describeFileFromUrl, DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION } from '../../shared/describeFileVision';
 
-function getModelFunctionSchema(model: GenModelRow & { function_schema?: unknown }): Record<string, unknown> | null {
-  const apiFunctionSchema = model.gen_models_apis_id?.function_schema;
-  if (apiFunctionSchema && typeof apiFunctionSchema === 'object' && !Array.isArray(apiFunctionSchema)) {
-    return apiFunctionSchema as Record<string, unknown>;
-  }
-  if (model.function_schema && typeof model.function_schema === 'object' && !Array.isArray(model.function_schema)) {
-    return model.function_schema as Record<string, unknown>;
-  }
-  return null;
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function getToolInputSchema(functionSchema: Record<string, unknown> | null): Record<string, unknown> | null {
-  const schema =
-    objectRecord(functionSchema?.inputSchema) ?? objectRecord(functionSchema?.parameters) ?? functionSchema;
-  if (!schema) return null;
-  if (schema.type === 'object' && objectRecord(schema.properties)) return schema;
-
-  const nestedProperties = objectRecord(schema.properties);
-  if (nestedProperties?.type === 'object' && objectRecord(nestedProperties.properties)) return nestedProperties;
-
-  return null;
-}
-
-function slugPart(value: unknown): string {
-  return typeof value === 'string' ? value.trim().replace(/[-.]/g, '_').replace(/\s+/g, '_') : '';
-}
-
-function buildToolSlug(model: GenModelRow, functionSchema: Record<string, unknown> | null): string {
-  const modelProduct = slugPart(model.model_product);
-  const modelVariant = slugPart(model.model_variant);
-  const productVariantSlug = [modelProduct, modelVariant].filter(Boolean).join('_');
-  const fallbackSlug =
-    typeof functionSchema?.name === 'string'
-      ? slugPart(functionSchema.name)
-      : slugPart(model.model_id) || slugPart(model.model_name);
-  return (productVariantSlug || fallbackSlug).slice(0, 44);
-}
-
-type GenerationUserFile = {
-  id?: string | null;
-  file_name?: string | null;
-  thumbnail_url?: string | null;
-  file_path?: string | null;
-  file_size?: number | null;
-  file_type?: string | null;
-  status?: string | null;
-};
-
-type GenerationModelInfo = {
-  model_name?: string | null;
-  model_id?: string | null;
-  model_product?: string | null;
-  model_variant?: string | null;
-  generation_type?: string | null;
-  brand_name?: { name?: string | null; logo?: string | null } | string | null;
-};
-
-function markdownCell(value: unknown): string {
-  return String(value ?? '—').replace(/\|/g, '\\|').replace(/\n/g, '<br />');
-}
-
-function markdownLink(label: string, url: string | null | undefined): string {
-  return url ? `[${markdownCell(label)}](${url})` : markdownCell(label);
-}
-
-function getModelBrand(modelInfo: GenerationModelInfo | null | undefined): {
-  name: string | null;
-  logo: string | null;
-} {
-  const brand = modelInfo?.brand_name;
-  if (typeof brand === 'string') {
-    return { name: brand.trim() || null, logo: null };
-  }
-
-  return {
-    name: brand?.name?.trim() || null,
-    logo: brand?.logo?.trim() || null,
-  };
-}
-
-function buildGenerationCompletedMarkdown({
-  generation_id,
-  cost,
-  runStatus,
-  modelInfo,
-  userFiles,
-}: {
-  generation_id: string;
-  cost: number;
-  runStatus: string;
-  modelInfo?: GenerationModelInfo | null;
-  userFiles: GenerationUserFile[];
-}): string {
-  const brand = getModelBrand(modelInfo);
-  const modelName = modelInfo?.model_name?.trim() || modelInfo?.model_id?.trim() || 'Unknown model';
-  const modelTitle = [brand.name, modelName].filter(Boolean).join(' - ');
-  const lines = [
-    '## Generation completed successfully',
-    '',
-    `- **Generation id:** \`${generation_id}\``,
-    `- **Status:** ${markdownCell(runStatus)}`,
-    `- **Cost:** ${cost}`,
-    '',
-    '### Model',
-    '',
-    brand.logo ? `![${markdownCell(brand.name ?? 'Brand logo')}](${brand.logo})` : '',
-    `**${markdownCell(modelTitle)}**`,
-    '',
-    `- **Product:** ${markdownCell(modelInfo?.model_product)}`,
-    `- **Variant:** ${markdownCell(modelInfo?.model_variant)}`,
-    `- **Generation type:** ${markdownCell(modelInfo?.generation_type)}`,
-  ];
-
-  if (userFiles.length === 0) {
-    return [...lines, '', 'No generated files were returned.'].join('\n');
-  }
-
-  lines.push('', '### Generated files');
-
-  for (const [index, file] of userFiles.entries()) {
-    const fileName = file.file_name?.trim() || `Generated file ${index + 1}`;
-    const fileUrl = file.file_path?.trim() || file.thumbnail_url?.trim() || null;
-    const thumbnailUrl = file.thumbnail_url?.trim() || file.file_path?.trim() || null;
-
-    lines.push('', `#### ${index + 1}. ${markdownLink(fileName, fileUrl)}`);
-
-    if (thumbnailUrl) {
-      lines.push('', `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`);
-    }
-
-    lines.push(
-      '',
-      `- **Type:** ${markdownCell(file.file_type)}`,
-      fileUrl ? `- **URL:** ${markdownLink('Open file', fileUrl)}` : '- **URL:** —'
-    );
-  }
-
-  return lines.join('\n');
-}
-
-export default async function getAgentCustomTools(authToken: string) {
+export default async function getAgentCustomTools(_authToken: string, userId: string) {
   const models = await getGenModelsList();
   const toolPromptMeta = [];
   const modelNames: string[] = [];
@@ -177,7 +36,6 @@ export default async function getAgentCustomTools(authToken: string) {
       description: toolDescriptionWithCostHint,
     });
 
-    // Composio requires `inputParams` be a `z.object(...)` schema.
     const inputParams = jsonSchemaInputToZodObject(rawInputSchema);
 
     return [
@@ -186,15 +44,11 @@ export default async function getAgentCustomTools(authToken: string) {
         description: toolDescriptionWithCostHint,
         inputParams,
         execute: async input => {
-          return createGenerationRequest(authToken, model.id, input as Record<string, unknown>);
+          return createGenerationRequest(userId, String(model.id ?? ''), input as Record<string, unknown>);
         },
       }),
     ];
   });
-  const toolNameSchema =
-    modelNames.length > 0
-      ? z.enum(modelNames as [string, ...string[]]).describe('toolName should be one of the available model names.')
-      : z.string().describe('toolName should be one of the available model names.');
 
   const gennyBotAigenTools = experimental_createToolkit('GENNY_BOT', {
     name: 'Genny Bot Ai Gen Tools',
@@ -207,36 +61,14 @@ export default async function getAgentCustomTools(authToken: string) {
           'Estimate the usage cost for a generation before running it or if asked for pricing estimate.  Required fields should be sent in the tool input.  It is not necessary to send the prompt or image/video urls.  If no values are provided then use default values for the tool. toolName should schema name of the tool. Pass form_values_json as a JSON string of key/value fields (same shape as the generation tool inputs), e.g. {"resolution":"1080p","duration":5}.',
         inputParams: z.object({
           modelId: z.string().describe('The ID of the model to calculate the cost of'),
-          // Composio rejects z.record() (object with only additionalProperties). Use JSON string instead.
           form_values_json: z
             .string()
             .describe(
               'JSON object string of required fields, e.g. {"resolution":"1080p","duration":5} — same keys as the generation tool inputs.  It is not necessary to send the prompt or image/video urls.'
             ),
         }),
-        execute: async ({
-          modelId,
-          form_values_json,
-        }: {
-          modelId: string;
-          form_values_json: string;
-        }): Promise<Record<string, unknown>> => {
-          let formValues: Record<string, unknown> = {};
-          try {
-            const parsed = JSON.parse(form_values_json) as unknown;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              formValues = parsed as Record<string, unknown>;
-            } else {
-              return {
-                success: false,
-                message: 'form_values_json must parse to a JSON object',
-              };
-            }
-          } catch {
-            return { success: false, message: 'Invalid JSON in form_values_json' };
-          }
-          return agentCalculateCostRequest(authToken, modelId, formValues);
-        },
+        execute: async ({ modelId, form_values_json }: { modelId: string; form_values_json: string }) =>
+          calculateModelCostToolResult(modelId, form_values_json),
       }),
       experimental_createTool('GET_GENERATION_STATUS', {
         name: 'Get Generation Status',
@@ -245,68 +77,30 @@ export default async function getAgentCustomTools(authToken: string) {
         inputParams: z.object({
           generation_id: z.string().describe('The generation_id of the generation to get the status of'),
         }),
-        execute: async ({ generation_id }: { generation_id: string }): Promise<Record<string, unknown>> => {
-          const result = await fetch(
-            `${getInternalApiBaseUrl()}/playground/runs/${encodeURIComponent(generation_id)}/agent`,
-            {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${authToken}`,
-              },
-            }
-          );
-          const data = (await result.json()) as any;
-          if (!result.ok || data?.success === false) {
-            return {
-              message: data?.error?.message ?? 'Failed to get generation status',
-              generation_id,
-              status: 'error',
-            };
-          }
-
-          const item = data?.data?.item ?? data?.item;
-          if (!item) {
-            return {
-              message: 'Generation status response did not include a run item',
-              generation_id,
-              status: 'error',
-            };
-          }
-
-          const rawStatus = typeof item?.status === 'string' ? item.status : '';
-          const status = rawStatus.trim().toLowerCase();
-          const userFiles = Array.isArray(item?.user_files) ? item.user_files : [];
-          if (status === 'completed') {
-            const generationId = item?.id ?? generation_id;
-            const cost = item?.cost ?? 0;
-            const generationFiles = userFiles.map(({ status: _status, ...file }) => file);
-            const markdown = buildGenerationCompletedMarkdown({
-              generation_id: generationId,
-              cost,
-              runStatus: rawStatus || 'completed',
-              modelInfo: item?.gen_models,
-              userFiles: generationFiles,
+        execute: async ({ generation_id }: { generation_id: string }) =>
+          getGenerationStatusToolResult(userId, generation_id),
+      }),
+      experimental_createTool('DESCRIBE_REMOTE_FILE', {
+        name: 'Describe reference file for generation',
+        description:
+          'Vision analysis of a file at a public http(s) URL. Use before running image-to-image, image-to-video, video-to-video, or any generation tool whose schema accepts reference images, videos, or other file URL fields. Call this when the user supplies a link or attachment and you need accurate, concrete details to write the generation prompt and fill file-related tool inputs. The returned text is prompt-building material, not necessarily wording to read verbatim to the user.',
+        inputParams: z.object({
+          file_url: z
+            .string()
+            .describe(
+              'Public http(s) URL of the reference image, video, or other input file (e.g. from the user message, attachments, or storage).'
+            ),
+        }),
+        execute: async ({ file_url }: { file_url: string }): Promise<Record<string, unknown>> => {
+          try {
+            const { text } = await describeFileFromUrl(file_url, {
+              userInstruction: DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION,
             });
-            return {
-              message: markdown,
-              markdown,
-              display_markdown: markdown,
-              display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
-              generation_files: generationFiles,
-              generation_id: generationId,
-              cost,
-              status: 'completed',
-            };
+            return { success: true, text };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to describe file';
+            return { success: false, message };
           }
-          if (status === 'error') {
-            return { message: 'Generation failed', generation_id: item?.id ?? generation_id, status: 'error' };
-          }
-          return {
-            message: 'Generation is still processing',
-            generation_id: item?.id ?? generation_id,
-            status: status || 'processing',
-          };
         },
       }),
     ],
@@ -324,6 +118,12 @@ export default async function getAgentCustomTools(authToken: string) {
       slug: 'GET_GENERATION_STATUS',
       name: 'Get Generation Status',
       description: 'Check generation completion/failure and return cost when available.',
+    },
+    {
+      slug: 'DESCRIBE_REMOTE_FILE',
+      name: 'Describe reference file for generation',
+      description:
+        'Analyze a file URL to inform prompts and file-input fields for i2i, i2v, and similar models.',
     },
   ]);
 

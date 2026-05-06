@@ -4,7 +4,7 @@ import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { listUserFilesData } from '../../../database/user_files';
 
 /**
- * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all
+ * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all|images_videos|images_audio|videos_audio
  */
 export async function listUserFiles(req: Request, res: Response): Promise<void> {
   try {

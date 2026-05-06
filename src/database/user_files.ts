@@ -212,9 +212,16 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
 
-  if (fileTypeFilter === 'images') query = query.ilike('file_type', 'image/%');
-  else if (fileTypeFilter === 'videos') query = query.ilike('file_type', 'video/%');
-  else if (fileTypeFilter === 'audio') query = query.ilike('file_type', 'audio/%');
+  const fileTypePrefixes = [
+    fileTypeFilter.includes('images') ? 'image' : null,
+    fileTypeFilter.includes('videos') ? 'video' : null,
+    fileTypeFilter.includes('audio') ? 'audio' : null,
+  ].filter((prefix): prefix is string => Boolean(prefix));
+  if (fileTypePrefixes.length === 1) {
+    query = query.ilike('file_type', `${fileTypePrefixes[0]}/%`);
+  } else if (fileTypePrefixes.length > 1 && fileTypePrefixes.length < 3) {
+    query = query.or(fileTypePrefixes.map(prefix => `file_type.ilike.${prefix}/%`).join(','));
+  }
 
   const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, to);
   if (error) {

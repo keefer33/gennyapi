@@ -1,40 +1,26 @@
 import { Response } from 'express';
-import { AppError } from '../../app/error';
+import { AppError, isAppError } from '../../app/error';
 import { sendError } from '../../app/response';
 import { z } from 'zod/v3';
 import { handleGetAgentModelByName } from '../../database/agent_models';
 import getAgentCustomTools from './agentCustomTools';
 import { Composio } from '@composio/core';
 import { VercelProvider } from '@composio/vercel';
-import { AgentModelRow } from '../../database/types';
+import { AgentModelRow, GenModelRow } from '../../database/types';
+import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
+import { resolvePlaygroundRunCost } from '../playground/playgroundRunCost';
+import { RUN_AGENT_SELECT } from '../../database/const';
+import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
 import {
   SSEWriter,
   RunAgentBody,
   RunAgentInput,
   RunAgentAttachmentInput,
   RunAgentHttpError,
-  AgentCalculateCostResponse,
-  GenerationRequestResponse,
   GennyToolPromptMeta,
+  GenerationUserFile,
+  GenerationModelInfo,
 } from './types';
-
-/**
- * Base URL when this server calls its own HTTP routes (playground/* from agent tools).
- *
- * Priority:
- * 1. INTERNAL_API_BASE_URL — full override (no trailing slash), any environment
- * 2. NODE_ENV === "production" — http://INTERNAL_API_HOST:PORT (INTERNAL_API_HOST defaults to gennyapi)
- * 3. Otherwise — http://127.0.0.1:PORT (local dev)
- */
-export function getInternalApiBaseUrl(): string {
-
-  if (process.env.NODE_ENV === 'production') {
-    const host = process.env.INTERNAL_API_HOST?.trim() || 'gennyapi';
-    return `http://gennyapi:3000`;
-  }
-
-  return `http://localhost:3000`;
-}
 
 export function createSSEWriter(res: Response): SSEWriter {
   return (data: Record<string, unknown>) => {
@@ -132,102 +118,26 @@ export async function loadComposioTools(
   }
 }
 
-export async function agentCalculateCostRequest(
-  authToken: string,
-  modelId: string,
-  formValues: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  try {
-    const result = await fetch(`${getInternalApiBaseUrl()}/playground/cost`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
-        payload: formValues,
-        modelId: modelId.trim(),
-      }),
-    });
-
-    let data: AgentCalculateCostResponse | null = null;
-    try {
-      data = (await result.json()) as AgentCalculateCostResponse;
-    } catch {
-      data = null;
-    }
-
-    if (!result.ok || data?.success === false) {
-      const errorMessage =
-        typeof data?.error === 'string' ? data.error : `Cost calculation failed with status ${result.status}`;
-      return {
-        success: false,
-        message: errorMessage,
-        status: result.status,
-      };
-    }
-
-    const payload = data?.data;
-    if (typeof payload?.cost !== 'number' || Number.isNaN(payload.cost) || !Number.isFinite(payload.cost)) {
-      return {
-        success: false,
-        message: typeof data?.error === 'string' ? data.error : 'Cost calculation did not return a valid numeric cost',
-        status: result.status,
-      };
-    }
-
-    return {
-      success: true,
-      cost: payload.cost,
-    };
-  } catch (error: unknown) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : 'Unexpected error while calculating cost',
-    };
-  }
-}
-
 export async function createGenerationRequest(
-  authToken: string,
+  userId: string,
   model_id: string,
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   try {
-    const result = await fetch(`${getInternalApiBaseUrl()}/playground/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
-        id: model_id,
-        payload,
-      }),
-    });
-    let data: GenerationRequestResponse | null = null;
-    try {
-      data = (await result.json()) as GenerationRequestResponse;
-    } catch {
-      data = null;
-    }
-
-    if (!result.ok) {
-      const errorMessage =
-        typeof data?.error === 'string' ? data.error : `Generation request failed with status ${result.status}`;
-      return {
-        success: false,
-        message: errorMessage,
-        status: result.status,
-      };
-    }
-
+    const genModelRun = await executePlaygroundModelRun(userId, model_id, payload);
     return {
       success: true,
       message: 'Generation started successfully',
-      generation_id: data?.data?.id ?? null,
+      generation_id: genModelRun?.id ?? null,
     };
   } catch (error: unknown) {
+    if (isAppError(error)) {
+      return {
+        success: false,
+        message: error.expose ? error.message : 'Generation request failed',
+        status: error.statusCode,
+      };
+    }
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Unexpected error while generating image',
@@ -322,6 +232,285 @@ export function toSnakeCase(input: string): string {
     .replace(/([A-Z]+)([A-Z][a-z0-9]+)/g, '$1_$2')
     .replace(/[\s-]+/g, '_')
     .toLowerCase();
+}
+
+// --- Genny bot toolkit: schema helpers, markdown, tool executors ---
+
+export function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+export function getModelFunctionSchema(
+  model: GenModelRow & { function_schema?: unknown }
+): Record<string, unknown> | null {
+  const apiFunctionSchema = model.gen_models_apis_id?.function_schema;
+  if (apiFunctionSchema && typeof apiFunctionSchema === 'object' && !Array.isArray(apiFunctionSchema)) {
+    return apiFunctionSchema as Record<string, unknown>;
+  }
+  if (model.function_schema && typeof model.function_schema === 'object' && !Array.isArray(model.function_schema)) {
+    return model.function_schema as Record<string, unknown>;
+  }
+  return null;
+}
+
+export function getToolInputSchema(functionSchema: Record<string, unknown> | null): Record<string, unknown> | null {
+  const schema =
+    objectRecord(functionSchema?.inputSchema) ?? objectRecord(functionSchema?.parameters) ?? functionSchema;
+  if (!schema) return null;
+  if (schema.type === 'object' && objectRecord(schema.properties)) return schema;
+
+  const nestedProperties = objectRecord(schema.properties);
+  if (nestedProperties?.type === 'object' && objectRecord(nestedProperties.properties)) return nestedProperties;
+
+  return null;
+}
+
+export function slugPart(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/[-.]/g, '_').replace(/\s+/g, '_') : '';
+}
+
+export function buildToolSlug(model: GenModelRow, functionSchema: Record<string, unknown> | null): string {
+  const modelProduct = slugPart(model.model_product);
+  const modelVariant = slugPart(model.model_variant);
+  const productVariantSlug = [modelProduct, modelVariant].filter(Boolean).join('_');
+  const fallbackSlug =
+    typeof functionSchema?.name === 'string'
+      ? slugPart(functionSchema.name)
+      : slugPart(model.model_id) || slugPart(model.model_name);
+  return (productVariantSlug || fallbackSlug).slice(0, 44);
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export function markdownCell(value: unknown): string {
+  return String(value ?? '—').replace(/\|/g, '\\|').replace(/\n/g, '<br />');
+}
+
+export function markdownLink(label: string, url: string | null | undefined): string {
+  return url ? `[${markdownCell(label)}](${url})` : markdownCell(label);
+}
+
+export function getModelBrand(modelInfo: GenerationModelInfo | null | undefined): {
+  name: string | null;
+  logo: string | null;
+} {
+  const brand = modelInfo?.brand_name;
+  if (typeof brand === 'string') {
+    return { name: brand.trim() || null, logo: null };
+  }
+
+  return {
+    name: brand?.name?.trim() || null,
+    logo: brand?.logo?.trim() || null,
+  };
+}
+
+function normalizePayloadRecord(payload: unknown): Record<string, unknown> | null {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  return payload as Record<string, unknown>;
+}
+
+/** Display-friendly value for markdown bullets (primitives as text, objects as JSON). */
+function formatPayloadValueForMarkdown(value: unknown): string {
+  if (value === null || value === undefined) return markdownCell('—');
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return markdownCell(value);
+  }
+  try {
+    return markdownCell(JSON.stringify(value));
+  } catch {
+    return markdownCell(String(value));
+  }
+}
+
+const PAYLOAD_KEY_ORDER = ['prompt', 'positive_prompt', 'user_prompt', 'text', 'negative_prompt'];
+
+function orderedPayloadEntries(rec: Record<string, unknown>): [string, unknown][] {
+  const entries = Object.entries(rec);
+  const used = new Set<number>();
+  const out: [string, unknown][] = [];
+
+  for (const priority of PAYLOAD_KEY_ORDER) {
+    const idx = entries.findIndex(([k]) => k.toLowerCase() === priority);
+    if (idx !== -1 && !used.has(idx)) {
+      out.push(entries[idx]);
+      used.add(idx);
+    }
+  }
+
+  const rest = entries
+    .map((e, i) => ({ e, i }))
+    .filter(({ i }) => !used.has(i))
+    .sort((a, b) => a.e[0].localeCompare(b.e[0]))
+    .map(({ e }) => e);
+  out.push(...rest);
+  return out;
+}
+
+/** Key/value markdown lines for generation payload (prompt-like keys first). */
+function buildPayloadMarkdownLines(payload: unknown): string[] {
+  const rec = normalizePayloadRecord(payload);
+  if (!rec) return [];
+
+  return orderedPayloadEntries(rec).map(
+    ([key, value]) => `- **${markdownCell(key)}:** ${formatPayloadValueForMarkdown(value)}`
+  );
+}
+
+export function buildGenerationCompletedMarkdown({
+  generation_id,
+  cost,
+  runStatus,
+  modelInfo,
+  userFiles,
+  payload,
+}: {
+  generation_id: string;
+  cost: number;
+  runStatus: string;
+  modelInfo?: GenerationModelInfo | null;
+  userFiles: GenerationUserFile[];
+  payload?: unknown;
+}): string {
+  const brand = getModelBrand(modelInfo);
+  const modelName = modelInfo?.model_name?.trim() || modelInfo?.model_id?.trim() || 'Unknown model';
+  const modelTitle = [brand.name, modelName].filter(Boolean).join(' - ');
+  const payloadLines = buildPayloadMarkdownLines(payload);
+
+  const lines = [
+    '## Generation completed successfully',
+    '',
+    `- **Generation id:** \`${generation_id}\``,
+    `- **Status:** ${markdownCell(runStatus)}`,
+    `- **Cost:** ${cost}`,
+    '',
+    '### Model',
+    '',
+    brand.logo
+      ? `<img src="${escapeHtmlAttr(brand.logo)}" alt="${escapeHtmlAttr(brand.name ?? 'Brand logo')}" width="30" height="30" />`
+      : '',
+    `**${markdownCell(modelTitle)}**`,
+    ...(payloadLines.length > 0 ? ['', '### Request', '', ...payloadLines] : []),
+  ];
+
+  if (userFiles.length === 0) {
+    return [...lines, '', 'No generated files were returned.'].join('\n');
+  }
+
+  lines.push('', '### Generated files');
+
+  for (const [index, file] of userFiles.entries()) {
+    const fileName = file.file_name?.trim() || `Generated file ${index + 1}`;
+    const fileUrl = file.file_path?.trim() || file.thumbnail_url?.trim() || null;
+    const thumbnailUrl = file.thumbnail_url?.trim() || file.file_path?.trim() || null;
+
+    lines.push('', `#### ${index + 1}. ${markdownLink(fileName, fileUrl)}`);
+
+    if (thumbnailUrl) {
+      lines.push('', `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`);
+    }
+
+    lines.push(
+      '',
+      `- **Type:** ${markdownCell(file.file_type)}`,
+      fileUrl ? `- **URL:** ${markdownLink('Open file', fileUrl)}` : '- **URL:** —'
+    );
+  }
+
+  return lines.join('\n');
+}
+
+export async function calculateModelCostToolResult(
+  modelId: string,
+  form_values_json: string
+): Promise<Record<string, unknown>> {
+  let formValues: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(form_values_json) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      formValues = parsed as Record<string, unknown>;
+    } else {
+      return {
+        success: false,
+        message: 'form_values_json must parse to a JSON object',
+      };
+    }
+  } catch {
+    return { success: false, message: 'Invalid JSON in form_values_json' };
+  }
+  try {
+    const cost = await resolvePlaygroundRunCost(modelId, formValues);
+    return { success: true, cost };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unexpected error while calculating cost';
+    return { success: false, message };
+  }
+}
+
+export async function getGenerationStatusToolResult(
+  userId: string,
+  generation_id: string
+): Promise<Record<string, unknown>> {
+  const runId = typeof generation_id === 'string' ? generation_id.trim() : '';
+  if (!runId) {
+    return { message: 'generation_id is required', generation_id: generation_id ?? '', status: 'error' };
+  }
+
+  let item: Awaited<ReturnType<typeof getUserGenModelRunByIdForUser>> | null;
+  try {
+    item = await getUserGenModelRunByIdForUser(userId, runId, RUN_AGENT_SELECT);
+  } catch {
+    return {
+      message: 'Failed to load generation status',
+      generation_id: runId,
+      status: 'error',
+    };
+  }
+
+  if (!item) {
+    return {
+      message: 'Run not found',
+      generation_id: runId,
+      status: 'error',
+    };
+  }
+
+  const rawStatus = typeof item.status === 'string' ? item.status : '';
+  const status = rawStatus.trim().toLowerCase();
+  const userFiles = Array.isArray((item as { user_files?: unknown }).user_files)
+    ? (item as { user_files: GenerationUserFile[] }).user_files
+    : [];
+  if (status === 'completed') {
+    const generationId = item.id ?? runId;
+    const cost = item.cost ?? 0;
+    const generationFiles = userFiles.map(({ status: _st, ...file }) => file);
+    const markdown = buildGenerationCompletedMarkdown({
+      generation_id: generationId,
+      cost,
+      runStatus: rawStatus || 'completed',
+      modelInfo: (item as { gen_models?: GenerationModelInfo | null }).gen_models,
+      userFiles: generationFiles,
+      payload: item.payload,
+    });
+    return {
+      markdown,
+      display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
+      generation_files: generationFiles,
+      generation_id: generationId,
+      cost,
+      status: 'completed',
+    };
+  }
+  if (status === 'error') {
+    return { message: 'Generation failed', generation_id: item.id ?? runId, status: 'error' };
+  }
+  return {
+    message: 'Generation is still processing',
+    generation_id: item.id ?? runId,
+    status: status || 'processing',
+  };
 }
 
 export function buildGennyBotSystemPrompt(tools: GennyToolPromptMeta[]): string {
