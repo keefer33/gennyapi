@@ -46,7 +46,6 @@ const USER_FILES_INSERT_KEYS = [
   'file_type',
   'generated_info',
   'folder_id',
-  'zip_data',
   'status',
   'upload_type',
   'thumbnail_url',

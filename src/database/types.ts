@@ -90,7 +90,6 @@ export type UserFileRow = {
   file_type?: string | null;
   generated_info?: unknown | null;
   folder_id?: string | null;
-  zip_data?: unknown | null;
   status?: string | null;
   upload_type?: string | null;
   thumbnail_url?: string | null;
