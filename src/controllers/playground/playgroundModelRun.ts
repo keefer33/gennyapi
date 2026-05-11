@@ -16,7 +16,7 @@ export async function playgroundModelRun(req: Request, res: Response): Promise<v
       throw badRequest('payload is required');
     }
 
-    const genModelRun = await executePlaygroundModelRun(userId, id, payload);
+    const genModelRun = await executePlaygroundModelRun(userId, id, payload, 'playground');
     sendOk(res, genModelRun);
   } catch (err) {
     sendError(res, err);

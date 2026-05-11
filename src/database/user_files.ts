@@ -20,6 +20,48 @@ export async function getUserFilesByRunId(runId: string): Promise<UserFileRow[]>
   return files ?? [];
 }
 
+/** All rows for a run (any status) — for teardown before deleting the run. */
+export async function getUserFilesByRunIdAllStatuses(runId: string): Promise<UserFileRow[]> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data: files, error: filesErr } = await supabaseServerClient
+    .from('user_files')
+    .select('*')
+    .eq('gen_model_run_id', runId);
+
+  if (filesErr) {
+    throw new AppError(filesErr.message, {
+      statusCode: 500,
+      code: 'user_gen_model_run_files_fetch_failed',
+    });
+  }
+  return (files as UserFileRow[]) ?? [];
+}
+
+/** Voice preview row from character create (`upload_type` character, same `file_path` as `user_characters.files.voice`). */
+export async function getUserFileByUserAndFilePath(
+  userId: string,
+  filePath: string
+): Promise<UserFileRow | null> {
+  const trimmed = filePath.trim();
+  if (!trimmed) return null;
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('file_path', trimmed)
+    .eq('upload_type', 'character')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_file_by_path_fetch_failed',
+    });
+  }
+  return (data as UserFileRow | null) ?? null;
+}
+
 export async function deleteUserFile(id: string): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
   const { error: delErr } = await supabaseServerClient

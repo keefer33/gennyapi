@@ -56,6 +56,8 @@ export type UserGenModelRuns = {
   payload?: unknown;
   response?: unknown;
   polling_response?: unknown;
+  app?: string | null;
+  character_id?: string | null;
 };
 
 export type UserGenModelRunListRow = UserGenModelRuns & {
@@ -95,6 +97,25 @@ export type UserFileRow = {
   thumbnail_url?: string | null;
   gen_model_id?: string | null;
   gen_model_run_id?: string | null;
+};
+
+/** Matches `public.user_characters` */
+export type UserCharacterRow = {
+  id?: string | null;
+  user_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  name?: string | null;
+  description?: string | null;
+  language?: string | null;
+  gender?: string | null;
+  age?: string | null;
+  accent?: string | null;
+  category?: string | null;
+  descriptive?: string | null;
+  use_case?: string | null;
+  featured?: boolean | null;
+  files?: unknown | null;
 };
 
 /** Matches `public.user_tags` */

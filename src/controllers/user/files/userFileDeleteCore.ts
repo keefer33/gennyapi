@@ -43,7 +43,7 @@ export async function deleteUserFileStorageAndDbForRow(userId: string, row: User
     });
   }
 
-  if (thumbStorageKey && thumbStorageKey !== mainStorageKey && thumbStorageKey !== idOrName) {
+  if (thumbStorageKey && thumbStorageKey !== mainStorageKey) {
     const thumbRes = await axios.delete(`${baseUrl}/api/user/files/${encodeURIComponent(thumbStorageKey)}`, {
       headers: {
         Authorization: token,
@@ -61,4 +61,34 @@ export async function deleteUserFileStorageAndDbForRow(userId: string, row: User
   }
 
   await deleteUserFile(fileId);
+}
+
+/**
+ * Deletes a Zipline object by public URL only (no `user_files` row).
+ * Used when e.g. `user_characters.files.voice` points at storage but the DB row is missing.
+ */
+export async function deleteZiplinePublicUrlForUser(userId: string, fileUrl: string): Promise<void> {
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return;
+
+  const baseUrl = getZiplineBaseUrl();
+  const key = ziplineStorageKeyFromPublicUrl(trimmed, baseUrl);
+  if (!key) return;
+
+  const token = await getZiplineTokenForUser(userId);
+  const ziplineRes = await axios.delete(`${baseUrl}/api/user/files/${encodeURIComponent(key)}`, {
+    headers: {
+      Authorization: token,
+    },
+    validateStatus: () => true,
+  });
+
+  const ziplineData = ziplineRes.data;
+  if (ziplineRes.status !== 404 && (ziplineRes.status < 200 || ziplineRes.status >= 300)) {
+    throw new AppError(ziplineData?.message || 'Failed to delete file from storage', {
+      statusCode: ziplineRes.status,
+      code: 'user_file_storage_delete_failed',
+      details: ziplineData,
+    });
+  }
 }

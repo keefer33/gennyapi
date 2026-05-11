@@ -73,11 +73,23 @@ function xaiErrorMessage(responseData: unknown): string | null {
   }
   const errText = root.error;
   if (typeof errText === 'string' && errText.trim()) return errText.trim();
+  const detail = root.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail.trim();
+  if (Array.isArray(detail)) {
+    const first = detail[0];
+    if (first && typeof first === 'object') {
+      const msg = (first as Record<string, unknown>).msg;
+      if (typeof msg === 'string' && msg.trim()) return msg.trim();
+    }
+  }
+  const message = root.message;
+  if (typeof message === 'string' && message.trim()) return message.trim();
   return null;
 }
 
 export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): Promise<void> {
   const { run, runId, rowStatus, apiSchema, apiKey, vendorModelName } = context;
+  const duration = durationForRun(run);
   const isInstantImage = vendorModelName === XAI_INSTANT_IMAGE_VENDOR_MODEL;
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
@@ -95,7 +107,16 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
 
   if (isInstantImage) {
     if (!server || !apiPath) {
-      throw new Error('xai instant image api_schema missing server/api_path');
+      const message = 'xAI instant image is misconfigured (missing server or api_path).';
+      console.error('[webhookXai]', message, { run_id: run.id });
+      await errorWebhookRun({
+        run,
+        response: {},
+        message,
+        duration,
+        metaError: 'xai instant image api_schema missing server/api_path',
+      });
+      return;
     }
     const endpoint = `${server}${apiPath}`;
     const requestPayload = {
@@ -108,7 +129,21 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
       validateStatus: () => true,
     });
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`xai instant image failed with status ${response.status}`);
+      const httpMsg =
+        xaiErrorMessage(response.data) || `xAI image request failed (HTTP ${response.status})`;
+      console.error('[webhookXai] instant image HTTP error', {
+        run_id: run.id,
+        status: response.status,
+        message: httpMsg,
+      });
+      await errorWebhookRun({
+        run,
+        response: response.data,
+        message: httpMsg,
+        duration,
+        metaError: `xai instant image HTTP ${response.status}`,
+      });
+      return;
     }
     lastResponse = response.data as any;
     imageUrls = Array.isArray(lastResponse?.data)
@@ -120,7 +155,16 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
     finalStatus = imageUrls.length > 0 ? 'done' : 'failed';
   } else {
     if (!server || !pollingPath || !taskId) {
-      throw new Error('xai api_schema missing server/polling_path or task_id');
+      const message = 'xAI polling is misconfigured (missing server, polling_path, or task_id).';
+      console.error('[webhookXai]', message, { run_id: run.id });
+      await errorWebhookRun({
+        run,
+        response: {},
+        message,
+        duration,
+        metaError: 'xai api_schema missing server/polling_path or task_id',
+      });
+      return;
     }
     const endpoint = `${server}${pollingPath}${taskId}`;
     console.log('[webhookXai] poll', { endpoint, run_id: run.id, task_id: taskId, db_status: rowStatus });
@@ -130,7 +174,21 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
     });
 
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`xai polling failed with status ${response.status}`);
+      const httpMsg =
+        xaiErrorMessage(response.data) || `xAI polling failed (HTTP ${response.status})`;
+      console.error('[webhookXai] polling HTTP error', {
+        run_id: run.id,
+        status: response.status,
+        message: httpMsg,
+      });
+      await errorWebhookRun({
+        run,
+        response: response.data,
+        message: httpMsg,
+        duration,
+        metaError: `xai polling HTTP ${response.status}`,
+      });
+      return;
     }
     lastResponse = (response.data ?? {}) as XaiPollingResponse;
     finalStatus = typeof lastResponse.status === 'string' ? lastResponse.status : 'unknown';
@@ -143,8 +201,6 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
     task_id: taskId,
     db_status: rowStatus,
   });
-
-  const duration = durationForRun(run);
 
   try {
     if (finalStatus === 'done' && (videoUrl || imageUrls.length > 0)) {
@@ -212,6 +268,5 @@ export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): P
       message: message || 'Generation failed, please try again.',
       duration,
     });
-    throw error;
   }
 }

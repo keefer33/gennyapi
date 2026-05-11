@@ -28,6 +28,14 @@ export function getZiplineBaseUrl(): string {
  * (e.g. `https://aifile.link/tlgHWK.jpg` → `tlgHWK.jpg`). Only URLs whose origin matches
  * {@link getZiplineBaseUrl} are accepted.
  */
+/** Compare hosts for Zipline public URLs (treat `www.` and `http`/`https` as equivalent to configured base). */
+function ziplinePublicUrlMatchesBase(parsed: URL, baseParsed: URL): boolean {
+  const stripWww = (host: string) => host.replace(/^www\./i, '');
+  const hostA = stripWww(parsed.hostname).toLowerCase();
+  const hostB = stripWww(baseParsed.hostname).toLowerCase();
+  return hostA === hostB;
+}
+
 export function ziplineStorageKeyFromPublicUrl(
   fileUrl: string | null | undefined,
   ziplineBaseUrl: string
@@ -48,7 +56,7 @@ export function ziplineStorageKeyFromPublicUrl(
   } catch {
     return null;
   }
-  if (parsed.origin !== baseParsed.origin) return null;
+  if (!ziplinePublicUrlMatchesBase(parsed, baseParsed)) return null;
   const key = parsed.pathname.replace(/^\/+/, '');
   return key || null;
 }

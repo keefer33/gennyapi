@@ -42,7 +42,9 @@ function instantModelResponse(genModel: NonNullable<Awaited<ReturnType<typeof ge
 export async function executePlaygroundModelRun(
   userId: string,
   modelId: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  app: string = 'playground',
+  character_id: string = null
 ): Promise<Awaited<ReturnType<typeof createUserGenModelRun>>> {
   const id = typeof modelId === 'string' ? modelId.trim() : '';
   if (!id) {
@@ -107,6 +109,8 @@ export async function executePlaygroundModelRun(
       cost,
       task_id: respObj?.id || respObj?.taskId || null,
       status: 'pending',
+      app: app,
+      character_id: character_id,
     });
 
     await insertUserUsageLog({
