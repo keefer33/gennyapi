@@ -24,24 +24,19 @@ const DEFAULT_CREATE_PATH = '/v1/prediction';
 export async function runEachlabsModel(genModel: GenModelRow, payload: unknown) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema as EachlabsApiSchema | null) ?? {};
   const server = (typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '') || DEFAULT_SERVER;
-  const apiPath =
-    (typeof apiSchema.api_path === 'string' && apiSchema.api_path.trim()) || DEFAULT_CREATE_PATH;
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+  const apiPath = (typeof apiSchema.api_path === 'string' && apiSchema.api_path.trim()) || DEFAULT_CREATE_PATH;
+  const vendorModelName = typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
   const version =
     (typeof apiSchema.version === 'string' && apiSchema.version.trim()) ||
     (typeof apiSchema.model_version === 'string' && apiSchema.model_version.trim()) ||
     '';
 
   if (!vendorModelName || !version) {
-    throw new AppError(
-      'Eachlabs requires api_schema.vendor_model_name (model slug) and version (or model_version)',
-      {
-        statusCode: 400,
-        code: 'eachlabs_schema_missing_model_or_version',
-        expose: true,
-      }
-    );
+    throw new AppError('Eachlabs requires api_schema.vendor_model_name (model slug) and version (or model_version)', {
+      statusCode: 400,
+      code: 'eachlabs_schema_missing_model_or_version',
+      expose: true,
+    });
   }
 
   const apiKey = genModel.gen_models_apis_id?.vendor_api?.api_key;
@@ -58,9 +53,7 @@ export async function runEachlabsModel(genModel: GenModelRow, payload: unknown) 
   const endpoint = `${base}${path}`;
 
   const input =
-    payload && typeof payload === 'object' && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {};
+    payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
 
   const response = await axios.post(
     endpoint,

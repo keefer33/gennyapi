@@ -95,10 +95,12 @@ const mediaSource = (input: unknown): string => {
   return typeof source === 'string' ? source.trim() : '';
 };
 
-const getVideoDurationSeconds = async (input: unknown): Promise<number> => {
+/** Audio or video: ffprobe reads container `format.duration` (seconds, ceil). */
+const getMediaDurationSeconds = async (input: unknown): Promise<number> => {
   const source = mediaSource(input);
   if (!source || !ffprobeStatic.path) return 0;
-
+console.log('source', source);
+console.log('ffprobeStatic.path', ffprobeStatic.path);
   try {
     const { stdout } = await execFileAsync(
       ffprobeStatic.path,
@@ -108,7 +110,7 @@ const getVideoDurationSeconds = async (input: unknown): Promise<number> => {
     const duration = Number(String(stdout).trim());
     return Number.isFinite(duration) && duration > 0 ? Math.ceil(duration) : 0;
   } catch (error) {
-    console.warn('[calculatePricingUtil] ffprobe duration lookup failed', error);
+    console.warn('[calculatePricingUtil] ffprobe media duration lookup failed', error);
     return 0;
   }
 };
@@ -151,12 +153,12 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
         return unitCost * multiplier;
       }
 
-      if (data?.type === 'multiConvert') {
+      if (data?.type === 'multiConvert' || data?.type === 'multiConvertAudio') {
         const unitCost = Number(data.cost);
         if (!Number.isFinite(unitCost)) return 0;
         const convertField = typeof data.field === 'string' ? data.field : undefined;
         const sourceValue = convertField ? safeFormValues[convertField] : undefined;
-        const durationSeconds = await getVideoDurationSeconds(sourceValue);
+        const durationSeconds = await getMediaDurationSeconds(sourceValue);
         return unitCost * durationSeconds;
       }
 

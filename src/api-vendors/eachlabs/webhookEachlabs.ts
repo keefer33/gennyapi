@@ -38,7 +38,7 @@ function eachlabsOutputToProcessable(output: unknown): string | string[] | null 
   if (typeof output === 'string' && output.trim()) return output.trim();
   if (Array.isArray(output)) {
     const urls = output
-      .map((item) => {
+      .map(item => {
         if (typeof item === 'string') return item.trim();
         if (item && typeof item === 'object' && typeof (item as { url?: unknown }).url === 'string') {
           return String((item as { url: string }).url).trim();
@@ -117,7 +117,7 @@ export async function webhookEachlabs(context: WebhookVendorContext<EachlabsPoll
   }
 
   const data = (response.data ?? {}) as EachlabsPredictionResponse;
-  const status = (typeof data.status === 'string' ? data.status.trim().toLowerCase() : 'unknown');
+  const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : 'unknown';
 
   try {
     if (status === 'success') {

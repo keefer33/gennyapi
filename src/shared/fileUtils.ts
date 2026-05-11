@@ -418,7 +418,7 @@ const generateThumbnail = async (
       const thumbnail = await sharp(fileBuffer)
         .resize(width, height, {
           fit: 'cover',
-          position: 'center',
+          position: 'top',
         })
         .jpeg({ quality: 85 })
         .toBuffer();
@@ -457,7 +457,7 @@ const generateThumbnail = async (
         const thumbnailBuffer = await sharp(frameBuffer)
           .resize(width, height, {
             fit: 'cover',
-            position: 'center',
+            position: 'top',
           })
           .jpeg({ quality: 85 })
           .toBuffer();
