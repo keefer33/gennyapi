@@ -6,6 +6,22 @@ const execFileAsync = promisify(execFile);
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffprobeStatic = require('ffprobe-static') as { path?: string };
 
+/**
+ * Reads a value from a nested object using dot-separated paths (e.g. `parameters.duration`).
+ * Aligns with the generate UI `getFormValueAtPath` behavior.
+ */
+const getFormValueAtPath = (values: unknown, path: string): unknown => {
+  if (!path) return values;
+  if (typeof values !== 'object' || values === null) return undefined;
+  const segments = path.split('.');
+  let cur: unknown = (values as Record<string, unknown>)[segments[0]!];
+  for (let i = 1; i < segments.length; i += 1) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[segments[i]!];
+  }
+  return cur;
+};
+
 /** Pull the expression from `formula` (string or `{"total_price": <expr>}` shape). */
 const extractFormulaExpression = (formula: unknown): string | null => {
   if (formula == null) return null;
@@ -99,8 +115,6 @@ const mediaSource = (input: unknown): string => {
 const getMediaDurationSeconds = async (input: unknown): Promise<number> => {
   const source = mediaSource(input);
   if (!source || !ffprobeStatic.path) return 0;
-console.log('source', source);
-console.log('ffprobeStatic.path', ffprobeStatic.path);
   try {
     const { stdout } = await execFileAsync(
       ffprobeStatic.path,
@@ -132,13 +146,19 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
       }
 
       const field = typeof current?.field === 'string' ? current.field : undefined;
-      const selectedValue = field ? safeFormValues[field] : undefined;
+      const selectedValue = field ? getFormValueAtPath(safeFormValues, field) : undefined;
       const values = current?.values;
-      const next =
+      const branchMap =
         selectedValue !== undefined && values && typeof values === 'object'
-          ? (values[selectedValue] ??
-            Object.entries(values).find(([key]) => key.toLowerCase() === String(selectedValue).toLowerCase())?.[1])
-          : undefined;
+          ? (values as Record<string, unknown>)
+          : null;
+      const keyStr = selectedValue !== undefined ? String(selectedValue) : '';
+      const next = branchMap
+        ? (branchMap[keyStr] ??
+            Object.entries(branchMap).find(
+              ([key]) => key.toLowerCase() === keyStr.toLowerCase()
+            )?.[1])
+        : undefined;
       const data = next ?? current;
 
       const numeric = Number(data);
@@ -148,7 +168,8 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
 
       if (data?.type === 'multi') {
         const unitCost = Number(data.cost);
-        const multiplier = Number(safeFormValues[data.field]);
+        const multField = typeof data.field === 'string' ? data.field : undefined;
+        const multiplier = Number(multField ? getFormValueAtPath(safeFormValues, multField) : NaN);
         if (!Number.isFinite(unitCost) || !Number.isFinite(multiplier)) return 0;
         return unitCost * multiplier;
       }
@@ -157,7 +178,7 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
         const unitCost = Number(data.cost);
         if (!Number.isFinite(unitCost)) return 0;
         const convertField = typeof data.field === 'string' ? data.field : undefined;
-        const sourceValue = convertField ? safeFormValues[convertField] : undefined;
+        const sourceValue = convertField ? getFormValueAtPath(safeFormValues, convertField) : undefined;
         const durationSeconds = await getMediaDurationSeconds(sourceValue);
         return unitCost * durationSeconds;
       }
@@ -188,13 +209,19 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
         cost = pricing.cost * (formValues.num_images || formValues.max_images || formValues.n);
       }
       break;
-    case 'singleField':
-      cost = pricing.cost[formValues[pricing.field]] || 0;
+    case 'singleField': {
+      const sf =
+        typeof pricing.field === 'string'
+          ? getFormValueAtPath(formValues, pricing.field)
+          : undefined;
+      cost = (sf !== undefined && pricing.cost != null ? pricing.cost[sf as keyof typeof pricing.cost] : 0) || 0;
       break;
+    }
     case 'singleFieldMultiplier': {
       // cost = price * fieldValue (e.g. price per unit × duration)
       const price = Number(pricing.cost);
-      const fieldValue = formValues[pricing.field];
+      const fieldValue =
+        typeof pricing.field === 'string' ? getFormValueAtPath(formValues, pricing.field) : undefined;
       const value = fieldValue !== undefined && fieldValue !== null ? Number(fieldValue) : NaN;
       cost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
       break;

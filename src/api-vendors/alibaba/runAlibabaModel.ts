@@ -14,6 +14,9 @@ type AlibabaApiSchema = {
 
 const DEFAULT_ALIBABA_INPUT_STRING_FIELDS = new Set(['audio_url', 'negative_prompt']);
 
+/** Root keys that belong in Wan-style `input`, not `parameters`. */
+const WAN_INPUT_ROOT_KEYS = new Set(['prompt', 'text', 'media', 'model', 'input', 'parameters']);
+
 function trimString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -91,7 +94,9 @@ function isMediaField(key: string, value: unknown): boolean {
   if (value === undefined || value === null) return false;
   const normalized = key.toLowerCase();
   if (normalized === 'media') return true;
-  return /(image|frame|audio|driving_audio|video|video_to_edit|reference|last_image|first_frame|last_frame)/i.test(normalized);
+  return /(image|frame|audio|driving_audio|video|video_to_edit|reference|last_image|first_frame|last_frame)/i.test(
+    normalized
+  );
 }
 
 function alibabaVideoMediaType(key: string): string {
@@ -125,7 +130,11 @@ function mediaItemsFromField(key: string, value: unknown): Record<string, string
   return url ? [{ type: alibabaVideoMediaType(key), url }] : [];
 }
 
-function buildAlibabaVideoPayload(payload: unknown, model: string, apiSchema: AlibabaApiSchema): Record<string, unknown> {
+function buildAlibabaVideoPayload(
+  payload: unknown,
+  model: string,
+  apiSchema: AlibabaApiSchema
+): Record<string, unknown> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   const input = originalPayload.input && typeof originalPayload.input === 'object' ? originalPayload.input : null;
   if (input) {
@@ -136,6 +145,39 @@ function buildAlibabaVideoPayload(payload: unknown, model: string, apiSchema: Al
         originalPayload.parameters && typeof originalPayload.parameters === 'object'
           ? originalPayload.parameters
           : undefined,
+    };
+  }
+
+  /** Wan 2.x R2V etc.: `input` is only `prompt` + `media` (as sent); other root fields → `parameters` (`aspect_ratio` → `ratio`). */
+  const wanMedia = originalPayload.media;
+  if (
+    Object.prototype.hasOwnProperty.call(originalPayload, 'media') &&
+    wanMedia != null &&
+    (Array.isArray(wanMedia) || typeof wanMedia === 'object')
+  ) {
+    const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
+    const parameters: Record<string, unknown> =
+      originalPayload.parameters && typeof originalPayload.parameters === 'object'
+        ? { ...(originalPayload.parameters as Record<string, unknown>) }
+        : {};
+
+    for (const [key, value] of Object.entries(originalPayload)) {
+      if (WAN_INPUT_ROOT_KEYS.has(key)) continue;
+      parameters[key] = value;
+    }
+
+    if (parameters.aspect_ratio != null && parameters.ratio == null) {
+      parameters.ratio = parameters.aspect_ratio;
+      delete parameters.aspect_ratio;
+    }
+
+    return {
+      model,
+      input: {
+        prompt,
+        media: wanMedia,
+      },
+      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
     };
   }
 
@@ -199,8 +241,7 @@ export async function runAlibabaModel(genModel: GenModelRow, payload: unknown) {
       expose: false,
     });
   }
-  console.log('payload', JSON.stringify(payload, null, 2));
-console.log(JSON.stringify(buildAlibabaVideoPayload(payload, vendorModelName, apiSchema), null, 2));
+console.log('buildAlibabaVideoPayload', JSON.stringify(buildAlibabaVideoPayload(payload, vendorModelName, apiSchema), null, 2));
   const response = await axios.post(
     alibabaEndpoint(apiSchema, DEFAULT_ALIBABA_VIDEO_PATH),
     buildAlibabaVideoPayload(payload, vendorModelName, apiSchema),
