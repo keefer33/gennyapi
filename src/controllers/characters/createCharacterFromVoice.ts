@@ -159,7 +159,7 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
       use_case: voice.use_case ?? null,
     });
     prompt = `${prompt}.  Show person full figure on a white background with arms by their sides. No text or logos just the person with the white background.`
-    const generateVideo = await executePlaygroundModelRun(userId,'528fb6d8-2aed-42ba-b841-c4945ab4ea6b',{"n": 4, "prompt": prompt },'character', characterRow.id)
+    const generateVideo = await executePlaygroundModelRun(userId,'528fb6d8-2aed-42ba-b841-c4945ab4ea6b',{"n": 4, "prompt": prompt, "quality": "medium", "resolution": "1K" },'character', characterRow.id)
     if (!generateVideo) {
       throw new AppError('Failed to generate video', {
         statusCode: 500,

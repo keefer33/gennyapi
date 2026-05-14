@@ -58,6 +58,7 @@ export const RUN_HISTORY_SELECT = `
   task_id,
   cost,
   duration,
+  app,
   user_files(*),
   payload,
   response,
@@ -81,6 +82,7 @@ export const RUN_HISTORY_LIST_SELECT = `
   task_id,
   cost,
   duration,
+  app,
   user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at, generated_info),
   polling_response
 `;
@@ -99,6 +101,7 @@ export const RUN_AGENT_SELECT = `
     model_variant,
     generation_type
   ),
+  app,
   user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at, status, generated_info),
   payload,
   response,
