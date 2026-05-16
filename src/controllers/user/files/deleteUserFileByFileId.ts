@@ -2,14 +2,13 @@ import { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { getZiplineBaseUrl, getZiplineTokenForUser } from '../../zipline/ziplineUtils';
-import { deleteUserFileStorageAndDbForRow } from './userFileDeleteCore';
-import { getUserFileByIdForUser } from '../../../database/user_files';
+import { deleteUserFile, getUserFileByIdForUser } from '../../../database/user_files';
 
 /**
  * DELETE /user/files/:fileId
  * Body: { idOrName: string } — Zipline identifier (usually file name / id from storage)
  */
-export async function deleteUserFile(req: Request, res: Response): Promise<void> {
+export async function deleteUserFileByFileId(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
 
@@ -36,7 +35,7 @@ export async function deleteUserFile(req: Request, res: Response): Promise<void>
       throw badRequest('idOrName does not match file record');
     }
 
-    await deleteUserFileStorageAndDbForRow(userId, row);
+    await deleteUserFile(fileId);
 
     sendOk(res, { ok: true });
   } catch (error) {

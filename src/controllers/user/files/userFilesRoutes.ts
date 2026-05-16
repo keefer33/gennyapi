@@ -4,7 +4,7 @@ import { listUserFiles } from './listUserFiles';
 import { getUserFileByPath } from './getUserFileByPath';
 import { getUserFileById } from './getUserFileById';
 import { createUserFile } from './createUserFile';
-import { deleteUserFile } from './deleteUserFile';
+import { deleteUserFileByFileId } from './deleteUserFileByFileId';
 import { updateUserFile } from './updateUserFile';
 import { uploadUserFile } from './uploadUserFile';
 
@@ -15,7 +15,7 @@ router.get('/', authenticateUser, listUserFiles);
 router.get('/:fileId', authenticateUser, getUserFileById);
 router.post('/upload', authenticateUser, uploadUserFile);
 router.post('/', authenticateUser, createUserFile);
-router.delete('/:fileId', authenticateUser, deleteUserFile);
+router.delete('/:fileId', authenticateUser, deleteUserFileByFileId);
 router.patch('/:fileId', authenticateUser, updateUserFile);
 
 export default router;

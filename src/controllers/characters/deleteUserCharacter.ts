@@ -3,21 +3,10 @@ import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import {
-  deleteUserFileStorageAndDbForRow,
-  deleteZiplinePublicUrlForUser,
-} from '../user/files/userFileDeleteCore';
-import {
   deleteUserCharacterRow,
   getUserCharacterForUser,
 } from '../../database/user_characters';
-import { getUserFileByUserAndFilePath, getUserFilesByRunIdAllStatuses } from '../../database/user_files';
 import { deleteUserGenModelRun, listUserGenModelRunIdsForCharacter } from '../../database/user_gen_model_runs';
-
-function voiceUrlFromCharacterMetadata(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const v = (metadata as Record<string, unknown>).voice;
-  return typeof v === 'string' && v.trim() ? v.trim() : null;
-}
 
 /**
  * DELETE /characters/:characterId
@@ -44,21 +33,7 @@ export async function deleteUserCharacter(req: Request, res: Response): Promise<
 
     const runIds = await listUserGenModelRunIdsForCharacter(userId, characterId);
     for (const runId of runIds) {
-      const files = await getUserFilesByRunIdAllStatuses(runId);
-      for (const f of files) {
-        await deleteUserFileStorageAndDbForRow(userId, f);
-      }
       await deleteUserGenModelRun(runId);
-    }
-
-    const voiceUrl = voiceUrlFromCharacterMetadata(character.metadata);
-    if (voiceUrl) {
-      const voiceRow = await getUserFileByUserAndFilePath(userId, voiceUrl);
-      if (voiceRow?.id && voiceRow.file_name?.trim()) {
-        await deleteUserFileStorageAndDbForRow(userId, voiceRow);
-      } else {
-        await deleteZiplinePublicUrlForUser(userId, voiceUrl);
-      }
     }
 
     await deleteUserCharacterRow(userId, characterId);

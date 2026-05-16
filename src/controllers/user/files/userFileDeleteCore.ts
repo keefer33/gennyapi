@@ -55,38 +55,3 @@ export async function deleteZiplineStorageForUserFileRow(userId: string, row: Us
     );
   }
 }
-
-/**
- * Deletes one `user_files` row from Zipline (main + optional thumbnail) then from the DB.
- * Uses `file_name` as the Zipline primary key (same as DELETE /user/files/:fileId).
- */
-export async function deleteUserFileStorageAndDbForRow(userId: string, row: UserFileRow): Promise<void> {
-  const fileId = row.id;
-  const idOrName = typeof row.file_name === 'string' ? row.file_name.trim() : '';
-  if (!idOrName && !row.file_path?.trim()) {
-    throw new AppError('File has no file_name or file_path', {
-      statusCode: 500,
-      code: 'user_file_missing_name',
-      expose: false,
-    });
-  }
-
-  await deleteZiplineStorageForUserFileRow(userId, row);
-  await deleteUserFile(fileId);
-}
-
-/**
- * Deletes a Zipline object by public URL only (no `user_files` row).
- * Used when e.g. `user_characters.metadata.voice` points at storage but the DB row is missing.
- */
-export async function deleteZiplinePublicUrlForUser(userId: string, fileUrl: string): Promise<void> {
-  const trimmed = fileUrl.trim();
-  if (!trimmed) return;
-
-  const baseUrl = getZiplineBaseUrl();
-  const key = ziplineStorageKeyFromPublicUrl(trimmed, baseUrl);
-  if (!key) return;
-
-  const token = await getZiplineTokenForUser(userId);
-  await deleteZiplineObjectByKey(token, baseUrl, key, 'user_file_storage_delete_failed');
-}
