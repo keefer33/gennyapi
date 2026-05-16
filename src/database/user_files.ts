@@ -37,7 +37,7 @@ export async function getUserFilesByRunIdAllStatuses(runId: string): Promise<Use
   return (files as UserFileRow[]) ?? [];
 }
 
-/** Voice preview row from character create (`upload_type` character, same `file_path` as `user_characters.files.voice`). */
+/** Voice preview row from character create (`upload_type` character, same `file_path` as `user_characters.metadata.voice`). */
 export async function getUserFileByUserAndFilePath(
   userId: string,
   filePath: string
@@ -93,6 +93,7 @@ const USER_FILES_INSERT_KEYS = [
   'thumbnail_url',
   'gen_model_id',
   'gen_model_run_id',
+  'character_id',
 ] as const;
 
 /** `user_gen_model_runs` embeds `gen_model_id` as an object; `user_files.gen_model_id` is a UUID FK. */

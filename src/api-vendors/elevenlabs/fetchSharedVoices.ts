@@ -9,7 +9,7 @@ export const ELEVENLABS_SHARED_VOICES_URL = 'https://api.elevenlabs.io/v1/shared
 /** Query params for `GET /v1/shared-voices` — see ElevenLabs API docs. */
 export type ElevenLabsSharedVoicesParams = Record<string, unknown>;
 
-async function resolveElevenLabsApiKeyFromVendorApis(): Promise<string> {
+export async function resolveElevenLabsApiKeyFromVendorApis(): Promise<string> {
   const vendorRow = await getVendorApiKeyByVendorName(ELEVENLABS_VENDOR_NAME);
   const apiKey = vendorRow?.api_key?.trim();
   if (!apiKey) {

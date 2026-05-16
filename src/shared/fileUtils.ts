@@ -594,6 +594,7 @@ export const saveFileFromUrl = async (
       gen_model_run_id: runId,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
+      character_id: pollingFileData.character_id ?? null,
     };
 
     const dbData = await createUserFileRow(fileMetadata);
@@ -675,6 +676,7 @@ export const saveFileFromBuffer = async (
       gen_model_run_id: runId,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
+      character_id: pollingFileData.character_id ?? null,
     };
 
     const dbData = await createUserFileRow(fileMetadata);

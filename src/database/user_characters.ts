@@ -35,7 +35,8 @@ const USER_CHARACTERS_LIST_SELECT = `*,
       file_type,
       created_at,
       status,
-      thumbnail_url
+      thumbnail_url,
+      generated_info
     )
   )`;
 
@@ -47,14 +48,15 @@ function mapCharacterWithRunsRows(rows: CharacterWithRunsRow[]): UserCharacterRo
       files: Array.isArray(run.user_files) ? run.user_files : [],
     }));
 
-    const currentFiles = row.files && typeof row.files === 'object' ? (row.files as Record<string, unknown>) : {};
-    const mergedFiles = { ...currentFiles, generations };
-    delete (mergedFiles as Record<string, unknown>).generated_files;
+    const currentMetadata =
+      row.metadata && typeof row.metadata === 'object' ? (row.metadata as Record<string, unknown>) : {};
+    const merged = { ...currentMetadata, generations };
+    delete (merged as Record<string, unknown>).generated_files;
     const { user_gen_model_runs: _runs, ...base } = row;
 
     return {
       ...base,
-      files: mergedFiles,
+      metadata: merged,
     };
   });
 }
@@ -103,7 +105,7 @@ export async function listUserCharactersForUser(
   return { characters, total };
 }
 
-/** Single character with the same `user_gen_model_runs` / `files.generations` shape as the list endpoint. */
+/** Single character with the same `user_gen_model_runs` / merged `metadata.generations` shape as the list endpoint. */
 export async function getUserCharacterForUser(
   userId: string,
   characterId: string
@@ -143,7 +145,7 @@ const USER_CHARACTERS_INSERT_KEYS = [
   'descriptive',
   'use_case',
   'featured',
-  'files',
+  'metadata',
 ] as const;
 
 export async function createUserCharacterRow(row: Partial<UserCharacterRow>): Promise<UserCharacterRow> {
@@ -165,6 +167,26 @@ export async function createUserCharacterRow(row: Partial<UserCharacterRow>): Pr
   }
 
   return data as UserCharacterRow;
+}
+
+export async function updateUserCharacterMetadata(
+  userId: string,
+  characterId: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  const { supabaseServerClient } = await getServerClient();
+  const { error } = await supabaseServerClient
+    .from('user_characters')
+    .update({ metadata })
+    .eq('id', characterId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_character_metadata_update_failed',
+    });
+  }
 }
 
 export async function deleteUserCharacterRow(userId: string, characterId: string): Promise<void> {

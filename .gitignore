@@ -16,6 +16,7 @@ oldfiles/
 .env.test.local
 .env.production.local
 
+src/schemas
 # IDE and editor files
 .vscode/
 .idea/

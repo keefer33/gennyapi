@@ -241,7 +241,10 @@ export async function runAlibabaModel(genModel: GenModelRow, payload: unknown) {
       expose: false,
     });
   }
-console.log('buildAlibabaVideoPayload', JSON.stringify(buildAlibabaVideoPayload(payload, vendorModelName, apiSchema), null, 2));
+  console.log(
+    'buildAlibabaVideoPayload',
+    JSON.stringify(buildAlibabaVideoPayload(payload, vendorModelName, apiSchema), null, 2)
+  );
   const response = await axios.post(
     alibabaEndpoint(apiSchema, DEFAULT_ALIBABA_VIDEO_PATH),
     buildAlibabaVideoPayload(payload, vendorModelName, apiSchema),

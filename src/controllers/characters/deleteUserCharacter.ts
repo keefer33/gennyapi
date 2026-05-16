@@ -13,9 +13,9 @@ import {
 import { getUserFileByUserAndFilePath, getUserFilesByRunIdAllStatuses } from '../../database/user_files';
 import { deleteUserGenModelRun, listUserGenModelRunIdsForCharacter } from '../../database/user_gen_model_runs';
 
-function voiceUrlFromCharacterFiles(files: unknown): string | null {
-  if (!files || typeof files !== 'object') return null;
-  const v = (files as Record<string, unknown>).voice;
+function voiceUrlFromCharacterMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const v = (metadata as Record<string, unknown>).voice;
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
@@ -51,7 +51,7 @@ export async function deleteUserCharacter(req: Request, res: Response): Promise<
       await deleteUserGenModelRun(runId);
     }
 
-    const voiceUrl = voiceUrlFromCharacterFiles(character.files);
+    const voiceUrl = voiceUrlFromCharacterMetadata(character.metadata);
     if (voiceUrl) {
       const voiceRow = await getUserFileByUserAndFilePath(userId, voiceUrl);
       if (voiceRow?.id && voiceRow.file_name?.trim()) {

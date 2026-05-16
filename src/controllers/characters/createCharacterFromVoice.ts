@@ -44,7 +44,7 @@ function safePreviewFilename(voiceId: string, previewUrl: string, voiceName: str
 
 /**
  * POST /characters/create
- * Body: `{ voice_id: string }` — resolves shared voice, mirrors preview to Zipline, inserts `user_files` and `user_characters`.
+ * Body: `{ voice_id: string }` — resolves shared voice, mirrors preview to Zipline, inserts `user_files` and `user_characters.metadata`.
  */
 export async function createCharacterFromVoice(req: Request, res: Response): Promise<void> {
   try {
@@ -123,16 +123,6 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
     const ziplineVoicePath = uploaded.url;
     const fileType = getMimeType(filename);
 
-    await createUserFileRow({
-      user_id: userId,
-      file_name: (uploaded as { name?: string }).name ?? filename,
-      file_path: ziplineVoicePath,
-      file_size: fileBuffer.length,
-      file_type: uploaded.type ?? fileType,
-      status: 'active',
-      upload_type: 'character',
-    });
-
     const characterRow = await createUserCharacterRow({
       user_id: userId,
       name: voice.name ?? null,
@@ -145,7 +135,41 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
       descriptive: voice.descriptive ?? null,
       use_case: voice.use_case ?? null,
       featured: Boolean(voice.featured),
-      files: { voice: ziplineVoicePath },
+      metadata: {
+        type: 'elevenlabs',
+        voice: ziplineVoicePath,
+        voice_id: voiceId,
+        speech: [],
+      },
+    });
+
+    const characterId = characterRow.id?.trim();
+    if (!characterId) {
+      throw new AppError('Failed to create character', {
+        statusCode: 500,
+        code: 'character_create_missing_id',
+      });
+    }
+
+    await createUserFileRow({
+      user_id: userId,
+      character_id: characterId,
+      file_name: (uploaded as { name?: string }).name ?? filename,
+      file_path: ziplineVoicePath,
+      file_size: fileBuffer.length,
+      file_type: uploaded.type ?? fileType,
+      status: 'active',
+      upload_type: 'character',
+      generated_info: {
+        type: 'elevenlabs',
+        voice_id: voiceId,
+        voice_name: voice.name ?? null,
+        voice_description: voice.description ?? null,
+        voice_language: voice.language ?? null,
+        voice_gender: voice.gender ?? null,
+        voice_age: voice.age,
+        voice_accent: voice.accent ?? null,
+      }
     });
 
     let prompt = JSON.stringify({
@@ -159,7 +183,13 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
       use_case: voice.use_case ?? null,
     });
     prompt = `${prompt}.  Show person full figure on a white background with arms by their sides. No text or logos just the person with the white background.`
-    const generateVideo = await executePlaygroundModelRun(userId,'528fb6d8-2aed-42ba-b841-c4945ab4ea6b',{"n": 4, "prompt": prompt, "quality": "medium", "resolution": "1K" },'character', characterRow.id)
+    const generateVideo = await executePlaygroundModelRun(
+      userId,
+      '528fb6d8-2aed-42ba-b841-c4945ab4ea6b',
+      { n: 4, prompt, quality: 'medium', resolution: '1K', aspect_ratio: '9:16' },
+      'character',
+      characterId
+    );
     if (!generateVideo) {
       throw new AppError('Failed to generate video', {
         statusCode: 500,

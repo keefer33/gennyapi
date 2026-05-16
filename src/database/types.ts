@@ -97,6 +97,7 @@ export type UserFileRow = {
   thumbnail_url?: string | null;
   gen_model_id?: string | null;
   gen_model_run_id?: string | null;
+  character_id?: string | null;
 };
 
 /** Matches `public.user_characters` */
@@ -115,7 +116,8 @@ export type UserCharacterRow = {
   descriptive?: string | null;
   use_case?: string | null;
   featured?: boolean | null;
-  files?: unknown | null;
+  /** ElevenLabs source + `generations` merged on read from `user_gen_model_runs`. */
+  metadata?: unknown | null;
 };
 
 /** Matches `public.user_tags` */
