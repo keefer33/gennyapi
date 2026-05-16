@@ -62,7 +62,7 @@ export const RUN_HISTORY_SELECT = `
   user_files(*),
   payload,
   response,
-  polling_response
+  polling_response,
   character_id
 `;
 
