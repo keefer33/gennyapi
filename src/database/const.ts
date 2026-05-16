@@ -63,6 +63,7 @@ export const RUN_HISTORY_SELECT = `
   payload,
   response,
   polling_response
+  character_id
 `;
 
 export const RUN_HISTORY_LIST_SELECT = `
@@ -84,7 +85,8 @@ export const RUN_HISTORY_LIST_SELECT = `
   duration,
   app,
   user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at, generated_info),
-  polling_response
+  polling_response,
+  character_id
 `;
 
 export const RUN_AGENT_SELECT = `
@@ -105,7 +107,8 @@ export const RUN_AGENT_SELECT = `
   user_files!gen_model_run_id(id, file_name, thumbnail_url, file_path, file_size, file_type, created_at, status, generated_info),
   payload,
   response,
-  polling_response
+  polling_response,
+  character_id
 `;
 
   export const USAGE_LOG_SELECT = `
