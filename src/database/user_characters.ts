@@ -2,11 +2,33 @@ import { AppError } from '../app/error';
 import { getServerClient } from './supabaseClient';
 import { UserCharacterRow } from './types';
 
+function createdAtMs(value: string | null | undefined): number {
+  if (!value?.trim()) return 0;
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function sortUserFilesByCreatedAtDesc<
+  T extends { created_at?: string | null },
+>(files: T[]): T[] {
+  return [...files].sort((a, b) => createdAtMs(b.created_at) - createdAtMs(a.created_at));
+}
+
+function genModelIdFromRunEmbed(value: unknown): string {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value && typeof value === 'object' && 'id' in value) {
+    const id = (value as { id: unknown }).id;
+    if (typeof id === 'string' && id.trim()) return id.trim();
+  }
+  return '';
+}
+
 type CharacterWithRunsRow = UserCharacterRow & {
   user_gen_model_runs?:
     | Array<{
         id?: string | null;
         status?: string | null;
+        gen_model_id?: string | { id?: string | null } | null;
         user_files?:
           | Array<{
               id?: string | null;
@@ -27,6 +49,7 @@ const USER_CHARACTERS_LIST_SELECT = `*,
   user_gen_model_runs(
     id,
     status,
+    gen_model_id,
     user_files!gen_model_run_id(
       id,
       file_name,
@@ -45,7 +68,8 @@ function mapCharacterWithRunsRows(rows: CharacterWithRunsRow[]): UserCharacterRo
     const generations = (row.user_gen_model_runs ?? []).map(run => ({
       id: run.id ?? '',
       status: run.status ?? '',
-      files: Array.isArray(run.user_files) ? run.user_files : [],
+      gen_model_id: genModelIdFromRunEmbed(run.gen_model_id) || undefined,
+      files: sortUserFilesByCreatedAtDesc(Array.isArray(run.user_files) ? run.user_files : []),
     }));
 
     const currentMetadata =
@@ -145,6 +169,22 @@ const USER_CHARACTERS_INSERT_KEYS = [
   'descriptive',
   'use_case',
   'featured',
+  'status',
+  'metadata',
+] as const;
+
+const USER_CHARACTERS_PATCH_KEYS = [
+  'name',
+  'description',
+  'language',
+  'gender',
+  'age',
+  'accent',
+  'category',
+  'descriptive',
+  'use_case',
+  'featured',
+  'status',
   'metadata',
 ] as const;
 
@@ -167,6 +207,85 @@ export async function createUserCharacterRow(row: Partial<UserCharacterRow>): Pr
   }
 
   return data as UserCharacterRow;
+}
+
+export async function patchUserCharacterRow(
+  userId: string,
+  characterId: string,
+  patch: Partial<UserCharacterRow>
+): Promise<UserCharacterRow> {
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const raw = patch as Record<string, unknown>;
+  for (const key of USER_CHARACTERS_PATCH_KEYS) {
+    if (raw[key] === undefined) continue;
+    payload[key] = raw[key];
+  }
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters')
+    .update(payload)
+    .eq('id', characterId)
+    .eq('user_id', userId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_character_patch_failed',
+    });
+  }
+
+  if (!data) {
+    throw new AppError('Character not found', {
+      statusCode: 404,
+      code: 'character_not_found',
+    });
+  }
+
+  return data as UserCharacterRow;
+}
+
+export async function updateUserCharacterForUser(
+  userId: string,
+  characterId: string,
+  patch: { name?: string | null; description?: string | null }
+): Promise<UserCharacterRow> {
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.name !== undefined) {
+    payload.name = typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : null;
+  }
+  if (patch.description !== undefined) {
+    payload.description =
+      typeof patch.description === 'string' && patch.description.trim() ? patch.description.trim() : null;
+  }
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters')
+    .update(payload)
+    .eq('id', characterId)
+    .eq('user_id', userId)
+    .select(USER_CHARACTERS_LIST_SELECT)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_character_update_failed',
+    });
+  }
+
+  if (!data) {
+    throw new AppError('Character not found', {
+      statusCode: 404,
+      code: 'character_not_found',
+    });
+  }
+
+  const [character] = mapCharacterWithRunsRows([data as CharacterWithRunsRow]);
+  return character;
 }
 
 export async function updateUserCharacterMetadata(

@@ -1,5 +1,8 @@
 import type { Request, Response } from 'express';
-import { elevenLabsTextToSpeech } from '../../../api-vendors/elevenlabs/textToSpeech';
+import {
+  elevenLabsTextToDialogue,
+  type ElevenLabsDialogueInput,
+} from '../../../api-vendors/elevenlabs/textToDialogue';
 import { AppError } from '../../../app/error';
 import { badRequest, sendError, sendOk } from '../../../app/response';
 import { createUserFileRow } from '../../../database/user_files';
@@ -9,25 +12,52 @@ import { uploadFileToZipline } from '../../../shared/ziplineApi';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { getZiplineTokenForUser } from '../../zipline/ziplineUtils';
 
-export type CharacterSpeechEntry = {
-  text: string;
-  voice_id: string;
+export type CharacterDialogueInput = ElevenLabsDialogueInput;
+
+export type CharacterDialogueEntry = {
+  inputs: CharacterDialogueInput[];
   url: string;
   file_id: string;
   created_at: string;
 };
 
-function speechFilename(characterId: string, voiceId: string): string {
+function parseDialogueInputs(value: unknown): CharacterDialogueInput[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw badRequest('inputs must be a non-empty array');
+  }
+
+  const inputs: CharacterDialogueInput[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw badRequest(`inputs[${i}] must be an object`);
+    }
+    const row = item as Record<string, unknown>;
+    const text = typeof row.text === 'string' ? row.text.trim() : '';
+    const voiceId =
+      typeof row.voice_id === 'string'
+        ? row.voice_id.trim()
+        : typeof row.voiceId === 'string'
+          ? row.voiceId.trim()
+          : '';
+    if (!text) throw badRequest(`inputs[${i}].text is required`);
+    if (!voiceId) throw badRequest(`inputs[${i}].voice_id is required`);
+    inputs.push({ text, voice_id: voiceId });
+  }
+  return inputs;
+}
+
+function dialogueFilename(characterId: string): string {
   const stamp = Date.now();
-  const safeVoice = voiceId.replace(/[^\w.-]+/g, '_').slice(0, 40);
-  return `character-${characterId.slice(0, 8)}-${safeVoice}-${stamp}.mp3`;
+  return `character-${characterId.slice(0, 8)}-dialogue-${stamp}.mp3`;
 }
 
 /**
- * POST /characters/speech
- * Body: `{ character_id, voice_id, text }` — ElevenLabs TTS, upload MP3 to Zipline as `user_files` for the character.
+ * POST /characters/dialogue
+ * Body: `{ character_id, inputs: [{ text, voice_id }, ...], model_id?, output_format? }`
+ * — ElevenLabs text-to-dialogue, upload MP3 to Zipline as `user_files` for the character.
  */
-export async function createCharacterSpeech(req: Request, res: Response): Promise<void> {
+export async function createCharacterDialogue(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -38,17 +68,13 @@ export async function createCharacterSpeech(req: Request, res: Response): Promis
         : typeof body.characterId === 'string'
           ? body.characterId.trim()
           : '';
-    const voiceId =
-      typeof body.voice_id === 'string'
-        ? body.voice_id.trim()
-        : typeof body.voiceId === 'string'
-          ? body.voiceId.trim()
-          : '';
-    const text = typeof body.text === 'string' ? body.text.trim() : '';
-
     if (!characterId) throw badRequest('character_id is required');
-    if (!voiceId) throw badRequest('voice_id is required');
-    if (!text) throw badRequest('text is required');
+
+    const inputs = parseDialogueInputs(body.inputs);
+
+    const modelId = typeof body.model_id === 'string' ? body.model_id.trim() : undefined;
+    const outputFormat =
+      typeof body.output_format === 'string' ? body.output_format.trim() : undefined;
 
     const character = await getUserCharacterForUser(userId, characterId);
     if (!character) {
@@ -58,8 +84,13 @@ export async function createCharacterSpeech(req: Request, res: Response): Promis
       });
     }
 
-    const audioBuffer = await elevenLabsTextToSpeech(voiceId, text);
-    const filename = speechFilename(characterId, voiceId);
+    const audioBuffer = await elevenLabsTextToDialogue({
+      inputs,
+      ...(modelId ? { model_id: modelId } : {}),
+      ...(outputFormat ? { output_format: outputFormat } : {}),
+    });
+
+    const filename = dialogueFilename(characterId);
     const token = await getZiplineTokenForUser(userId);
 
     let ziplineBody: Awaited<ReturnType<typeof uploadFileToZipline>>;
@@ -69,7 +100,7 @@ export async function createCharacterSpeech(req: Request, res: Response): Promis
       const message = err instanceof Error ? err.message : String(err);
       throw new AppError(message, {
         statusCode: 502,
-        code: 'character_speech_zipline_upload_failed',
+        code: 'character_dialogue_zipline_upload_failed',
         expose: true,
       });
     }
@@ -78,7 +109,7 @@ export async function createCharacterSpeech(req: Request, res: Response): Promis
     if (!uploaded?.url) {
       throw new AppError('Invalid Zipline upload response', {
         statusCode: 500,
-        code: 'character_speech_zipline_response_invalid',
+        code: 'character_dialogue_zipline_response_invalid',
         details: ziplineBody,
       });
     }
@@ -95,30 +126,31 @@ export async function createCharacterSpeech(req: Request, res: Response): Promis
       upload_type: 'character',
       generated_info: {
         type: 'elevenlabs',
-        voice_id: voiceId,
-        speech: text,
-      }
+        dialogue: true,
+        inputs,
+        ...(modelId ? { model_id: modelId } : {}),
+        ...(outputFormat ? { output_format: outputFormat } : {}),
+      },
     });
 
     const fileId = fileRow.id?.trim();
     if (!fileId) {
-      throw new AppError('Failed to persist speech file', {
+      throw new AppError('Failed to persist dialogue file', {
         statusCode: 500,
-        code: 'character_speech_file_insert_failed',
+        code: 'character_dialogue_file_insert_failed',
       });
     }
 
     const createdAt = new Date().toISOString();
-    const speechEntry: CharacterSpeechEntry = {
-      text,
-      voice_id: voiceId,
+    const dialogueEntry: CharacterDialogueEntry = {
+      inputs,
       url: uploaded.url,
       file_id: fileId,
       created_at: createdAt,
     };
 
     sendOk(res, {
-      speech: speechEntry,
+      dialogue: dialogueEntry,
       file: fileRow,
     });
   } catch (error) {

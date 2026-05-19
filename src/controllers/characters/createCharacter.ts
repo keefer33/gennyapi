@@ -5,11 +5,11 @@ import { sendError, sendOk } from '../../app/response';
 import { fetchElevenLabsSharedVoices } from '../../api-vendors/elevenlabs/fetchSharedVoices';
 import { createUserCharacterRow } from '../../database/user_characters';
 import { createUserFileRow } from '../../database/user_files';
+import type { UserCharacterRow } from '../../database/types';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { getMimeType } from '../../shared/fileUtils';
 import { uploadFileToZipline } from '../../shared/ziplineApi';
 import { getZiplineTokenForUser } from '../zipline/ziplineUtils';
-import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
 
 type ElevenLabsSharedVoice = {
   voice_id?: string;
@@ -30,7 +30,11 @@ type SharedVoicesApiResponse = {
   voices?: ElevenLabsSharedVoice[];
 };
 
-function safePreviewFilename(voiceId: string, previewUrl: string, voiceName: string | null | undefined): string {
+function safePreviewFilename(
+  voiceId: string,
+  previewUrl: string,
+  voiceName: string | null | undefined
+): string {
   try {
     const path = new URL(previewUrl).pathname;
     const fromUrl = path.split('/').pop();
@@ -44,9 +48,9 @@ function safePreviewFilename(voiceId: string, previewUrl: string, voiceName: str
 
 /**
  * POST /characters/create
- * Body: `{ voice_id: string }` — resolves shared voice, mirrors preview to Zipline, inserts `user_files` and `user_characters.metadata`.
+ * Body: `{ voice_id: string }` — resolves shared library voice, mirrors preview to Zipline, creates character.
  */
-export async function createCharacterFromVoice(req: Request, res: Response): Promise<void> {
+export async function createCharacter(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
     const voiceIdRaw = (req.body as { voice_id?: unknown })?.voice_id;
@@ -129,12 +133,13 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
       description: voice.description ?? null,
       language: voice.language ?? null,
       gender: voice.gender ?? null,
-      age: voice.age,
+      age: voice.age ?? null,
       accent: voice.accent ?? null,
       category: voice.category ?? null,
       descriptive: voice.descriptive ?? null,
       use_case: voice.use_case ?? null,
       featured: Boolean(voice.featured),
+      status: 'active',
       metadata: {
         type: 'elevenlabs',
         voice_id: voiceId,
@@ -165,37 +170,12 @@ export async function createCharacterFromVoice(req: Request, res: Response): Pro
         voice_description: voice.description ?? null,
         voice_language: voice.language ?? null,
         voice_gender: voice.gender ?? null,
-        voice_age: voice.age,
+        voice_age: voice.age ?? null,
         voice_accent: voice.accent ?? null,
-      }
+      },
     });
 
-    let prompt = JSON.stringify({
-      name: voice.name ?? null,
-      description: voice.description ?? null,
-      language: voice.language ?? null,
-      gender: voice.gender ?? null,
-      age: voice.age,
-      accent: voice.accent ?? null,
-      descriptive: voice.descriptive ?? null,
-      use_case: voice.use_case ?? null,
-    });
-    prompt = `${prompt}.  Show person full figure on a white background with arms by their sides. No text or logos just the person with the white background.`
-    const generateVideo = await executePlaygroundModelRun(
-      userId,
-      '528fb6d8-2aed-42ba-b841-c4945ab4ea6b',
-      { n: 4, prompt, quality: 'medium', resolution: '1K', aspect_ratio: '9:16' },
-      'character',
-      characterId
-    );
-    if (!generateVideo) {
-      throw new AppError('Failed to generate video', {
-        statusCode: 500,
-        code: 'character_voice_video_generation_failed',
-      });
-    }
-
-    sendOk(res, characterRow);
+    sendOk(res, { character: characterRow as UserCharacterRow });
   } catch (error) {
     sendError(res, error);
   }

@@ -6,6 +6,9 @@ export const ELEVENLABS_VENDOR_NAME = 'elevenlabs';
 
 export const ELEVENLABS_SHARED_VOICES_URL = 'https://api.elevenlabs.io/v1/shared-voices';
 
+/** Applied to every shared-voices request (ElevenLabs library filter). */
+export const ELEVENLABS_SHARED_VOICES_MIN_NOTICE_PERIOD_DAYS = 360;
+
 /** Query params for `GET /v1/shared-voices` — see ElevenLabs API docs. */
 export type ElevenLabsSharedVoicesParams = Record<string, unknown>;
 
@@ -36,7 +39,10 @@ export async function fetchElevenLabsSharedVoices(
     headers: {
       'xi-api-key': apiKey,
     },
-    params: params ?? {},
+    params: {
+      ...(params ?? {}),
+      min_notice_period_days: ELEVENLABS_SHARED_VOICES_MIN_NOTICE_PERIOD_DAYS,
+    },
     validateStatus: () => true,
   });
 

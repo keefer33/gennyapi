@@ -87,13 +87,13 @@ const USER_FILES_INSERT_KEYS = [
   'file_size',
   'file_type',
   'generated_info',
-  'folder_id',
   'status',
   'upload_type',
   'thumbnail_url',
   'gen_model_id',
   'gen_model_run_id',
   'character_id',
+  'voice_id',
 ] as const;
 
 /** `user_gen_model_runs` embeds `gen_model_id` as an object; `user_files.gen_model_id` is a UUID FK. */
@@ -209,6 +209,31 @@ export async function updateUserFileName(
   }
 
   return data as UserFileRow;
+}
+
+/** Active audio files linked to a character (`user_files.character_id`). */
+export async function listCharacterAudioFilesForUser(
+  userId: string,
+  characterId: string
+): Promise<UserFileRow[]> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .select(FILE_SELECT)
+    .eq('user_id', userId)
+    .eq('character_id', characterId)
+    .eq('status', 'active')
+    .ilike('file_type', 'audio/%')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'character_audio_files_list_failed',
+    });
+  }
+
+  return (data as UserFileRow[]) ?? [];
 }
 
 export async function listUserFilesData(params: ListUserFilesParams): Promise<ListUserFilesResult> {

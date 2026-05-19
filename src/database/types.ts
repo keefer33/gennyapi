@@ -91,13 +91,31 @@ export type UserFileRow = {
   file_size?: number | null;
   file_type?: string | null;
   generated_info?: unknown | null;
-  folder_id?: string | null;
   status?: string | null;
   upload_type?: string | null;
   thumbnail_url?: string | null;
   gen_model_id?: string | null;
   gen_model_run_id?: string | null;
   character_id?: string | null;
+  voice_id?: string | null;
+};
+
+/** Matches `public.user_voices` */
+export type UserVoiceRow = {
+  id?: string | null;
+  user_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  name?: string | null;
+  description?: string | null;
+  language?: string | null;
+  gender?: string | null;
+  age?: string | null;
+  accent?: string | null;
+  category?: string | null;
+  descriptive?: string | null;
+  use_case?: string | null;
+  metadata?: unknown | null;
 };
 
 /** Matches `public.user_characters` */
@@ -116,6 +134,7 @@ export type UserCharacterRow = {
   descriptive?: string | null;
   use_case?: string | null;
   featured?: boolean | null;
+  status?: string | null;
   /** ElevenLabs source + `generations` merged on read from `user_gen_model_runs`. */
   metadata?: unknown | null;
 };

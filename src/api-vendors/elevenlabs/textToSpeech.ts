@@ -8,7 +8,10 @@ function ttsUrl(voiceId: string): string {
   return `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`;
 }
 
-function audioBufferFromTtsResponse(data: unknown, contentType: string | undefined): Buffer {
+export function elevenLabsAudioBufferFromResponse(
+  data: unknown,
+  contentType: string | undefined
+): Buffer {
   if (data instanceof ArrayBuffer) {
     const buf = Buffer.from(data);
     if (buf.length > 0) return buf;
@@ -114,7 +117,7 @@ export async function elevenLabsTextToSpeech(
     }
   }
 
-  const buffer = audioBufferFromTtsResponse(payload, contentType);
+  const buffer = elevenLabsAudioBufferFromResponse(payload, contentType);
   if (buffer.length === 0) {
     throw new AppError('ElevenLabs returned empty audio', {
       statusCode: 502,

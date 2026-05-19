@@ -7,6 +7,7 @@ import { webhookOpenai } from '../../api-vendors/openai/webhookOpenai';
 import { webhookGoogle } from '../../api-vendors/google/webhookGoogle';
 import { webhookAlibaba } from '../../api-vendors/alibaba/webhookAlibaba';
 import { webhookEachlabs } from '../../api-vendors/eachlabs/webhookEachlabs';
+import { webhookPrunaai } from '../../api-vendors/prunaai/webhookPrunaai';
 
 const ACTIVE_POLLING_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 
@@ -109,6 +110,9 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
         break;
       case 'eachlabs':
         await webhookEachlabs(vendorContext);
+        break;
+      case 'prunaai':
+        await webhookPrunaai(vendorContext);
         break;
       case 'wavespeed':
         break;
