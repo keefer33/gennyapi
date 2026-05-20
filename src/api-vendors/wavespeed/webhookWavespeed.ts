@@ -12,12 +12,77 @@ import {
   tickWebhookRun,
 } from '../../shared/webhooksUtils';
 
-function extractWavespeedErrorMessage(error: unknown): string {
-  const raw =
-    typeof error === 'string' ? error : error instanceof Error ? error.message : String(error ?? '');
-  const msgMatch = raw.match(/msg="([^"]+)"/);
-  if (msgMatch?.[1]) return msgMatch[1];
-  return raw.trim() || 'Unknown Wavespeed error';
+const WAVESPEED_ERROR_KEYS = ['error', 'message', 'msg', 'detail', 'reason', 'description'] as const;
+
+function normalizeWavespeedErrorText(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '[object Object]') return '';
+  const msgMatch = trimmed.match(/msg="([^"]+)"/);
+  return (msgMatch?.[1] ?? trimmed).trim();
+}
+
+/** Pull a human-readable message from strings, Errors, or Wavespeed prediction objects. */
+function extractWavespeedErrorMessage(error: unknown, depth = 0): string {
+  if (error == null) return '';
+  if (depth > 4) return '';
+
+  if (typeof error === 'string') {
+    return normalizeWavespeedErrorText(error);
+  }
+
+  if (error instanceof Error) {
+    return normalizeWavespeedErrorText(error.message) || normalizeWavespeedErrorText(error.name);
+  }
+
+  if (Array.isArray(error)) {
+    const parts = error
+      .map(item => extractWavespeedErrorMessage(item, depth + 1))
+      .filter(Boolean);
+    return parts.join('; ');
+  }
+
+  if (typeof error !== 'object') {
+    return normalizeWavespeedErrorText(String(error));
+  }
+
+  const record = error as Record<string, unknown>;
+
+  for (const key of WAVESPEED_ERROR_KEYS) {
+    const value = record[key];
+    if (value == null) continue;
+    const extracted = extractWavespeedErrorMessage(value, depth + 1);
+    if (extracted) return extracted;
+  }
+
+  const nestedData = record.data;
+  if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+    const nested = extractWavespeedErrorMessage(nestedData, depth + 1);
+    if (nested) return nested;
+  }
+
+  const code = record.code;
+  if (typeof code === 'string' || typeof code === 'number') {
+    const codeText = String(code).trim();
+    if (codeText) return `Wavespeed error (code ${codeText})`;
+  }
+
+  try {
+    return normalizeWavespeedErrorText(JSON.stringify(error));
+  } catch {
+    return '';
+  }
+}
+
+function wavespeedFailureMessage(body: Record<string, unknown>): string {
+  const message = extractWavespeedErrorMessage(body);
+  const code = body.code;
+  if (message && (typeof code === 'string' || typeof code === 'number')) {
+    const codeText = String(code).trim();
+    if (codeText && !message.includes(codeText)) {
+      return `${message} (code ${codeText})`;
+    }
+  }
+  return message || 'Generation failed, please try again.';
 }
 
 export async function webhookWavespeed(req: Request, res: Response): Promise<void> {
@@ -55,7 +120,7 @@ export async function webhookWavespeed(req: Request, res: Response): Promise<voi
         await errorWebhookRun({
           run: userGenModelRun,
           response: body,
-          message: extractWavespeedErrorMessage(body),
+          message: wavespeedFailureMessage(body),
           metaError: `wavespeed generation ${String(status)}`,
           duration,
         });
@@ -64,11 +129,12 @@ export async function webhookWavespeed(req: Request, res: Response): Promise<voi
 
       await tickWebhookRun({ runId: userGenModelRun.id as string, duration });
     } catch (error) {
-      const errorMessage = extractWavespeedErrorMessage(error);
+      const errorMessage =
+        extractWavespeedErrorMessage(error) || wavespeedFailureMessage(body) || 'Generation failed, please try again.';
       await errorWebhookRun({
         run: userGenModelRun,
         response: body,
-        message: errorMessage || 'Generation failed, please try again.',
+        message: errorMessage,
         duration,
       });
       throw new Error(errorMessage);

@@ -38,10 +38,7 @@ export async function getUserFilesByRunIdAllStatuses(runId: string): Promise<Use
 }
 
 /** Voice preview row from character create (`upload_type` character, same `file_path` as `user_characters.metadata.voice`). */
-export async function getUserFileByUserAndFilePath(
-  userId: string,
-  filePath: string
-): Promise<UserFileRow | null> {
+export async function getUserFileByUserAndFilePath(userId: string, filePath: string): Promise<UserFileRow | null> {
   const trimmed = filePath.trim();
   if (!trimmed) return null;
   const { supabaseServerClient } = await getServerClient();
@@ -64,10 +61,7 @@ export async function getUserFileByUserAndFilePath(
 
 export async function deleteUserFile(id: string): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
-  const { error: delErr } = await supabaseServerClient
-    .from('user_files')
-    .delete()
-    .eq('id', id);
+  const { error: delErr } = await supabaseServerClient.from('user_files').delete().eq('id', id);
 
   if (delErr) {
     throw new AppError(delErr.message, {
@@ -111,9 +105,7 @@ function genModelIdUuidForUserFile(value: unknown): string | undefined {
   return undefined;
 }
 
-export async function createUserFileRow(
-  row: Partial<UserFileRow>
-): Promise<UserFileRow> {
+export async function createUserFileRow(row: Partial<UserFileRow>): Promise<UserFileRow> {
   const { supabaseServerClient } = await getServerClient();
   const raw = row as Record<string, unknown>;
   const payload: Record<string, unknown> = {};
@@ -126,11 +118,7 @@ export async function createUserFileRow(
       payload[key] = raw[key];
     }
   }
-  const { data, error } = await supabaseServerClient
-    .from('user_files')
-    .insert(payload)
-    .select('*')
-    .single();
+  const { data, error } = await supabaseServerClient.from('user_files').insert(payload).select('*').single();
 
   if (error) {
     throw new AppError(error.message, {
@@ -187,11 +175,7 @@ export async function getActiveUserFileForUpdate(
   return (data as Pick<UserFileRow, 'file_path' | 'file_name'> | null) ?? null;
 }
 
-export async function updateUserFileName(
-  fileId: string,
-  userId: string,
-  fileName: string
-): Promise<UserFileRow> {
+export async function updateUserFileName(fileId: string, userId: string, fileName: string): Promise<UserFileRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from('user_files')
@@ -212,10 +196,7 @@ export async function updateUserFileName(
 }
 
 /** Active audio files linked to a character (`user_files.character_id`). */
-export async function listCharacterAudioFilesForUser(
-  userId: string,
-  characterId: string
-): Promise<UserFileRow[]> {
+export async function listCharacterAudioFilesForUser(userId: string, characterId: string): Promise<UserFileRow[]> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from('user_files')
@@ -238,7 +219,7 @@ export async function listCharacterAudioFilesForUser(
 
 export async function listUserFilesData(params: ListUserFilesParams): Promise<ListUserFilesResult> {
   const { supabaseServerClient } = await getServerClient();
-  const { userId, page, limit, tagIds, uploadType, fileTypeFilter } = params;
+  const { userId, page, limit, tagIds, uploadType, fileTypeFilter, characterId } = params;
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -278,6 +259,7 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
 
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
+  if (characterId) query = query.eq('character_id', characterId);
 
   const fileTypePrefixes = [
     fileTypeFilter.includes('images') ? 'image' : null,

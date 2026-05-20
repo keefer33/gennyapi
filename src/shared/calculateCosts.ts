@@ -111,6 +111,44 @@ const mediaSource = (input: unknown): string => {
   return typeof source === 'string' ? source.trim() : '';
 };
 
+export type FieldRangePricingBand = {
+  min: number;
+  max: number;
+  cost: number;
+};
+
+/**
+ * Resolves a per-run cost from a numeric form field and inclusive min/max bands.
+ * First matching band wins. Returns 0 when the value is missing or falls outside all bands.
+ *
+ * Example `model_pricing` for upscale `target` (1–128 MP):
+ * `{ "type": "fieldRange", "field": "target", "ranges": [
+ *   { "min": 1, "max": 4, "cost": 0.005 },
+ *   { "min": 5, "max": 8, "cost": 0.01 },
+ *   { "min": 9, "max": 16, "cost": 0.02 },
+ *   { "min": 17, "max": 32, "cost": 0.04 },
+ *   { "min": 33, "max": 64, "cost": 0.06 },
+ *   { "min": 65, "max": 128, "cost": 0.12 }
+ * ]}`
+ */
+export const lookupFieldRangeCost = (
+  value: unknown,
+  ranges: FieldRangePricingBand[] | undefined
+): number => {
+  const n = value !== undefined && value !== null ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return 0;
+  if (!Array.isArray(ranges) || ranges.length === 0) return 0;
+
+  for (const band of ranges) {
+    const min = Number(band?.min);
+    const max = Number(band?.max);
+    const bandCost = Number(band?.cost);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(bandCost)) continue;
+    if (n >= min && n <= max) return bandCost;
+  }
+  return 0;
+};
+
 /** Audio or video: ffprobe reads container `format.duration` (seconds, ceil). */
 const getMediaDurationSeconds = async (input: unknown): Promise<number> => {
   const source = mediaSource(input);
@@ -224,6 +262,12 @@ export const calculatePricingUtil = async (formValues: any, pricing: any) => {
         typeof pricing.field === 'string' ? getFormValueAtPath(formValues, pricing.field) : undefined;
       const value = fieldValue !== undefined && fieldValue !== null ? Number(fieldValue) : NaN;
       cost = !Number.isNaN(price) && !Number.isNaN(value) ? price * value : 0;
+      break;
+    }
+    case 'fieldRange': {
+      const fieldValue =
+        typeof pricing.field === 'string' ? getFormValueAtPath(formValues, pricing.field) : undefined;
+      cost = lookupFieldRangeCost(fieldValue, pricing.ranges);
       break;
     }
     case 'multiFields':

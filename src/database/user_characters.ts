@@ -39,6 +39,7 @@ type CharacterWithRunsRow = UserCharacterRow & {
               created_at?: string | null;
               status?: string | null;
               thumbnail_url?: string | null;
+              generated_info?: string | null;
             }>
           | null;
       }>
@@ -88,6 +89,8 @@ function mapCharacterWithRunsRows(rows: CharacterWithRunsRow[]): UserCharacterRo
 export type ListUserCharactersOptions = {
   limit?: number;
   offset?: number;
+  /** When true, returns `id` and `name` only (no generation/file embeds). */
+  minimal?: boolean;
 };
 
 /**
@@ -101,11 +104,13 @@ export async function listUserCharactersForUser(
   const { supabaseServerClient } = await getServerClient();
   const limit = opts?.limit;
   const offset = opts?.offset ?? 0;
+  const minimal = opts?.minimal === true;
 
   const withCount = limit != null;
+  const select = minimal ? 'id, name, created_at' : USER_CHARACTERS_LIST_SELECT;
   let q = supabaseServerClient
     .from('user_characters')
-    .select(USER_CHARACTERS_LIST_SELECT, withCount ? { count: 'exact' } : undefined)
+    .select(select, withCount ? { count: 'exact' } : undefined)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -120,6 +125,12 @@ export async function listUserCharactersForUser(
       statusCode: 500,
       code: 'user_characters_list_failed',
     });
+  }
+
+  if (minimal) {
+    const characters = (data as UserCharacterRow[] | null) ?? [];
+    const total = withCount && typeof count === 'number' ? count : characters.length;
+    return { characters, total };
   }
 
   const rows = (data as CharacterWithRunsRow[] | null) ?? [];

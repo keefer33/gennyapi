@@ -328,6 +328,7 @@ export type ListUserFilesParams = {
   tagIds: string[];
   uploadType: string | null;
   fileTypeFilter: string;
+  characterId?: string | null;
 };
 
 export type ListUserFilesResult = {

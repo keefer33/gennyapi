@@ -12,11 +12,16 @@ function parseIntQuery(value: unknown, fallback: number): number {
 /**
  * GET /characters
  * Returns the authenticated user's rows from `user_characters`, optionally with generation embeds.
- * Query: `page` (0-based), `limit` (optional). When `limit` is omitted, returns all characters.
+ * Query: `page` (0-based), `limit` (optional), `minimal=1` (id/name only, no embeds).
+ * When `limit` is omitted, returns all characters.
  */
 export async function getUserCharacters(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
+    const minimal =
+      req.query.minimal === '1' ||
+      req.query.minimal === 'true' ||
+      req.query.minimal === 'yes';
     const limitRaw = req.query.limit;
     const paginate = limitRaw !== undefined && String(limitRaw).length > 0;
     const limit = paginate ? Math.min(100, Math.max(1, parseIntQuery(limitRaw, 12))) : undefined;
@@ -25,7 +30,10 @@ export async function getUserCharacters(req: Request, res: Response): Promise<vo
 
     const { characters, total } = await listUserCharactersForUser(
       userId,
-      limit != null ? { limit, offset: offset ?? 0 } : undefined
+      {
+        ...(limit != null ? { limit, offset: offset ?? 0 } : {}),
+        ...(minimal ? { minimal: true } : {}),
+      }
     );
     sendOk(res, { characters, total });
   } catch (error) {
