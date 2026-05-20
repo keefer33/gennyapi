@@ -68,7 +68,7 @@ export async function webhookPrunaai(context: WebhookVendorContext<PrunaaiPollAp
   }
 
   const endpoint = `${base}${prefixTrim}/${encodeURIComponent(taskId)}`;
-
+console.log('endpoint', endpoint);
   const response = await axios.get(endpoint, {
     headers: {
       Accept: 'application/json',
