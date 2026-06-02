@@ -15,6 +15,7 @@ import { runAlibabaModel } from '../../api-vendors/alibaba/runAlibabaModel';
 import { runEachlabsModel } from '../../api-vendors/eachlabs/runEachlabsModel';
 import { runPrunaaiModel } from '../../api-vendors/prunaai/runPrunaaiModel';
 import { runKlingModel } from '../../api-vendors/kling/runKlingModel';
+import { runSkyreelsModel } from '../../api-vendors/skyreels/runSkyreelsModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -100,6 +101,9 @@ export async function executePlaygroundModelRun(
           break;
         case 'kling':
           response = await runKlingModel(genModel, payload);
+          break;
+        case 'skyreels':
+          response = await runSkyreelsModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {

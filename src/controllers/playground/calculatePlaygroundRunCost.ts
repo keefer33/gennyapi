@@ -17,6 +17,8 @@ export async function calculatePlaygroundRunCost(
     case 'alibaba':
     case 'eachlabs':
     case 'prunaai':
+    case 'kling':
+    case 'skyreels':
       return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
     case 'wavespeed':
       return getWavespeedCost(

@@ -7,6 +7,7 @@ import { webhookAlibaba } from '../api-vendors/alibaba/webhookAlibaba';
 import { webhookEachlabs } from '../api-vendors/eachlabs/webhookEachlabs';
 import { webhookPrunaai } from '../api-vendors/prunaai/webhookPrunaai';
 import { webhookKling } from '../api-vendors/kling/webhookKling';
+import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
 import { RUN_HISTORY_SELECT } from '../database/const';
 import { getUserGenModelRunById, getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
 import { getUserFilesByRunId } from '../database/user_files';
@@ -96,6 +97,9 @@ export async function advanceGenModelRunPoll(runId: string): Promise<void> {
       break;
     case 'kling':
       await webhookKling(vendorContext);
+      break;
+    case 'skyreels':
+      await webhookSkyreels(vendorContext);
       break;
     default:
       break;

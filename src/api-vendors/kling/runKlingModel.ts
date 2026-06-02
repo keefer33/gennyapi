@@ -73,9 +73,11 @@ export async function runKlingModel(genModel: GenModelRow, payload: unknown) {
   const requestPayload =
     payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...(payload as Record<string, unknown>) } : {};
   if (vendorModelName && !trimString((requestPayload as { model?: unknown }).model)) {
-    requestPayload.model = vendorModelName;
+    requestPayload.model_name = vendorModelName;
   }
-
+console.log('requestPayload', requestPayload);
+console.log('endpoint', endpoint);
+console.log('jwt', jwt);
   const response = await axios.post(endpoint, requestPayload, {
     headers: {
       Accept: 'application/json',
@@ -87,6 +89,7 @@ export async function runKlingModel(genModel: GenModelRow, payload: unknown) {
 
   if (response.status < 200 || response.status >= 300) {
     const errBody = response.data;
+    console.log('errBody', errBody);
     const msg =
       errBody && typeof errBody === 'object' && 'message' in errBody
         ? String((errBody as { message?: unknown }).message)
@@ -98,9 +101,10 @@ export async function runKlingModel(genModel: GenModelRow, payload: unknown) {
       details: errBody,
     });
   }
-
+console.log('response', response.data);
   const data = (response.data ?? {}) as KlingCreateResponse;
   const taskId = klingTaskIdFromCreateResponse(data);
+  console.log('taskId', taskId);
   if (!taskId) {
     throw new AppError('Kling response did not include task_id', {
       statusCode: 502,
