@@ -37,28 +37,6 @@ export async function getUserFilesByRunIdAllStatuses(runId: string): Promise<Use
   return (files as UserFileRow[]) ?? [];
 }
 
-/** Voice preview row from character create (`upload_type` character, same `file_path` as `user_characters.metadata.voice`). */
-export async function getUserFileByUserAndFilePath(userId: string, filePath: string): Promise<UserFileRow | null> {
-  const trimmed = filePath.trim();
-  if (!trimmed) return null;
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('user_files')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('file_path', trimmed)
-    .eq('upload_type', 'character')
-    .maybeSingle();
-
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'user_file_by_path_fetch_failed',
-    });
-  }
-  return (data as UserFileRow | null) ?? null;
-}
-
 export async function deleteUserFile(id: string): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
   const { error: delErr } = await supabaseServerClient.from('user_files').delete().eq('id', id);
@@ -175,6 +153,40 @@ export async function getActiveUserFileForUpdate(
   return (data as Pick<UserFileRow, 'file_path' | 'file_name'> | null) ?? null;
 }
 
+export async function updateUserFilesUploadTypeForRun(
+  runId: string,
+  userId: string,
+  uploadType: string,
+  characterId: string | null = null
+): Promise<UserFileRow[]> {
+  const id = runId.trim();
+  const type = uploadType.trim();
+  if (!id || !type) {
+    throw new AppError('runId and uploadType are required', {
+      statusCode: 400,
+      code: 'user_files_upload_type_update_invalid',
+    });
+  }
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .update({ upload_type: type, character_id: characterId })
+    .eq('gen_model_run_id', id)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .select(FILE_SELECT);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_files_upload_type_update_failed',
+    });
+  }
+
+  return (data as UserFileRow[]) ?? [];
+}
+
 export async function updateUserFileName(fileId: string, userId: string, fileName: string): Promise<UserFileRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
@@ -195,31 +207,9 @@ export async function updateUserFileName(fileId: string, userId: string, fileNam
   return data as UserFileRow;
 }
 
-/** Active audio files linked to a character (`user_files.character_id`). */
-export async function listCharacterAudioFilesForUser(userId: string, characterId: string): Promise<UserFileRow[]> {
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('user_files')
-    .select(FILE_SELECT)
-    .eq('user_id', userId)
-    .eq('character_id', characterId)
-    .eq('status', 'active')
-    .ilike('file_type', 'audio/%')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'character_audio_files_list_failed',
-    });
-  }
-
-  return (data as UserFileRow[]) ?? [];
-}
-
 export async function listUserFilesData(params: ListUserFilesParams): Promise<ListUserFilesResult> {
   const { supabaseServerClient } = await getServerClient();
-  const { userId, page, limit, tagIds, uploadType, fileTypeFilter, characterId } = params;
+  const { userId, page, limit, tagIds, uploadType, fileTypeFilter } = params;
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -259,7 +249,6 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
 
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
-  if (characterId) query = query.eq('character_id', characterId);
 
   const fileTypePrefixes = [
     fileTypeFilter.includes('images') ? 'image' : null,

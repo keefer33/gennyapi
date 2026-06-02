@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { sendError, sendOk } from '../../app/response';
-import { getAuthUserId } from '../../shared/getAuthUserId';
+import { listBaseLookThumbnailUrlsForCharacterIds } from '../../database/user_characters_files';
 import { listUserCharactersForUser } from '../../database/user_characters';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 function parseIntQuery(value: unknown, fallback: number): number {
   if (value === undefined || value === null || value === '') return fallback;
@@ -11,31 +12,33 @@ function parseIntQuery(value: unknown, fallback: number): number {
 
 /**
  * GET /characters
- * Returns the authenticated user's rows from `user_characters`, optionally with generation embeds.
- * Query: `page` (0-based), `limit` (optional), `minimal=1` (id/name only, no embeds).
- * When `limit` is omitted, returns all characters.
+ * Lists the authenticated user's `user_characters` rows.
  */
 export async function getUserCharacters(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const minimal =
-      req.query.minimal === '1' ||
-      req.query.minimal === 'true' ||
-      req.query.minimal === 'yes';
     const limitRaw = req.query.limit;
     const paginate = limitRaw !== undefined && String(limitRaw).length > 0;
-    const limit = paginate ? Math.min(100, Math.max(1, parseIntQuery(limitRaw, 12))) : undefined;
+    const limit = paginate ? Math.min(100, Math.max(1, parseIntQuery(limitRaw, 24))) : undefined;
     const page = paginate ? Math.max(0, parseIntQuery(req.query.page, 0)) : 0;
     const offset = limit != null ? page * limit : undefined;
 
     const { characters, total } = await listUserCharactersForUser(
       userId,
-      {
-        ...(limit != null ? { limit, offset: offset ?? 0 } : {}),
-        ...(minimal ? { minimal: true } : {}),
-      }
+      limit != null ? { limit, offset: offset ?? 0 } : undefined
     );
-    sendOk(res, { characters, total });
+
+    const characterIds = characters
+      .map(c => (typeof c.id === 'string' ? c.id.trim() : ''))
+      .filter(Boolean);
+    const thumbnails = await listBaseLookThumbnailUrlsForCharacterIds(characterIds);
+    const charactersWithThumbnails = characters.map(c => {
+      const id = typeof c.id === 'string' ? c.id.trim() : '';
+      const baseLookThumbnailUrl = id ? thumbnails.get(id) ?? null : null;
+      return { ...c, baseLookThumbnailUrl };
+    });
+
+    sendOk(res, { characters: charactersWithThumbnails, total });
   } catch (error) {
     sendError(res, error);
   }

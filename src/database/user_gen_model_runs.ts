@@ -150,26 +150,6 @@ export async function updateUserGenModelRun(input: UserGenModelRuns): Promise<vo
   }
 }
 
-/** Run ids for a character (same user), for storage cleanup before deleting the character row. */
-export async function listUserGenModelRunIdsForCharacter(userId: string, characterId: string): Promise<string[]> {
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('user_gen_model_runs')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('character_id', characterId);
-
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'user_gen_model_runs_list_by_character_failed',
-      expose: false,
-    });
-  }
-  const rows = (data as { id?: string | null }[] | null) ?? [];
-  return rows.map(r => String(r.id ?? '').trim()).filter(Boolean);
-}
-
 export async function deleteUserGenModelRun(runId: string): Promise<void> {
   const { supabaseServerClient } = await getServerClient();
   const { error: delErr } = await supabaseServerClient.from('user_gen_model_runs').delete().eq('id', runId);
@@ -202,4 +182,32 @@ export async function getUserGenModelRunByIdForUser(
     });
   }
   return row;
+}
+
+export async function updateUserGenModelRunAppForUser(
+  userId: string,
+  runId: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const id = runId.trim();
+  if (!id) {
+    throw new AppError('runId is required', {
+      statusCode: 400,
+      code: 'user_gen_model_run_update_invalid',
+    });
+  }
+console.log('payload', payload);
+  const { supabaseServerClient } = await getServerClient();
+  const { error } = await supabaseServerClient
+    .from('user_gen_model_runs')
+    .update(payload)
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_run_app_update_failed',
+    });
+  }
 }

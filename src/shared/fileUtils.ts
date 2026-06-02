@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { AppError } from '../app/error';
 import { uploadFileToZipline, getZipData } from './ziplineApi';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
@@ -287,34 +288,104 @@ export const getFilename = (url: string): string | null => {
   }
 };
 
+export type DownloadUrlOptions = {
+  timeoutMs?: number;
+  maxBytes?: number;
+};
+
+type FetchUrlBytesResult = {
+  buffer: Buffer;
+  contentType: string | undefined;
+};
+
+/**
+ * Downloads a remote URL to a Buffer. Throws {@link AppError} on failure.
+ */
+export async function downloadUrlToBuffer(
+  url: string,
+  opts?: DownloadUrlOptions
+): Promise<Buffer> {
+  const { buffer } = await fetchUrlBytes(url, opts);
+  return buffer;
+}
+
+async function fetchUrlBytes(url: string, opts?: DownloadUrlOptions): Promise<FetchUrlBytesResult> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    throw new AppError('URL is required', {
+      statusCode: 400,
+      code: 'download_url_missing',
+      expose: true,
+    });
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new AppError('URL is invalid', {
+      statusCode: 400,
+      code: 'download_url_invalid',
+      expose: true,
+    });
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new AppError('URL must use http or https', {
+      statusCode: 400,
+      code: 'download_url_invalid_protocol',
+      expose: true,
+    });
+  }
+
+  const response = await axios.get<ArrayBuffer>(trimmed, {
+    responseType: 'arraybuffer',
+    timeout: opts?.timeoutMs ?? 120000,
+    maxContentLength: opts?.maxBytes ?? 50 * 1024 * 1024,
+    maxBodyLength: opts?.maxBytes ?? 50 * 1024 * 1024,
+    validateStatus: () => true,
+  });
+
+  if (response.status < 200 || response.status >= 300 || !response.data) {
+    throw new AppError('Failed to download file', {
+      statusCode: 502,
+      code: 'download_url_failed',
+      expose: true,
+      details: { status: response.status, url: trimmed },
+    });
+  }
+
+  const buffer = Buffer.from(response.data);
+  if (buffer.length === 0) {
+    throw new AppError('Downloaded file is empty', {
+      statusCode: 400,
+      code: 'download_url_empty',
+      expose: true,
+    });
+  }
+
+  const rawType = response.headers['content-type'];
+  const contentType =
+    typeof rawType === 'string' ? rawType.split(';')[0]?.trim() || undefined : undefined;
+
+  return { buffer, contentType };
+}
+
 /**
  * Convert URL to base64 data URL
  * Supports images, PDFs, and other file types
  */
 export const convertUrlToBase64 = async (url: string, mimeType?: string): Promise<string | null> => {
   try {
-    // Validate URL
-    if (!url || !url.startsWith('http')) {
+    if (!url || !url.trim().startsWith('http')) {
       console.error('Invalid URL provided:', url);
       return null;
     }
 
-    // Fetch the file content from URL
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      validateStatus: () => true,
-    });
+    const { buffer, contentType: headerType } = await fetchUrlBytes(url);
 
-    if (response.status < 200 || response.status >= 300) {
-      console.error('Failed to fetch file:', response.status, response.statusText);
-      return null;
-    }
-
-    // Get the content type from response headers or use provided mimeType
-    let contentType = mimeType || response.headers['content-type'];
-
+    let contentType = mimeType || headerType;
     if (!contentType) {
-      // Try to determine from file extension
       const extension = getFileExtension(url);
       if (extension) {
         contentType = getMimeType(url);
@@ -324,16 +395,12 @@ export const convertUrlToBase64 = async (url: string, mimeType?: string): Promis
       }
     }
 
-    // Validate that it's a supported file type
     if (!isSupportedFileType(contentType)) {
       console.error('Unsupported file type:', contentType);
       return null;
     }
 
-    // Convert to base64
-    const arrayBuffer = response.data;
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-
+    const base64 = buffer.toString('base64');
     return `data:${contentType};base64,${base64}`;
   } catch (error) {
     console.error('Error converting URL to base64:', error);
@@ -594,7 +661,6 @@ export const saveFileFromUrl = async (
       gen_model_run_id: runId,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
-      character_id: pollingFileData.character_id ?? null,
     };
 
     const dbData = await createUserFileRow(fileMetadata);
@@ -676,7 +742,6 @@ export const saveFileFromBuffer = async (
       gen_model_run_id: runId,
       generated_info: generatedInfo,
       thumbnail_url: thumbnailUrl,
-      character_id: pollingFileData.character_id ?? null,
     };
 
     const dbData = await createUserFileRow(fileMetadata);

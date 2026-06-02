@@ -1,27 +1,25 @@
 import express from 'express';
 import { authenticateUser } from '../../middlewares/auth';
-import { createCharacter } from './createCharacter';
-import { createCharacterDialogue } from './voices/createCharacterDialogue';
-import { createCharacterSpeech } from './voices/createCharacterSpeech';
+import { assistCharacterDesignHandler } from './assistCharacterDesign';
+import { createUserCharacter } from './createUserCharacter';
 import { deleteUserCharacter } from './deleteUserCharacter';
-import { getSharedVoices } from './voices/getSharedVoices';
 import { getUserCharacter } from './getUserCharacter';
 import { getUserCharacters } from './getUserCharacters';
-import { listCharacterAudioFiles } from './listCharacterAudioFiles';
-import { patchUserCharacter } from './patchUserCharacter';
-import { runCharacterGeneration } from './runCharacterGeneration';
+import { generateCharacterLook } from './generateCharacterLook';
+import { getUserCharacterHistory } from './getUserCharacterHistory';
+import { switchCharacterBaseLook } from './switchCharacterBaseLook';
+import { updateUserCharacter } from './updateUserCharacter';
 
 const router = express.Router();
 
 router.get('/', authenticateUser, getUserCharacters);
-router.get('/library', authenticateUser, getSharedVoices);
-router.post('/create', authenticateUser, createCharacter);
-router.post('/speech', authenticateUser, createCharacterSpeech);
-router.post('/dialogue', authenticateUser, createCharacterDialogue);
-router.post('/:characterId/run', authenticateUser, runCharacterGeneration);
-router.get('/:characterId/audio-files', authenticateUser, listCharacterAudioFiles);
-router.patch('/:characterId', authenticateUser, patchUserCharacter);
-router.delete('/:characterId', authenticateUser, deleteUserCharacter);
+router.post('/assist', authenticateUser, assistCharacterDesignHandler);
+router.post('/', authenticateUser, createUserCharacter);
+router.post('/:characterId/generate-look', authenticateUser, generateCharacterLook);
+router.post('/:characterId/switch-base-look', authenticateUser, switchCharacterBaseLook);
+router.get('/:characterId/history', authenticateUser, getUserCharacterHistory);
 router.get('/:characterId', authenticateUser, getUserCharacter);
+router.patch('/:characterId', authenticateUser, updateUserCharacter);
+router.delete('/:characterId', authenticateUser, deleteUserCharacter);
 
 export default router;

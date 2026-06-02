@@ -155,6 +155,55 @@ export function enumValuesToArray(values: unknown): unknown[] {
     .filter(v => v !== undefined);
 }
 
+function isJsonSchemaObjectSchema(value: unknown): value is Record<string, unknown> {
+  const rec = objectRecord(value);
+  if (!rec) return false;
+  if (rec.type === 'object' && objectRecord(rec.properties)) return true;
+  return Boolean(objectRecord(rec.properties));
+}
+
+/** Property key order from `x-order-properties`, then any remaining keys. */
+export function jsonSchemaPropertyKeys(schema: Record<string, unknown>): string[] {
+  const properties = objectRecord(schema.properties) ?? {};
+  const order = schema['x-order-properties'];
+  const keys: string[] = [];
+  if (Array.isArray(order)) {
+    for (const entry of order) {
+      if (typeof entry === 'string' && entry in properties && !keys.includes(entry)) {
+        keys.push(entry);
+      }
+    }
+  }
+  for (const key of Object.keys(properties)) {
+    if (!keys.includes(key)) keys.push(key);
+  }
+  return keys;
+}
+
+function jsonSchemaArrayItemsToZod(propSchema: Record<string, unknown>): z.ZodTypeAny {
+  const items = propSchema.items;
+  let elementSchema: z.ZodTypeAny;
+
+  if (Array.isArray(items) && items.length > 0) {
+    const members = items.map(item => jsonSchemaPropToZod(item));
+    elementSchema =
+      members.length === 1
+        ? members[0]!
+        : z.tuple(members as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+  } else if (items && typeof items === 'object' && !Array.isArray(items)) {
+    elementSchema = jsonSchemaPropToZod(items);
+  } else {
+    elementSchema = z.any();
+  }
+
+  let arraySchema = z.array(elementSchema);
+  const minItems = propSchema.minItems;
+  const maxItems = propSchema.maxItems;
+  if (typeof minItems === 'number') arraySchema = (arraySchema as z.ZodArray<z.ZodTypeAny>).min(minItems);
+  if (typeof maxItems === 'number') arraySchema = (arraySchema as z.ZodArray<z.ZodTypeAny>).max(maxItems);
+  return arraySchema;
+}
+
 export function jsonSchemaPropToZod(propSchema: any): z.ZodTypeAny {
   const type = propSchema?.type as string | undefined;
   const description = propSchema?.description as string | undefined;
@@ -172,22 +221,16 @@ export function jsonSchemaPropToZod(propSchema: any): z.ZodTypeAny {
     schema = z.string();
     if (typeof propSchema?.minLength === 'number') schema = (schema as z.ZodString).min(propSchema.minLength);
     if (typeof propSchema?.maxLength === 'number') schema = (schema as z.ZodString).max(propSchema.maxLength);
-  } else if (type === 'object') {
-    // Nested object: recurse into its properties.
+  } else if (type === 'object' || objectRecord(propSchema?.properties)) {
     schema = jsonSchemaInputToZodObject(propSchema);
   } else if (type === 'integer' || type === 'number') {
     schema = type === 'integer' ? z.number().int() : z.number();
     if (typeof propSchema?.minimum === 'number') schema = (schema as any).min(propSchema.minimum);
     if (typeof propSchema?.maximum === 'number') schema = (schema as any).max(propSchema.maximum);
   } else if (type === 'array') {
-    const itemsSchema = propSchema?.items ?? { type: 'any' };
-    let itemZod: z.ZodTypeAny = jsonSchemaPropToZod(itemsSchema);
-    const maxItems = propSchema?.maxItems;
-    const minItems = propSchema?.minItems;
-    let arraySchema = z.array(itemZod);
-    if (typeof minItems === 'number') arraySchema = (arraySchema as any).min(minItems);
-    if (typeof maxItems === 'number') arraySchema = (arraySchema as any).max(maxItems);
-    schema = arraySchema;
+    schema = jsonSchemaArrayItemsToZod(
+      propSchema && typeof propSchema === 'object' ? (propSchema as Record<string, unknown>) : {}
+    );
   } else if (type === 'boolean') {
     schema = z.boolean();
   } else {
@@ -207,16 +250,28 @@ export function jsonSchemaPropToZod(propSchema: any): z.ZodTypeAny {
 
 export function jsonSchemaInputToZodObject(inputSchema: any): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const schema = inputSchema?.inputSchema ?? inputSchema;
-  const requiredKeys: string[] = Array.isArray(schema?.required) ? schema.required : [];
-  const properties: Record<string, any> = schema?.properties ?? {};
+  const schemaRecord =
+    schema && typeof schema === 'object' && !Array.isArray(schema)
+      ? (schema as Record<string, unknown>)
+      : {};
+  const requiredKeys: string[] = Array.isArray(schemaRecord.required)
+    ? (schemaRecord.required as string[])
+    : [];
+  const properties = objectRecord(schemaRecord.properties) ?? {};
 
   const shape: Record<string, z.ZodTypeAny> = {};
-  for (const [key, propSchema] of Object.entries(properties)) {
+  for (const key of jsonSchemaPropertyKeys(schemaRecord)) {
+    const propSchema = properties[key];
+    if (!propSchema) continue;
     const base = jsonSchemaPropToZod(propSchema);
-    const isReadOnly = propSchema?.readOnly === true;
+    const propRec =
+      propSchema && typeof propSchema === 'object' && !Array.isArray(propSchema)
+        ? (propSchema as Record<string, unknown>)
+        : {};
+    const isReadOnly = propRec.readOnly === true;
     const isRequired = requiredKeys.includes(key) && !isReadOnly;
-    const hasDefault = propSchema?.default !== undefined;
-    shape[key] = !isRequired && !hasDefault ? (base as any).optional() : base;
+    const hasDefault = propRec.default !== undefined;
+    shape[key] = !isRequired && !hasDefault ? (base as z.ZodTypeAny).optional() : base;
   }
 
   return z.object(shape);
@@ -253,14 +308,42 @@ export function getModelFunctionSchema(
   return null;
 }
 
+/**
+ * Resolves the root JSON Schema object used for agent tool `inputParams` (supports nested
+ * `input` / `parameters` objects, OpenAI-style `parameters`, and tuple `items` arrays).
+ */
 export function getToolInputSchema(functionSchema: Record<string, unknown> | null): Record<string, unknown> | null {
-  const schema =
-    objectRecord(functionSchema?.inputSchema) ?? objectRecord(functionSchema?.parameters) ?? functionSchema;
-  if (!schema) return null;
-  if (schema.type === 'object' && objectRecord(schema.properties)) return schema;
+  if (!functionSchema) return null;
 
-  const nestedProperties = objectRecord(schema.properties);
-  if (nestedProperties?.type === 'object' && objectRecord(nestedProperties.properties)) return nestedProperties;
+  const candidates: unknown[] = [
+    functionSchema.inputSchema,
+    functionSchema.parameters,
+    functionSchema,
+  ];
+
+  for (const candidate of candidates) {
+    if (!isJsonSchemaObjectSchema(candidate)) continue;
+    const rec = objectRecord(candidate)!;
+    const properties = objectRecord(rec.properties)!;
+    return {
+      ...rec,
+      type: 'object',
+      properties,
+      required: Array.isArray(rec.required) ? rec.required : undefined,
+    };
+  }
+
+  const rootProps = objectRecord(functionSchema.properties);
+  if (rootProps) {
+    return {
+      type: 'object',
+      properties: rootProps,
+      required: Array.isArray(functionSchema.required) ? functionSchema.required : undefined,
+      description:
+        typeof functionSchema.description === 'string' ? functionSchema.description : undefined,
+      'x-order-properties': functionSchema['x-order-properties'],
+    };
+  }
 
   return null;
 }

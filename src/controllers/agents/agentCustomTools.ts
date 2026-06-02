@@ -21,7 +21,6 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     const functionSchema = getModelFunctionSchema(model);
     const toolSlug = buildToolSlug(model, functionSchema);
     const rawInputSchema = getToolInputSchema(functionSchema);
-
     if (!toolSlug || !rawInputSchema) return [];
     const toolName = String(model?.model_name ?? toolSlug);
     if (!modelNames.includes(toolName)) {

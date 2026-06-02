@@ -1,11 +1,19 @@
 import Stripe from "stripe";
 
-// Only initialize Stripe if the secret key is available
-export const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: "2025-09-30.clover",
-    })
-  : null;
+let stripeInstance: Stripe | null | undefined;
+
+/** Lazily initialized so dotenv can load before first use (see index.ts import order). */
+export function getStripe(): Stripe | null {
+  if (stripeInstance === undefined) {
+    const key = process.env.STRIPE_SECRET_KEY?.trim();
+    stripeInstance = key
+      ? new Stripe(key, {
+          apiVersion: "2025-09-30.clover",
+        })
+      : null;
+  }
+  return stripeInstance;
+}
 
 /** Allowed balance top-up amounts in USD (whole dollars). */
 export const TOP_UP_AMOUNTS_DOLLARS = [5, 10, 25, 50, 100] as const;

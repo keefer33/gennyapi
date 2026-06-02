@@ -1,4 +1,4 @@
-import { isValidTopUpDollars, stripe } from '../../shared/stripe';
+import { getStripe, isValidTopUpDollars } from '../../shared/stripe';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
@@ -6,6 +6,7 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 
 export const createPaymentIntent = async (req: Request, res: Response): Promise<void> => {
   try {
+    const stripe = getStripe();
     if (!stripe) {
       throw new AppError('Stripe not configured', {
         statusCode: 500,
@@ -22,7 +23,7 @@ export const createPaymentIntent = async (req: Request, res: Response): Promise<
       throw badRequest('Invalid top-up amount');
     }
 
-    const amountCents = dollars * 100;
+    const amountCents = Math.round(dollars * 100);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,

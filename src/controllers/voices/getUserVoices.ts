@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { sendError, sendOk } from '../../../app/response';
-import { listUserVoicesForUser } from '../../../database/user_voices';
-import { getAuthUserId } from '../../../shared/getAuthUserId';
+import { sendError, sendOk } from '../../app/response';
+import { listUserVoicesForUser } from '../../database/user_voices';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 function parseIntQuery(value: unknown, fallback: number): number {
   if (value === undefined || value === null || value === '') return fallback;
@@ -10,8 +10,8 @@ function parseIntQuery(value: unknown, fallback: number): number {
 }
 
 /**
- * GET /characters/voices
- * Lists the authenticated user's `user_voices` rows with linked preview `user_files`.
+ * GET /voices
+ * Lists the authenticated user's saved voices (excludes transient design drafts).
  */
 export async function getUserVoices(req: Request, res: Response): Promise<void> {
   try {

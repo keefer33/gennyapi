@@ -100,6 +100,18 @@ export type UserFileRow = {
   voice_id?: string | null;
 };
 
+/** Matches `public.user_voices_speech` */
+export type UserVoiceSpeechRow = {
+  id?: string | null;
+  created_at?: string | null;
+  user_id?: string | null;
+  voice_id?: string | null;
+  title?: string | null;
+  transcript?: string | null;
+  metadata?: unknown | null;
+  file_id?: string | null;
+};
+
 /** Matches `public.user_voices` */
 export type UserVoiceRow = {
   id?: string | null;
@@ -112,10 +124,10 @@ export type UserVoiceRow = {
   gender?: string | null;
   age?: string | null;
   accent?: string | null;
-  category?: string | null;
   descriptive?: string | null;
-  use_case?: string | null;
   metadata?: unknown | null;
+  type?: string | null;
+  source?: string | null;
 };
 
 /** Matches `public.user_characters` */
@@ -126,17 +138,19 @@ export type UserCharacterRow = {
   updated_at?: string | null;
   name?: string | null;
   description?: string | null;
-  language?: string | null;
   gender?: string | null;
   age?: string | null;
-  accent?: string | null;
-  category?: string | null;
-  descriptive?: string | null;
-  use_case?: string | null;
-  featured?: boolean | null;
-  status?: string | null;
-  /** ElevenLabs source + `generations` merged on read from `user_gen_model_runs`. */
-  metadata?: unknown | null;
+  ethnicity?: string | null;
+  voice_id?: string | null;
+};
+
+/** Matches `public.user_characters_files` */
+export type UserCharacterFileRow = {
+  id?: string | null;
+  created_at?: string | null;
+  character_id?: string | null;
+  gen_model_run_id?: string | null;
+  type?: string | null;
 };
 
 /** Matches `public.user_tags` */
@@ -328,7 +342,6 @@ export type ListUserFilesParams = {
   tagIds: string[];
   uploadType: string | null;
   fileTypeFilter: string;
-  characterId?: string | null;
 };
 
 export type ListUserFilesResult = {

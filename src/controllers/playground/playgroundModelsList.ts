@@ -28,6 +28,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
   try {
     const { supabaseServerClient } = await getServerClient();
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     const modelId = typeof req.query.model_id === 'string' ? req.query.model_id.trim() : '';
     const brandFilters = toList(req.query.brands);
     const modelTypeFilters = toList(req.query.model_type);
@@ -47,6 +48,9 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       query = query.or(
         `model_id.ilike.%${escaped}%,model_name.ilike.%${escaped}%,model_description.ilike.%${escaped}%`
       );
+    }
+    if (id) {
+      query = query.eq('id', id);
     }
     if (modelId) {
       query = query.eq('model_id', modelId);
@@ -100,6 +104,7 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       },
       query: {
         search,
+        id,
         model_id: modelId,
         brands: brandFilters,
         model_product: modelProductFilters,

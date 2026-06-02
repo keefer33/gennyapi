@@ -1,5 +1,4 @@
-import { isValidTopUpCents } from '../../shared/stripe';
-import Stripe from 'stripe';
+import { getStripe, isValidTopUpCents } from '../../shared/stripe';
 import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError, sendOk } from '../../app/response';
@@ -11,12 +10,7 @@ import { createCompletedTransaction, getTransactionByPaymentIntentId } from '../
 
 export async function confirmPayment(req: Request, res: Response): Promise<void> {
   try {
-    const stripe = process.env.STRIPE_SECRET_KEY
-      ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-          apiVersion: '2025-09-30.clover',
-        })
-      : null;
-
+    const stripe = getStripe();
     if (!stripe) {
       throw new AppError('Stripe not configured', {
         statusCode: 500,

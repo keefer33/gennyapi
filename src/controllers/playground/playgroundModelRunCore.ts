@@ -14,6 +14,7 @@ import { runGoogleModel } from '../../api-vendors/google/runGoogleModel';
 import { runAlibabaModel } from '../../api-vendors/alibaba/runAlibabaModel';
 import { runEachlabsModel } from '../../api-vendors/eachlabs/runEachlabsModel';
 import { runPrunaaiModel } from '../../api-vendors/prunaai/runPrunaaiModel';
+import { runKlingModel } from '../../api-vendors/kling/runKlingModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -46,7 +47,7 @@ export async function executePlaygroundModelRun(
   modelId: string,
   payload: Record<string, unknown>,
   app: string = 'playground',
-  character_id: string = null
+  characterId: string | null = null
 ): Promise<Awaited<ReturnType<typeof createUserGenModelRun>>> {
   const id = typeof modelId === 'string' ? modelId.trim() : '';
   if (!id) {
@@ -97,6 +98,9 @@ export async function executePlaygroundModelRun(
         case 'prunaai':
           response = await runPrunaaiModel(genModel, payload);
           break;
+        case 'kling':
+          response = await runKlingModel(genModel, payload);
+          break;
         default:
           throw new AppError('Invalid vendor', {
             statusCode: 400,
@@ -118,7 +122,7 @@ export async function executePlaygroundModelRun(
       task_id: respObj?.id || respObj?.taskId || null,
       status: 'pending',
       app: app,
-      character_id: character_id,
+      character_id: characterId,
     });
 
     await insertUserUsageLog({

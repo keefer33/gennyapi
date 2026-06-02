@@ -93,11 +93,15 @@ export const processResponse = async (
 ) => {
   if (Array.isArray(output)) {
     const files: unknown[] = [];
+    const savedUrls = new Set<string>();
     for (let index = 0; index < output.length; index++) {
       const url = output[index];
       if (typeof url === 'string' && url.trim()) {
+        const trimmed = url.trim();
+        if (savedUrls.has(trimmed)) continue;
+        savedUrls.add(trimmed);
         try {
-          const savedFile = await saveFileFromUrl(url.trim(), pollingFileData);
+          const savedFile = await saveFileFromUrl(trimmed, pollingFileData);
           if (savedFile) files.push(savedFile);
         } catch (_error) {
           await failWebhookGeneration(pollingFileData, pollingFileResponse);
@@ -116,4 +120,31 @@ export const processResponse = async (
     await failWebhookGeneration(pollingFileData, pollingFileResponse);
   }
   throw new Error('API error: unknown');
+};
+
+const enrollments = [
+  { studentId: 1, studentName: "Jeff", course: "JavaScript" },
+  { studentId: 2, studentName: "Sarah", course: "Python" },
+  { studentId: 1, studentName: "Jeff", course: "React" },
+  { studentId: 3, studentName: "Mike", course: "JavaScript" },
+  { studentId: 2, studentName: "Sarah", course: "React" }
+];
+
+const getCoursesByStudent = (enrollments) => {
+  const coursesByStudent = {};
+
+  for (const enrollment of enrollments) {
+    const { course, studentName } = enrollment;
+    if (coursesByStudent[studentName]) {
+      coursesByStudent[studentName].push(course);
+    } else {
+      if (coursesByStudent[studentName].includes(course)) {
+        continue;
+      }
+      coursesByStudent[studentName] = [course];
+    }
+
+  }
+
+  return coursesByStudent;
 };

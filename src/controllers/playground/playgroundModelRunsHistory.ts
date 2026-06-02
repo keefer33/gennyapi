@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
+import { enrichHistoryRunFilesWithEntityNames } from '../../shared/enrichHistoryRunFilesWithEntityNames';
 /**
  * GET /playground/runs?page=1&limit=50&gen_model_id=&generation_ids=id1,id2&brands=slug1,slug2&model_product=p1,p2&model_type=t1,t2
  */
@@ -49,7 +50,8 @@ export async function playgroundModelRunsHistory(req: Request, res: Response): P
       model_products,
       model_types,
     });
-    sendOk(res, { items: rows, total, page, limit });
+    const items = await enrichHistoryRunFilesWithEntityNames(userId, rows);
+    sendOk(res, { items, total, page, limit });
   } catch (err) {
     sendError(res, err);
   }
