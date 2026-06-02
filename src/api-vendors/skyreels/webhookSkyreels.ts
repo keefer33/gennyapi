@@ -111,11 +111,11 @@ export async function webhookSkyreels(context: WebhookVendorContext<SkyreelsPoll
     }
 
     if (!status || PENDING_STATUSES.has(status)) {
-      await tickWebhookRun({ runId, duration });
+      await tickWebhookRun({ runId, duration, delayMs: 5000 });
       return;
     }
 
-    await tickWebhookRun({ runId, duration });
+    await tickWebhookRun({ runId, duration, delayMs: 5000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookSkyreels] caught error while processing', { run_id: run.id, message });
