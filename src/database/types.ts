@@ -142,6 +142,7 @@ export type UserCharacterRow = {
   age?: string | null;
   ethnicity?: string | null;
   voice_id?: string | null;
+  metadata?: unknown | null;
 };
 
 /** Matches `public.user_characters_files` */
@@ -151,6 +152,30 @@ export type UserCharacterFileRow = {
   character_id?: string | null;
   gen_model_run_id?: string | null;
   type?: string | null;
+};
+
+export type CharacterLookView = 'front' | 'back' | 'left' | 'right';
+
+/** Matches `public.user_characters_looks` */
+export type UserCharacterLookRow = {
+  id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  user_id?: string | null;
+  character_id?: string | null;
+  name?: string | null;
+  base_look?: boolean | null;
+  metadata?: unknown | null;
+};
+
+/** Matches `public.user_characters_look_items` */
+export type UserCharacterLookItemRow = {
+  id?: string | null;
+  created_at?: string | null;
+  look_id?: string | null;
+  file_id?: string | null;
+  view?: CharacterLookView | string | null;
+  metadata?: unknown | null;
 };
 
 /** Matches `public.user_tags` */

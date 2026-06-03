@@ -1,13 +1,14 @@
 import { AppError } from '../app/error';
 import { createUserCharacterRow, deleteUserCharacterRow, getUserCharacterForUser } from '../database/user_characters';
-import type { UserCharacterRow, UserFileRow, UserGenModelRuns } from '../database/types';
+import type { UserCharacterLookRow, UserCharacterRow, UserGenModelRuns } from '../database/types';
+import { createUserCharacterLookRow } from '../database/user_characters_looks';
 import { executePlaygroundModelRun } from '../controllers/playground/playgroundModelRunCore';
-import { updateUserGenModelRunAppForUser } from '../database/user_gen_model_runs';
-import { updateUserFilesUploadTypeForRun } from '../database/user_files';
-import { pollGenModelRunUntilTerminal } from './genModelRunPoll';
 
 /** Text-to-image model for initial character look generation. */
 export const CHARACTER_LOOK_MODEL_ID = 'df7aa4eb-bb74-41ad-b825-aba3ffab6e56';
+
+/** Edit-image model for back/right/left character look views. */
+export const CHARACTER_LOOK_EDIT_MODEL_ID = '6cac6e6a-e1cd-4192-97c6-9ca0b607f917';
 
 export { CHARACTER_BASE_LOOK_FILE_TYPE } from '../database/user_characters_files';
 
@@ -54,8 +55,7 @@ export type CharacterLookRunSummary = {
 
 export type CreateCharacterWithBaseLookResult = {
   character: UserCharacterRow;
-  lookRun: CharacterLookRunSummary;
-  baseLookFile: UserFileRow;
+  baseLook: UserCharacterLookRow;
 };
 
 function lookRunSummary(run: UserGenModelRuns, runId: string): CharacterLookRunSummary {
@@ -79,7 +79,7 @@ export function buildCharacterLookImagePrompt(description: string): string {
 }
 
 /**
- * Creates a character, generates the base look image, polls until complete, and links the file.
+ * Creates a character and a base look row; view generation runs asynchronously via webhook.
  */
 export async function createUserCharacterWithBaseLook(
   userId: string,
@@ -105,47 +105,22 @@ export async function createUserCharacterWithBaseLook(
 
   try {
     const prompt = buildCharacterLookImagePrompt(input.description);
-    const genModelRun = await executePlaygroundModelRun(
-      userId,
-      CHARACTER_LOOK_MODEL_ID,
-      {
+    const baseLook = await createUserCharacterLookRow({
+      user_id: userId,
+      character_id: characterId,
+      base_look: true,
+      metadata: {
+        type: 'create_character_new',
         prompt,
-        aspect_ratio: '9:16',
-        disable_safety_checker: true,
       },
-      CHARACTER_LOOK_SAVED_UPLOAD_TYPE,
-      characterId
-    );
+    });
 
-    const runId = genModelRun.id?.trim();
-    if (!runId) {
-      throw new AppError('Failed to start base look generation', {
-        statusCode: 500,
-        code: 'character_base_look_run_missing_id',
-      });
-    }
-
-
-    const { run, files } = await pollGenModelRunUntilTerminal(userId, runId);
-    const baseLookFile = files[0];
-    if (!baseLookFile?.id?.trim()) {
-      throw new AppError('No base look image was generated', {
-        statusCode: 502,
-        code: 'character_base_look_no_file',
-        expose: true,
-      });
-    }
-
-    return {
-      character,
-      lookRun: lookRunSummary(run, runId),
-      baseLookFile,
-    };
+    return { character, baseLook };
   } catch (err) {
     try {
       await deleteUserCharacterRow(userId, characterId);
     } catch {
-      // Best-effort rollback if generation or file linking failed.
+      // Best-effort rollback if look row creation failed.
     }
     throw err;
   }

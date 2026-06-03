@@ -20,7 +20,15 @@ const USER_CHARACTERS_INSERT_KEYS = [
   'voice_id',
 ] as const;
 
-const USER_CHARACTERS_UPDATE_KEYS = ['name', 'description', 'gender', 'age', 'ethnicity', 'voice_id'] as const;
+const USER_CHARACTERS_UPDATE_KEYS = [
+  'name',
+  'description',
+  'gender',
+  'age',
+  'ethnicity',
+  'voice_id',
+  'metadata',
+] as const;
 
 export async function createUserCharacterRow(row: Partial<UserCharacterRow>): Promise<UserCharacterRow> {
   const { supabaseServerClient } = await getServerClient();

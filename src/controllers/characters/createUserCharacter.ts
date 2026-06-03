@@ -20,14 +20,14 @@ function optionalString(value: unknown): string | null {
 /**
  * POST /characters
  * Body: { name, description, voiceId?, gender?, age?, ethnicity? }
- * Creates the character, generates the base look, polls until complete, and links the image.
+ * Creates the character and enqueues base look generation (via DB webhook).
  */
 export async function createUserCharacter(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
 
-    const { character, lookRun, baseLookFile } = await createUserCharacterWithBaseLook(userId, {
+    const { character, baseLook } = await createUserCharacterWithBaseLook(userId, {
       user_id: userId,
       name: requiredString(body.name, 'name'),
       description: requiredString(body.description, 'description'),
@@ -37,7 +37,7 @@ export async function createUserCharacter(req: Request, res: Response): Promise<
       ethnicity: optionalString(body.ethnicity),
     });
 
-    sendOk(res, { character, lookRun, baseLookFile }, 201);
+    sendOk(res, { character, baseLook }, 201);
   } catch (error) {
     sendError(res, error);
   }
