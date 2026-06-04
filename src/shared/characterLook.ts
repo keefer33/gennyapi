@@ -142,7 +142,7 @@ function normalizePayloadRecord(value: unknown): Record<string, unknown> {
 export async function startCharacterLookGeneration(
   userId: string,
   characterId: string,
-  input: { modelId: string; payload: Record<string, unknown>; name?: string | null }
+  input: { modelId: string; payload: Record<string, unknown>; name: string }
 ): Promise<UserCharacterLookRow> {
   const id = characterId.trim();
   if (!id) {
@@ -170,12 +170,20 @@ export async function startCharacterLookGeneration(
   }
 
   const payload = normalizePayloadRecord(input.payload);
+  const name = input.name.trim();
+  if (!name) {
+    throw new AppError('name is required', {
+      statusCode: 400,
+      code: 'character_generate_look_missing_name',
+      expose: true,
+    });
+  }
 
   return createUserCharacterLookRow({
     user_id: userId,
     character_id: id,
     base_look: false,
-    name: input.name?.trim() || undefined,
+    name,
     metadata: {
       type: 'create_character_look',
       modelId,

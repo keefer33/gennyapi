@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { sendError, sendOk } from '../../app/response';
-import { listBaseLookThumbnailUrlsForCharacterIds } from '../../database/user_characters_files';
+import { listBaseLookThumbnailUrlsForCharacterIds } from '../../database/user_characters_looks';
 import { listUserCharactersForUser } from '../../database/user_characters';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 

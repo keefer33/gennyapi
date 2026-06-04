@@ -27,7 +27,7 @@ function parsePayload(body: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * POST /characters/:characterId/generate-look
- * Body: { modelId, uploadType, payload?, name? }
+ * Body: { modelId, uploadType, payload, name }
  * Image looks enqueue async 4-view generation via `user_characters_looks` insert + webhook.
  * Video generation runs immediately via the playground model run path.
  */
@@ -52,7 +52,7 @@ export async function generateCharacterLook(req: Request, res: Response): Promis
       return;
     }
 
-    const name = typeof body.name === 'string' ? body.name.trim() : null;
+    const name = requiredString(body.name, 'name');
     const look = await startCharacterLookGeneration(userId, characterId, {
       modelId,
       payload,

@@ -20,7 +20,7 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
   try {
     const body = req.body as Record<string, unknown>;
     const runId = typeof body.id === 'string' ? body.id.trim() : '';
-    const userId = getAuthUserId(req);
+    const userId = body.user_id as string;
 
     if (!runId) {
       res.sendStatus(400);

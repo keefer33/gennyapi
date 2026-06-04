@@ -211,3 +211,130 @@ export async function listUserCharacterLooksForCharacter(
     return { ...rest, items };
   });
 }
+
+function filePreviewUrl(file: UserFileRow): string | null {
+  const thumb = file.thumbnail_url?.trim();
+  if (thumb) return thumb;
+  const path = file.file_path?.trim();
+  if (path) return path;
+  return null;
+}
+
+function previewUrlFromLookItem(item: LookItemEmbed | undefined): string | null {
+  if (!item) return null;
+  const embedded = item.user_files;
+  const fileRaw = Array.isArray(embedded) ? embedded[0] : embedded;
+  if (!fileRaw || typeof fileRaw !== 'object') return null;
+  const file = fileRaw as UserFileRow;
+  if ((file.status ?? 'active') !== 'active') return null;
+  return filePreviewUrl(file);
+}
+
+/** Front-view thumbnail URL for each character's `base_look` row. */
+export async function listBaseLookThumbnailUrlsForCharacterIds(
+  characterIds: string[]
+): Promise<Map<string, string>> {
+  const ids = [...new Set(characterIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select(
+      `
+      character_id,
+      user_characters_look_items (
+        view,
+        user_files (
+          id,
+          thumbnail_url,
+          file_path,
+          status
+        )
+      )
+    `
+    )
+    .in('character_id', ids)
+    .eq('base_look', true);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_character_base_look_thumbnails_failed',
+    });
+  }
+
+  const result = new Map<string, string>();
+  for (const row of (data as LookEmbed[]) ?? []) {
+    const cid = row.character_id?.trim();
+    if (!cid || result.has(cid)) continue;
+
+    const frontItem = (row.user_characters_look_items ?? []).find(
+      (item) => (item.view ?? '').trim().toLowerCase() === 'front'
+    );
+    const url = previewUrlFromLookItem(frontItem);
+    if (url) result.set(cid, url);
+  }
+
+  return result;
+}
+
+export async function switchCharacterBaseLookForLook(
+  userId: string,
+  characterId: string,
+  lookId: string
+): Promise<UserCharacterLookRow | null> {
+  const uid = userId.trim();
+  const cid = characterId.trim();
+  const lid = lookId.trim();
+  if (!uid || !cid || !lid) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+
+  const { data: targetLook, error: targetError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select('id')
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .maybeSingle();
+
+  if (targetError) {
+    throw new AppError(targetError.message, {
+      statusCode: 500,
+      code: 'character_base_look_target_lookup_failed',
+    });
+  }
+  if (!String((targetLook as { id?: unknown } | null)?.id ?? '').trim()) return null;
+
+  const { error: demoteError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .update({ base_look: false })
+    .eq('character_id', cid)
+    .eq('user_id', uid);
+
+  if (demoteError) {
+    throw new AppError(demoteError.message, {
+      statusCode: 500,
+      code: 'character_base_look_demote_failed',
+    });
+  }
+
+  const { data: promotedLook, error: promoteError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .update({ base_look: true })
+    .eq('id', lid)
+    .eq('character_id', cid)
+    .eq('user_id', uid)
+    .select('*')
+    .single();
+
+  if (promoteError) {
+    throw new AppError(promoteError.message, {
+      statusCode: 500,
+      code: 'character_base_look_promote_failed',
+    });
+  }
+
+  return (promotedLook as UserCharacterLookRow | null) ?? null;
+}
