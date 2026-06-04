@@ -3,12 +3,7 @@ import { executePlaygroundModelRun } from '../controllers/playground/playgroundM
 import { createUserCharacterLookItemRow } from '../database/user_characters_looks';
 import type { CharacterLookView, UserCharacterLookRow, UserFileRow } from '../database/types';
 import { pollGenModelRunUntilTerminal } from './genModelRunPoll';
-import {
-  CHARACTER_LOOK_EDIT_MODEL_ID,
-  CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
-  CHARACTER_LOOK_MODEL_ID,
-  CHARACTER_LOOK_SAVED_UPLOAD_TYPE,
-} from './characterLook';
+import { CHARACTER_APP, CHARACTER_LOOK_EDIT_MODEL_ID, CHARACTER_LOOK_MODEL_ID } from './characterLook';
 
 const CREATE_CHARACTER_NEW_TYPE = 'create_character_new';
 const CREATE_CHARACTER_LOOK_TYPE = 'create_character_look';
@@ -17,7 +12,8 @@ const SIDE_VIEWS: Exclude<CharacterLookView, 'front'>[] = ['back', 'right', 'lef
 
 const VIEW_EDIT_PROMPTS: Record<Exclude<CharacterLookView, 'front'>, string> = {
   back: 'Rotate the person in the image 180 degrees to show a full-body back view, facing away from the camera. Keep the same character, clothing, proportions, and plain white studio background.',
-  right: 'Rotate the person in the image 90 degrees to the right to show a full-body right-side profile view. Keep the same character, clothing, proportions, and plain white studio background.',
+  right:
+    'Rotate the person in the image 90 degrees to the right to show a full-body right-side profile view. Keep the same character, clothing, proportions, and plain white studio background.',
   left: 'Rotate the person in the image 90 degrees to the left to show a full-body left-side profile view. Keep the same character, clothing, proportions, and plain white studio background.',
 };
 
@@ -48,10 +44,15 @@ async function runLookGeneration(
   lookId: string,
   modelId: string,
   payload: Record<string, unknown>,
-  uploadType: string,
   view: CharacterLookView
 ): Promise<UserFileRow> {
-  const genModelRun = await executePlaygroundModelRun(userId, modelId, payload, uploadType, characterId);
+  const genModelRun = await executePlaygroundModelRun(
+    userId,
+    modelId,
+    payload,
+    CHARACTER_APP,
+    characterId
+  );
   const runId = genModelRun.id?.trim();
   if (!runId) {
     throw new AppError(`Failed to start ${view} look generation`, {
@@ -107,7 +108,6 @@ async function generateSideViewsFromFront(
         images: [frontUrl],
         prompt: VIEW_EDIT_PROMPTS[view],
       },
-      CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
       view
     );
   }
@@ -146,17 +146,10 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
       aspect_ratio: '9:16',
       disable_safety_checker: true,
     },
-    CHARACTER_LOOK_SAVED_UPLOAD_TYPE,
     'front'
   );
 
-  await generateSideViewsFromFront(
-    userId,
-    characterId,
-    lookId,
-    frontFile,
-    CHARACTER_LOOK_EDIT_MODEL_ID
-  );
+  await generateSideViewsFromFront(userId, characterId, lookId, frontFile, CHARACTER_LOOK_EDIT_MODEL_ID);
 
   console.log('[generateCreateCharacterNewLookViews] completed', { look_id: lookId, character_id: characterId });
 }
@@ -189,15 +182,7 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
     model_id: modelId,
   });
 
-  const frontFile = await runLookGeneration(
-    userId,
-    characterId,
-    lookId,
-    modelId,
-    payload,
-    CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
-    'front'
-  );
+  const frontFile = await runLookGeneration(userId, characterId, lookId, modelId, payload, 'front');
 
   await generateSideViewsFromFront(userId, characterId, lookId, frontFile, modelId);
 

@@ -1,4 +1,5 @@
 import { AppError } from '../app/error';
+import { deleteUserFileForUser } from './user_files';
 import { getServerClient } from './supabaseClient';
 import type { CharacterLookView, UserCharacterLookItemRow, UserCharacterLookRow, UserFileRow } from './types';
 
@@ -92,38 +93,6 @@ export async function createUserCharacterLookItemRow(input: {
   }
 
   return data as UserCharacterLookItemRow;
-}
-
-export async function createCharacterLookWithView(input: {
-  user_id: string;
-  character_id: string;
-  file_id: string;
-  view: CharacterLookView;
-  name?: string | null;
-  base_look?: boolean;
-}): Promise<{ look: UserCharacterLookRow; item: UserCharacterLookItemRow }> {
-  const look = await createUserCharacterLookRow({
-    user_id: input.user_id,
-    character_id: input.character_id,
-    name: input.name ?? DEFAULT_BASE_LOOK_NAME,
-    base_look: input.base_look ?? false,
-  });
-
-  const lookId = look.id?.trim();
-  if (!lookId) {
-    throw new AppError('Failed to create character look', {
-      statusCode: 500,
-      code: 'character_look_missing_id',
-    });
-  }
-
-  const item = await createUserCharacterLookItemRow({
-    look_id: lookId,
-    file_id: input.file_id,
-    view: input.view,
-  });
-
-  return { look, item };
 }
 
 type LookItemEmbed = UserCharacterLookItemRow & {
@@ -337,4 +306,130 @@ export async function switchCharacterBaseLookForLook(
   }
 
   return (promotedLook as UserCharacterLookRow | null) ?? null;
+}
+
+export async function deleteUserCharacterLookForUser(
+  userId: string,
+  characterId: string,
+  lookId: string
+): Promise<boolean> {
+  const uid = userId.trim();
+  const cid = characterId.trim();
+  const lid = lookId.trim();
+  if (!uid || !cid || !lid) return false;
+
+  const { supabaseServerClient } = await getServerClient();
+
+  const { data: existing, error: lookupError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select('id, base_look')
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError(lookupError.message, {
+      statusCode: 500,
+      code: 'character_look_delete_lookup_failed',
+    });
+  }
+  const existingRow = existing as { id?: unknown; base_look?: boolean | null } | null;
+  if (!String(existingRow?.id ?? '').trim()) return false;
+  if (existingRow?.base_look) {
+    throw new AppError('Cannot delete the base look', {
+      statusCode: 400,
+      code: 'character_base_look_delete_forbidden',
+      expose: true,
+    });
+  }
+
+  const { data: lookItems, error: itemsError } = await supabaseServerClient
+    .from('user_characters_look_items')
+    .select('file_id')
+    .eq('look_id', lid);
+
+  if (itemsError) {
+    throw new AppError(itemsError.message, {
+      statusCode: 500,
+      code: 'character_look_delete_items_lookup_failed',
+    });
+  }
+
+  const fileIds = [
+    ...new Set(
+      (lookItems ?? [])
+        .map((item) => (typeof item.file_id === 'string' ? item.file_id.trim() : ''))
+        .filter(Boolean)
+    ),
+  ];
+
+  const { error: deleteError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .delete()
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid);
+
+  if (deleteError) {
+    throw new AppError(deleteError.message, {
+      statusCode: 500,
+      code: 'character_look_delete_failed',
+    });
+  }
+
+  for (const fileId of fileIds) {
+    await deleteUserFileForUser(uid, fileId);
+  }
+
+  return true;
+}
+
+export async function updateUserCharacterLookNameForUser(
+  userId: string,
+  characterId: string,
+  lookId: string,
+  name: string
+): Promise<UserCharacterLookRow | null> {
+  const uid = userId.trim();
+  const cid = characterId.trim();
+  const lid = lookId.trim();
+  const trimmedName = name.trim();
+  if (!uid || !cid || !lid || !trimmedName) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+
+  const { data: existing, error: lookupError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select('id')
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError(lookupError.message, {
+      statusCode: 500,
+      code: 'character_look_update_lookup_failed',
+    });
+  }
+  if (!String((existing as { id?: unknown } | null)?.id ?? '').trim()) return null;
+
+  const { data: updated, error: updateError } = await supabaseServerClient
+    .from('user_characters_looks')
+    .update({ name: trimmedName })
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .select('*')
+    .maybeSingle();
+
+  if (updateError) {
+    throw new AppError(updateError.message, {
+      statusCode: 500,
+      code: 'character_look_update_failed',
+    });
+  }
+
+  return (updated as UserCharacterLookRow | null) ?? null;
 }

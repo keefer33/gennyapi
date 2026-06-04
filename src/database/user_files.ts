@@ -49,6 +49,26 @@ export async function deleteUserFile(id: string): Promise<void> {
   }
 }
 
+export async function deleteUserFileForUser(userId: string, fileId: string): Promise<void> {
+  const uid = userId.trim();
+  const id = fileId.trim();
+  if (!uid || !id) return;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { error: delErr } = await supabaseServerClient
+    .from('user_files')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', uid);
+
+  if (delErr) {
+    throw new AppError(delErr.message, {
+      statusCode: 500,
+      code: 'user_file_delete_failed',
+    });
+  }
+}
+
 /** Columns on `public.user_files` — inserts are filtered so embed/extra keys never hit PostgREST. */
 const USER_FILES_INSERT_KEYS = [
   'id',
@@ -151,40 +171,6 @@ export async function getActiveUserFileForUpdate(
   }
 
   return (data as Pick<UserFileRow, 'file_path' | 'file_name'> | null) ?? null;
-}
-
-export async function updateUserFilesUploadTypeForRun(
-  runId: string,
-  userId: string,
-  uploadType: string,
-  characterId: string | null = null
-): Promise<UserFileRow[]> {
-  const id = runId.trim();
-  const type = uploadType.trim();
-  if (!id || !type) {
-    throw new AppError('runId and uploadType are required', {
-      statusCode: 400,
-      code: 'user_files_upload_type_update_invalid',
-    });
-  }
-
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('user_files')
-    .update({ upload_type: type, character_id: characterId })
-    .eq('gen_model_run_id', id)
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .select(FILE_SELECT);
-
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'user_files_upload_type_update_failed',
-    });
-  }
-
-  return (data as UserFileRow[]) ?? [];
 }
 
 export async function updateUserFileName(fileId: string, userId: string, fileName: string): Promise<UserFileRow> {

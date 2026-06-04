@@ -1,14 +1,6 @@
 import { AppError } from '../app/error';
 import { getServerClient } from './supabaseClient';
-import {
-  listUserCharacterFilesWithRunsForCharacter,
-  type CharacterFileWithRun,
-} from './user_characters_files';
 import type { UserCharacterRow } from './types';
-
-export type UserCharacterDetail = UserCharacterRow & {
-  characterFiles: CharacterFileWithRun[];
-};
 
 const USER_CHARACTERS_INSERT_KEYS = [
   'user_id',
@@ -116,17 +108,6 @@ export async function getUserCharacterForUser(
   }
 
   return (data as UserCharacterRow | null) ?? null;
-}
-
-export async function getUserCharacterDetailForUser(
-  userId: string,
-  characterId: string
-): Promise<UserCharacterDetail | null> {
-  const character = await getUserCharacterForUser(userId, characterId);
-  if (!character) return null;
-
-  const characterFiles = await listUserCharacterFilesWithRunsForCharacter(characterId);
-  return { ...character, characterFiles };
 }
 
 export async function updateUserCharacterRow(

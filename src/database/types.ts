@@ -145,15 +145,6 @@ export type UserCharacterRow = {
   metadata?: unknown | null;
 };
 
-/** Matches `public.user_characters_files` */
-export type UserCharacterFileRow = {
-  id?: string | null;
-  created_at?: string | null;
-  character_id?: string | null;
-  gen_model_run_id?: string | null;
-  type?: string | null;
-};
-
 export type CharacterLookView = 'front' | 'back' | 'left' | 'right';
 
 /** Matches `public.user_characters_looks` */
