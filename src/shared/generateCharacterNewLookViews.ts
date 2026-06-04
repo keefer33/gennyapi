@@ -11,6 +11,8 @@ import {
 } from './characterLook';
 
 const CREATE_CHARACTER_NEW_TYPE = 'create_character_new';
+const CREATE_CHARACTER_LOOK_TYPE = 'create_character_look';
+const ALL_VIEWS: CharacterLookView[] = ['front', 'back', 'right', 'left'];
 const SIDE_VIEWS: Exclude<CharacterLookView, 'front'>[] = ['back', 'right', 'left'];
 
 const VIEW_EDIT_PROMPTS: Record<Exclude<CharacterLookView, 'front'>, string> = {
@@ -29,6 +31,11 @@ function lookMetadata(row: UserCharacterLookRow): Record<string, unknown> {
     return metadata as Record<string, unknown>;
   }
   return {};
+}
+
+function normalizePayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { ...(value as Record<string, unknown>) };
 }
 
 function filePublicUrl(file: UserFileRow): string {
@@ -75,15 +82,40 @@ async function runLookGeneration(
   return file;
 }
 
-/**
- * Generates front (text-to-image) then back/right/left (edit-image) views for a new character look.
- */
-export async function generateCharacterNewLookViews(lookRow: UserCharacterLookRow): Promise<void> {
-  const metadata = lookMetadata(lookRow);
-  if (trimString(metadata.type) !== CREATE_CHARACTER_NEW_TYPE) {
-    return;
+async function generateSideViewsFromFront(
+  userId: string,
+  characterId: string,
+  lookId: string,
+  frontFile: UserFileRow,
+  modelId: string
+): Promise<void> {
+  const frontUrl = filePublicUrl(frontFile);
+  if (!frontUrl) {
+    throw new AppError('Front look file has no public URL', {
+      statusCode: 502,
+      code: 'character_look_front_url_missing',
+    });
   }
 
+  for (const view of SIDE_VIEWS) {
+    await runLookGeneration(
+      userId,
+      characterId,
+      lookId,
+      modelId,
+      {
+        images: [frontUrl],
+        prompt: VIEW_EDIT_PROMPTS[view],
+      },
+      CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
+      view
+    );
+  }
+}
+
+/** New character: text-to-image front, then edit-image back/right/left. */
+async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+  const metadata = lookMetadata(lookRow);
   const userId = trimString(lookRow.user_id);
   const characterId = trimString(lookRow.character_id);
   const lookId = trimString(lookRow.id);
@@ -102,7 +134,7 @@ export async function generateCharacterNewLookViews(lookRow: UserCharacterLookRo
     });
   }
 
-  console.log('[generateCharacterNewLookViews] starting', { look_id: lookId, character_id: characterId });
+  console.log('[generateCreateCharacterNewLookViews] starting', { look_id: lookId, character_id: characterId });
 
   const frontFile = await runLookGeneration(
     userId,
@@ -118,28 +150,78 @@ export async function generateCharacterNewLookViews(lookRow: UserCharacterLookRo
     'front'
   );
 
-  const frontUrl = filePublicUrl(frontFile);
-  if (!frontUrl) {
-    throw new AppError('Front look file has no public URL', {
-      statusCode: 502,
-      code: 'character_look_front_url_missing',
+  await generateSideViewsFromFront(
+    userId,
+    characterId,
+    lookId,
+    frontFile,
+    CHARACTER_LOOK_EDIT_MODEL_ID
+  );
+
+  console.log('[generateCreateCharacterNewLookViews] completed', { look_id: lookId, character_id: characterId });
+}
+
+/** Generated look: edit-image for front from user payload, then back/right/left rotations. */
+async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+  const metadata = lookMetadata(lookRow);
+  const userId = trimString(lookRow.user_id);
+  const characterId = trimString(lookRow.character_id);
+  const lookId = trimString(lookRow.id);
+  const modelId = trimString(metadata.modelId) || CHARACTER_LOOK_EDIT_MODEL_ID;
+  const payload = normalizePayload(metadata.payload);
+
+  if (!userId || !characterId || !lookId) {
+    throw new AppError('Character look row is missing required ids', {
+      statusCode: 400,
+      code: 'character_look_row_invalid',
+    });
+  }
+  if (Object.keys(payload).length === 0) {
+    throw new AppError('Character look metadata.payload is required', {
+      statusCode: 400,
+      code: 'character_look_payload_missing',
     });
   }
 
-  for (const view of SIDE_VIEWS) {
-    await runLookGeneration(
-      userId,
-      characterId,
-      lookId,
-      CHARACTER_LOOK_EDIT_MODEL_ID,
-      {
-        images: [frontUrl],
-        prompt: VIEW_EDIT_PROMPTS[view],
-      },
-      CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
-      view
-    );
+  console.log('[generateCreateCharacterLookViews] starting', {
+    look_id: lookId,
+    character_id: characterId,
+    model_id: modelId,
+  });
+
+  const frontFile = await runLookGeneration(
+    userId,
+    characterId,
+    lookId,
+    modelId,
+    payload,
+    CHARACTER_LOOK_GENERATED_UPLOAD_TYPE,
+    'front'
+  );
+
+  await generateSideViewsFromFront(userId, characterId, lookId, frontFile, modelId);
+
+  console.log('[generateCreateCharacterLookViews] completed', { look_id: lookId, character_id: characterId });
+}
+
+/** Dispatches look view generation based on `metadata.type`. */
+export async function generateCharacterLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+  const metadataType = trimString(lookMetadata(lookRow).type);
+
+  if (metadataType === CREATE_CHARACTER_NEW_TYPE) {
+    await generateCreateCharacterNewLookViews(lookRow);
+    return;
   }
 
-  console.log('[generateCharacterNewLookViews] completed', { look_id: lookId, character_id: characterId });
+  if (metadataType === CREATE_CHARACTER_LOOK_TYPE) {
+    await generateCreateCharacterLookViews(lookRow);
+    return;
+  }
 }
+
+/** @deprecated Use `generateCharacterLookViews`. */
+export async function generateCharacterNewLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+  await generateCharacterLookViews(lookRow);
+}
+
+export { ALL_VIEWS, CREATE_CHARACTER_LOOK_TYPE, CREATE_CHARACTER_NEW_TYPE };

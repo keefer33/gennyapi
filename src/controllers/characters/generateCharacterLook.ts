@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 import { badRequest, sendError, sendOk } from '../../app/response';
 import {
+  CHARACTER_LOOK_VIDEO_UPLOAD_TYPE,
   parseCharacterGenerateUploadType,
   startCharacterGeneratedLook,
+  startCharacterLookGeneration,
 } from '../../shared/characterLook';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 
@@ -25,8 +27,9 @@ function parsePayload(body: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * POST /characters/:characterId/generate-look
- * Body: { modelId, uploadType, payload? }
- * uploadType: character_base_look | character_look | character_video
+ * Body: { modelId, uploadType, payload?, name? }
+ * Image looks enqueue async 4-view generation via `user_characters_looks` insert + webhook.
+ * Video generation runs immediately via the playground model run path.
  */
 export async function generateCharacterLook(req: Request, res: Response): Promise<void> {
   try {
@@ -35,13 +38,28 @@ export async function generateCharacterLook(req: Request, res: Response): Promis
     if (!characterId) throw badRequest('characterId is required');
 
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const lookRun = await startCharacterGeneratedLook(userId, characterId, {
-      modelId: requiredString(body.modelId, 'modelId'),
-      uploadType: parseCharacterGenerateUploadType(body.uploadType),
-      payload: parsePayload(body),
+    const uploadType = parseCharacterGenerateUploadType(body.uploadType);
+    const modelId = requiredString(body.modelId, 'modelId');
+    const payload = parsePayload(body);
+
+    if (uploadType === CHARACTER_LOOK_VIDEO_UPLOAD_TYPE) {
+      const lookRun = await startCharacterGeneratedLook(userId, characterId, {
+        modelId,
+        uploadType,
+        payload,
+      });
+      sendOk(res, { lookRun }, 202);
+      return;
+    }
+
+    const name = typeof body.name === 'string' ? body.name.trim() : null;
+    const look = await startCharacterLookGeneration(userId, characterId, {
+      modelId,
+      payload,
+      name,
     });
 
-    sendOk(res, { lookRun }, 202);
+    sendOk(res, { look }, 202);
   } catch (error) {
     sendError(res, error);
   }

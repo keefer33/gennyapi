@@ -1,6 +1,6 @@
 import { AppError } from '../app/error';
 import { getServerClient } from './supabaseClient';
-import type { CharacterLookView, UserCharacterLookItemRow, UserCharacterLookRow } from './types';
+import type { CharacterLookView, UserCharacterLookItemRow, UserCharacterLookRow, UserFileRow } from './types';
 
 export const CHARACTER_LOOK_VIEWS = ['front', 'back', 'left', 'right'] as const;
 
@@ -124,4 +124,90 @@ export async function createCharacterLookWithView(input: {
   });
 
   return { look, item };
+}
+
+type LookItemEmbed = UserCharacterLookItemRow & {
+  user_files?: UserFileRow | UserFileRow[] | null;
+};
+
+type LookEmbed = UserCharacterLookRow & {
+  user_characters_look_items?: LookItemEmbed[] | null;
+};
+
+function normalizeLookFile(raw: unknown): UserFileRow | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const file = raw as UserFileRow;
+  if ((file.status ?? 'active') !== 'active') return null;
+  if (!file.id?.trim()) return null;
+  if (!file.file_path?.trim() && !file.thumbnail_url?.trim()) return null;
+  return file;
+}
+
+function viewSortIndex(view: string): number {
+  const index = CHARACTER_LOOK_VIEWS.indexOf(view as CharacterLookView);
+  return index === -1 ? CHARACTER_LOOK_VIEWS.length : index;
+}
+
+export type CharacterLookWithItems = UserCharacterLookRow & {
+  items: Array<
+    UserCharacterLookItemRow & {
+      file: UserFileRow | null;
+    }
+  >;
+};
+
+export async function listUserCharacterLooksForCharacter(
+  userId: string,
+  characterId: string
+): Promise<CharacterLookWithItems[]> {
+  const uid = userId.trim();
+  const cid = characterId.trim();
+  if (!uid || !cid) return [];
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select(
+      `
+      id, created_at, updated_at, user_id, character_id, name, base_look, metadata,
+      user_characters_look_items (
+        id, created_at, look_id, file_id, view, metadata,
+        user_files (
+          id, file_name, file_path, file_type, file_size, created_at, thumbnail_url, upload_type, status
+        )
+      )
+    `
+    )
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_character_looks_list_failed',
+    });
+  }
+
+  return ((data as LookEmbed[]) ?? []).map((look) => {
+    const rawItems = look.user_characters_look_items ?? [];
+    const items = rawItems
+      .map((item) => {
+        const embedded = item.user_files;
+        const fileRaw = Array.isArray(embedded) ? embedded[0] : embedded;
+        return {
+          id: item.id,
+          created_at: item.created_at,
+          look_id: item.look_id,
+          file_id: item.file_id,
+          view: item.view,
+          metadata: item.metadata,
+          file: normalizeLookFile(fileRaw),
+        };
+      })
+      .sort((a, b) => viewSortIndex(String(a.view ?? '')) - viewSortIndex(String(b.view ?? '')));
+
+    const { user_characters_look_items: _items, ...rest } = look;
+    return { ...rest, items };
+  });
 }

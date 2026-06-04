@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import type { UserCharacterLookRow } from '../../database/types';
-import { generateCharacterNewLookViews } from '../../shared/generateCharacterNewLookViews';
+import { generateCharacterLookViews } from '../../shared/generateCharacterNewLookViews';
 
 function verifyCharacterLookWebhook(req: Request): void {
   const expected =
@@ -93,6 +93,8 @@ function lookMetadataType(row: UserCharacterLookRow): string {
     : '';
 }
 
+const SUPPORTED_LOOK_METADATA_TYPES = new Set(['create_character_new', 'create_character_look']);
+
 /**
  * POST /webhooks/characters/generate/look
  * Called after `user_characters_looks` insert (database trigger).
@@ -123,11 +125,11 @@ export async function webhookCharacterGenerateLook(req: Request, res: Response):
     console.log('[webhookCharacterGenerateLook] metadata check', {
       look_id: row.id,
       metadata_type: metadataType,
-      expected_type: 'create_character_new',
+      supported_types: [...SUPPORTED_LOOK_METADATA_TYPES],
     });
 
-    if (metadataType !== 'create_character_new') {
-      console.log('[webhookCharacterGenerateLook] skipping — metadata.type does not match');
+    if (!SUPPORTED_LOOK_METADATA_TYPES.has(metadataType)) {
+      console.log('[webhookCharacterGenerateLook] skipping — unsupported metadata.type');
       res.sendStatus(204);
       return;
     }
@@ -136,11 +138,12 @@ export async function webhookCharacterGenerateLook(req: Request, res: Response):
       look_id: row.id,
       character_id: row.character_id,
       user_id: row.user_id,
+      metadata_type: metadataType,
     });
 
     res.status(202).json({ ok: true, look_id: row.id });
 
-    void generateCharacterNewLookViews(row)
+    void generateCharacterLookViews(row)
       .then(() => {
         console.log('[webhookCharacterGenerateLook] generation completed', { look_id: row.id });
       })

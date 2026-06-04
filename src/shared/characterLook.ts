@@ -139,6 +139,51 @@ function normalizePayloadRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+export async function startCharacterLookGeneration(
+  userId: string,
+  characterId: string,
+  input: { modelId: string; payload: Record<string, unknown>; name?: string | null }
+): Promise<UserCharacterLookRow> {
+  const id = characterId.trim();
+  if (!id) {
+    throw new AppError('characterId is required', {
+      statusCode: 400,
+      code: 'character_generate_look_missing_id',
+    });
+  }
+
+  const existing = await getUserCharacterForUser(userId, id);
+  if (!existing) {
+    throw new AppError('Character not found', {
+      statusCode: 404,
+      code: 'character_not_found',
+    });
+  }
+
+  const modelId = input.modelId.trim();
+  if (!modelId) {
+    throw new AppError('modelId is required', {
+      statusCode: 400,
+      code: 'character_generate_look_missing_model_id',
+      expose: true,
+    });
+  }
+
+  const payload = normalizePayloadRecord(input.payload);
+
+  return createUserCharacterLookRow({
+    user_id: userId,
+    character_id: id,
+    base_look: false,
+    name: input.name?.trim() || undefined,
+    metadata: {
+      type: 'create_character_look',
+      modelId,
+      payload,
+    },
+  });
+}
+
 export async function startCharacterGeneratedLook(
   userId: string,
   characterId: string,

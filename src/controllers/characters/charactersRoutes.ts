@@ -7,6 +7,7 @@ import { getUserCharacter } from './getUserCharacter';
 import { getUserCharacters } from './getUserCharacters';
 import { generateCharacterLook } from './generateCharacterLook';
 import { getUserCharacterHistory } from './getUserCharacterHistory';
+import { getUserCharacterLooks } from './getUserCharacterLooks';
 import { switchCharacterBaseLook } from './switchCharacterBaseLook';
 import { updateUserCharacter } from './updateUserCharacter';
 import { createCharacterKlingElement } from './createCharacterKlingElement';
@@ -20,6 +21,7 @@ router.post('/:characterId/generate-look', authenticateUser, generateCharacterLo
 router.post('/:characterId/create-element/kling', authenticateUser, createCharacterKlingElement);
 router.post('/:characterId/switch-base-look', authenticateUser, switchCharacterBaseLook);
 router.get('/:characterId/history', authenticateUser, getUserCharacterHistory);
+router.get('/:characterId/looks', authenticateUser, getUserCharacterLooks);
 router.get('/:characterId', authenticateUser, getUserCharacter);
 router.patch('/:characterId', authenticateUser, updateUserCharacter);
 router.delete('/:characterId', authenticateUser, deleteUserCharacter);
