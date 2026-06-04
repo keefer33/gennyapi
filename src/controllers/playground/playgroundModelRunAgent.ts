@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../app/response';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
-import { RUN_AGENT_SELECT } from '../../database/const';
 
 /** GET /playground/runs/:runId — one history row with linked `user_files` (thumbnails + previews). */
 export async function playgroundModelRunAgent(req: Request, res: Response): Promise<void> {
@@ -12,7 +11,7 @@ export async function playgroundModelRunAgent(req: Request, res: Response): Prom
     if (!runId) {
       throw badRequest('Missing run id');
     }
-    const row = await getUserGenModelRunByIdForUser(userId, runId, RUN_AGENT_SELECT);
+    const row = await getUserGenModelRunByIdForUser(userId, runId);
     if (!row) {
       throw notFound('Run not found');
     }

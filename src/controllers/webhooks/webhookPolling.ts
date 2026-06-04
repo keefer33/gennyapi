@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { getUserGenModelRunById } from '../../database/user_gen_model_runs';
+import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
 import { UserGenModelRuns } from '../../database/types';
 import { advanceGenModelRunPoll } from '../../shared/genModelRunPoll';
+import { getAuthUserId } from '../../shared/getAuthUserId';
 
 export type { WebhookVendorContext } from '../../shared/genModelRunPoll';
 
@@ -19,13 +20,14 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
   try {
     const body = req.body as Record<string, unknown>;
     const runId = typeof body.id === 'string' ? body.id.trim() : '';
+    const userId = getAuthUserId(req);
 
     if (!runId) {
       res.sendStatus(400);
       return;
     }
 
-    const runRow = await getUserGenModelRunById(runId);
+    const runRow = await getUserGenModelRunByIdForUser(userId, runId);
     if (!runRow) {
       res.sendStatus(404);
       return;
@@ -50,7 +52,7 @@ export async function webhookPolling(req: Request, res: Response): Promise<void>
       return;
     }
 
-    await advanceGenModelRunPoll(runId);
+    await advanceGenModelRunPoll(runRow);
 
     // No response body required.
     res.sendStatus(204);

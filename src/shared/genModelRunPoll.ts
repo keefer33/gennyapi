@@ -8,8 +8,7 @@ import { webhookEachlabs } from '../api-vendors/eachlabs/webhookEachlabs';
 import { webhookPrunaai } from '../api-vendors/prunaai/webhookPrunaai';
 import { webhookKling } from '../api-vendors/kling/webhookKling';
 import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
-import { RUN_HISTORY_SELECT } from '../database/const';
-import { getUserGenModelRunById, getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
+import { getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
 import { getUserFilesByRunId } from '../database/user_files';
 import type { GenModelRow, UserFileRow, UserGenModelRuns } from '../database/types';
 import { sleep } from './webhooksUtils';
@@ -32,7 +31,7 @@ function runStatus(runRow: UserGenModelRuns): string {
   return (runRow.status ?? '').toLowerCase().trim();
 }
 
-function buildWebhookVendorContext(runRow: UserGenModelRuns, rowId: string, rowStatus: string): WebhookVendorContext {
+function buildWebhookVendorContext(runRow: UserGenModelRuns): WebhookVendorContext {
   const rawGen = runRow.gen_model_id;
   if (!rawGen || typeof rawGen !== 'object' || Array.isArray(rawGen)) {
     throw new Error('gen model run poll: gen_model_id must be an embedded row');
@@ -43,13 +42,12 @@ function buildWebhookVendorContext(runRow: UserGenModelRuns, rowId: string, rowS
   const vendorApi = genModel.gen_models_apis_id?.vendor_api;
   const vendorName = typeof vendorApi?.vendor_name === 'string' ? vendorApi.vendor_name.trim() : '';
   const apiKey = typeof vendorApi?.api_key === 'string' ? vendorApi.api_key : '';
-  const vendorModelName =
-    typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
+  const vendorModelName = typeof apiSchema.vendor_model_name === 'string' ? apiSchema.vendor_model_name.trim() : '';
 
   return {
-    run: { ...runRow, id: rowId },
-    runId: rowId,
-    rowStatus,
+    run: { ...runRow, id: runRow.id },
+    runId: runRow.id,
+    rowStatus: runStatus(runRow),
     genModel,
     apiSchema,
     apiKey,
@@ -59,19 +57,8 @@ function buildWebhookVendorContext(runRow: UserGenModelRuns, rowId: string, rowS
 }
 
 /** One vendor poll tick for an in-flight run (same logic as POST /webhooks/polling). */
-export async function advanceGenModelRunPoll(runId: string): Promise<void> {
-  const runRow = await getUserGenModelRunById(runId);
-  if (!runRow) return;
-
-  const rowId = String(runRow.id ?? '').trim();
-  if (!rowId || !runRow.gen_model_id) return;
-
-  const rowStatus = runStatus(runRow);
-  if (rowStatus === 'completed' || rowStatus === 'error' || !ACTIVE_POLLING_STATUSES.has(rowStatus)) {
-    return;
-  }
-
-  const vendorContext = buildWebhookVendorContext(runRow, rowId, rowStatus);
+export async function advanceGenModelRunPoll(runRow: UserGenModelRuns): Promise<void> {
+  const vendorContext = buildWebhookVendorContext(runRow);
 
   switch (vendorContext.vendorName) {
     case 'xai':
@@ -129,7 +116,7 @@ export async function pollGenModelRunUntilTerminal(
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    const run = await getUserGenModelRunByIdForUser(userId, id, RUN_HISTORY_SELECT);
+    const run = await getUserGenModelRunByIdForUser(userId, id);
     if (!run) {
       throw new AppError('Run not found', {
         statusCode: 404,
@@ -152,7 +139,7 @@ export async function pollGenModelRunUntilTerminal(
         return { run, files };
       }
     } else if (ACTIVE_POLLING_STATUSES.has(status)) {
-      await advanceGenModelRunPoll(id);
+      await advanceGenModelRunPoll(run);
     }
 
     await sleep(pollIntervalMs);

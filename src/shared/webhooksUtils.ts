@@ -121,30 +121,3 @@ export const processResponse = async (
   }
   throw new Error('API error: unknown');
 };
-
-const enrollments = [
-  { studentId: 1, studentName: "Jeff", course: "JavaScript" },
-  { studentId: 2, studentName: "Sarah", course: "Python" },
-  { studentId: 1, studentName: "Jeff", course: "React" },
-  { studentId: 3, studentName: "Mike", course: "JavaScript" },
-  { studentId: 2, studentName: "Sarah", course: "React" }
-];
-
-const getCoursesByStudent = (enrollments) => {
-  const coursesByStudent = {};
-
-  for (const enrollment of enrollments) {
-    const { course, studentName } = enrollment;
-    if (coursesByStudent[studentName]) {
-      coursesByStudent[studentName].push(course);
-    } else {
-      if (coursesByStudent[studentName].includes(course)) {
-        continue;
-      }
-      coursesByStudent[studentName] = [course];
-    }
-
-  }
-
-  return coursesByStudent;
-};

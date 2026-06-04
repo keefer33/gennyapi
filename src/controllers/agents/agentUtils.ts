@@ -9,7 +9,6 @@ import { VercelProvider } from '@composio/vercel';
 import { AgentModelRow, GenModelRow } from '../../database/types';
 import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
 import { resolvePlaygroundRunCost } from '../playground/playgroundRunCost';
-import { RUN_AGENT_SELECT } from '../../database/const';
 import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
 import {
   SSEWriter,
@@ -543,7 +542,7 @@ export async function getGenerationStatusToolResult(
 
   let item: Awaited<ReturnType<typeof getUserGenModelRunByIdForUser>> | null;
   try {
-    item = await getUserGenModelRunByIdForUser(userId, runId, RUN_AGENT_SELECT);
+    item = await getUserGenModelRunByIdForUser(userId, runId);
   } catch {
     return {
       message: 'Failed to load generation status',
