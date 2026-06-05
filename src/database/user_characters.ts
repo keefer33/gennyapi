@@ -183,6 +183,7 @@ export async function deleteUserCharacterRow(userId: string, characterId: string
     .eq('user_id', userId);
 
   if (error) {
+    console.error(error);
     throw new AppError(error.message, {
       statusCode: 500,
       code: 'user_character_delete_failed',
