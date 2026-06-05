@@ -215,15 +215,13 @@ export async function assistCharacterDesign(
   const modelId = pickRandomAiAssistModel();
   const model = gateway(modelId);
   const userMessage = buildUserMessage(input);
-
+console.log("start");
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
-    providerOptions: {
-      gateway: { caching: 'auto' },
-    },
   });
+  console.log("end");
 
   const parsed = parseAssistJson(result.text ?? '');
   if (!parsed) {

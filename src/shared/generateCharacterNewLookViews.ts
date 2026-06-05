@@ -10,11 +10,32 @@ const CREATE_CHARACTER_LOOK_TYPE = 'create_character_look';
 const ALL_VIEWS: CharacterLookView[] = ['front', 'back', 'right', 'left'];
 const SIDE_VIEWS: Exclude<CharacterLookView, 'front'>[] = ['back', 'right', 'left'];
 
+const LOOK_EDIT_BASE_RULES =
+  'Keep the same character, clothing, proportions, and plain white studio background. Full-body head-to-toe, standing upright, arms at sides. Camera is fixed; only the person turns. Not a three-quarter view.';
+
 const VIEW_EDIT_PROMPTS: Record<Exclude<CharacterLookView, 'front'>, string> = {
-  back: 'Rotate the person in the image 180 degrees to show a full-body back view, facing away from the camera. Keep the same character, clothing, proportions, and plain white studio background.',
-  right:
-    'Rotate the person in the image 90 degrees to the right to show a full-body right-side profile view. Keep the same character, clothing, proportions, and plain white studio background.',
-  left: 'Rotate the person in the image 90 degrees to the left to show a full-body left-side profile view. Keep the same character, clothing, proportions, and plain white studio background.',
+  back: [
+    'Transform to a strict full-body BACK view (180-degree turn).',
+    'The person faces directly away from the camera; back of head, shoulders, and body visible.',
+    'No face toward camera.',
+    LOOK_EDIT_BASE_RULES,
+  ].join(' '),
+  right: [
+    'Transform to a strict full-body RIGHT profile (exact 90-degree turn from front).',
+    "The person's RIGHT side faces the camera: RIGHT ear, RIGHT cheek, and RIGHT shoulder visible;",
+    'LEFT side of face and body hidden.',
+    'Nose points toward the LEFT side of the image.',
+    'This is the character\'s right profile — NOT their left profile.',
+    LOOK_EDIT_BASE_RULES,
+  ].join(' '),
+  left: [
+    'Transform to a strict full-body LEFT profile (exact 90-degree turn from front).',
+    "The person's LEFT side faces the camera: LEFT ear, LEFT cheek, and LEFT shoulder visible;",
+    'RIGHT side of face and body hidden.',
+    'Nose points toward the RIGHT side of the image.',
+    'This is the character\'s left profile — NOT their right profile.',
+    LOOK_EDIT_BASE_RULES,
+  ].join(' '),
 };
 
 function trimString(value: unknown): string {

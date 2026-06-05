@@ -41,7 +41,7 @@ export async function fetchElevenLabsSharedVoices(
     },
     params: {
       ...(params ?? {}),
-      min_notice_period_days: ELEVENLABS_SHARED_VOICES_MIN_NOTICE_PERIOD_DAYS,
+      //min_notice_period_days: ELEVENLABS_SHARED_VOICES_MIN_NOTICE_PERIOD_DAYS,
     },
     validateStatus: () => true,
   });
