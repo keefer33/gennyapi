@@ -12,10 +12,12 @@ import { updateUserCharacter } from './updateUserCharacter';
 import { deleteUserCharacterLook } from './deleteUserCharacterLook';
 import { updateUserCharacterLook } from './updateUserCharacterLook';
 import { createCharacterKlingElement } from './createCharacterKlingElement';
+import { getCharacterLookModelOptions } from './getCharacterLookModelOptions';
 
 const router = express.Router();
 
 router.get('/', authenticateUser, getUserCharacters);
+router.get('/look-model-options', authenticateUser, getCharacterLookModelOptions);
 router.post('/assist', authenticateUser, assistCharacterDesignHandler);
 router.post('/', authenticateUser, createUserCharacter);
 router.post('/:characterId/generate-look', authenticateUser, generateCharacterLook);

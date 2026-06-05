@@ -141,6 +141,9 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
   const characterId = trimString(lookRow.character_id);
   const lookId = trimString(lookRow.id);
   const prompt = trimString(metadata.prompt);
+  const createModelId = trimString(metadata.createModelId) || CHARACTER_LOOK_MODEL_ID;
+  const editModelId = trimString(metadata.editModelId) || CHARACTER_LOOK_EDIT_MODEL_ID;
+  const basePayload = normalizePayload(metadata.payload);
 
   if (!userId || !characterId || !lookId) {
     throw new AppError('Character look row is missing required ids', {
@@ -157,20 +160,25 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
 
   console.log('[generateCreateCharacterNewLookViews] starting', { look_id: lookId, character_id: characterId });
 
+  const frontPayload =
+    Object.keys(basePayload).length > 0
+      ? { ...basePayload, prompt }
+      : {
+          prompt,
+          aspect_ratio: '9:16',
+          disable_safety_checker: true,
+        };
+
   const frontFile = await runLookGeneration(
     userId,
     characterId,
     lookId,
-    CHARACTER_LOOK_MODEL_ID,
-    {
-      prompt,
-      aspect_ratio: '9:16',
-      disable_safety_checker: true,
-    },
+    createModelId,
+    frontPayload,
     'front'
   );
 
-  await generateSideViewsFromFront(userId, characterId, lookId, frontFile, CHARACTER_LOOK_EDIT_MODEL_ID);
+  await generateSideViewsFromFront(userId, characterId, lookId, frontFile, editModelId);
 
   console.log('[generateCreateCharacterNewLookViews] completed', { look_id: lookId, character_id: characterId });
 }

@@ -3,14 +3,98 @@ import { createUserCharacterRow, deleteUserCharacterRow, getUserCharacterForUser
 import type { UserCharacterLookRow, UserCharacterRow } from '../database/types';
 import { createUserCharacterLookRow } from '../database/user_characters_looks';
 
+export type CharacterLookModelUiField = {
+  type?: string;
+  enum?: string[];
+  default?: unknown;
+  description?: string;
+};
+
+export type CharacterLookModelOption = {
+  label: string;
+  create_model_id: string;
+  edit_model_id: string;
+  fields: {
+    default: Record<string, unknown>;
+    ui: Record<string, CharacterLookModelUiField>;
+  };
+};
+
+export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
+  {
+    label: 'Pruna AI P-Image',
+    create_model_id: 'df7aa4eb-bb74-41ad-b825-aba3ffab6e56',
+    edit_model_id: '6cac6e6a-e1cd-4192-97c6-9ca0b607f917',
+    fields: {
+      default: {
+        aspect_ratio: '9:16',
+        disable_safety_checker: true,
+        turbo: true,
+      },
+      ui: {},
+    },
+  },
+  {
+    label: 'Google Nano Banana 2',
+    create_model_id: '11afc97d-9255-4db8-9dcc-4fef63ff9a44',
+    edit_model_id: 'bf5a5370-d39c-4d28-9b63-c67f4685b567',
+    fields: {
+      default: {
+        aspect_ratio: '9:16',
+      },
+      ui: {
+        resolution: {
+          enum: ['1k', '2k', '4k'],
+          type: 'string',
+          default: '1k',
+          description: 'The resolution of the output image.',
+        },
+      },
+    },
+  },
+];
+
 /** Text-to-image model for initial character look generation. */
-export const CHARACTER_LOOK_MODEL_ID = 'df7aa4eb-bb74-41ad-b825-aba3ffab6e56';
+export const CHARACTER_LOOK_MODEL_ID = CHARACTER_LOOK_MODEL_OPTIONS[0].create_model_id;
 
 /** Edit-image model for back/right/left character look views. */
-export const CHARACTER_LOOK_EDIT_MODEL_ID = '6cac6e6a-e1cd-4192-97c6-9ca0b607f917';
+export const CHARACTER_LOOK_EDIT_MODEL_ID = CHARACTER_LOOK_MODEL_OPTIONS[0].edit_model_id;
+
+export function findCharacterLookModelOption(
+  createModelId: string,
+  editModelId: string
+): CharacterLookModelOption | undefined {
+  const createId = createModelId.trim();
+  const editId = editModelId.trim();
+  return CHARACTER_LOOK_MODEL_OPTIONS.find(
+    (option) => option.create_model_id === createId && option.edit_model_id === editId
+  );
+}
+
+export function mergeCharacterLookModelPayload(
+  option: CharacterLookModelOption,
+  userPayload: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const merged = { ...option.fields.default };
+  for (const [key, field] of Object.entries(option.fields.ui)) {
+    const userValue = userPayload?.[key];
+    if (userValue !== undefined && userValue !== null && userValue !== '') {
+      merged[key] = userValue;
+    } else if (field.default !== undefined) {
+      merged[key] = field.default;
+    }
+  }
+  return merged;
+}
 
 /** `user_gen_model_runs.app` and `user_files.upload_type` for character assets. */
 export const CHARACTER_APP = 'character';
+
+export type CharacterLookModelInput = {
+  createModelId: string;
+  editModelId: string;
+  payload?: Record<string, unknown>;
+};
 
 export type CreateCharacterInput = {
   user_id: string;
@@ -20,6 +104,7 @@ export type CreateCharacterInput = {
   age?: string | null;
   ethnicity?: string | null;
   voice_id?: string | null;
+  lookModel?: CharacterLookModelInput;
 };
 
 export type CreateCharacterWithBaseLookResult = {
@@ -67,6 +152,17 @@ export async function createUserCharacterWithBaseLook(
 
   try {
     const prompt = buildCharacterLookImagePrompt(input.description);
+    const lookModelOption = input.lookModel
+      ? findCharacterLookModelOption(input.lookModel.createModelId, input.lookModel.editModelId)
+      : CHARACTER_LOOK_MODEL_OPTIONS[0];
+    if (!lookModelOption) {
+      throw new AppError('Invalid character look model', {
+        statusCode: 400,
+        code: 'character_look_model_invalid',
+        expose: true,
+      });
+    }
+    const lookPayload = mergeCharacterLookModelPayload(lookModelOption, input.lookModel?.payload);
     const baseLook = await createUserCharacterLookRow({
       user_id: userId,
       character_id: characterId,
@@ -74,6 +170,9 @@ export async function createUserCharacterWithBaseLook(
       metadata: {
         type: 'create_character_new',
         prompt,
+        createModelId: lookModelOption.create_model_id,
+        editModelId: lookModelOption.edit_model_id,
+        payload: lookPayload,
       },
     });
 
