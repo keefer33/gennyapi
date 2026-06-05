@@ -52,6 +52,60 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
       },
     },
   },
+  {
+    label: 'OpenAI GPT-IMAGE-2',
+    create_model_id: '528fb6d8-2aed-42ba-b841-c4945ab4ea6b',
+    edit_model_id: '377a54f4-0c4f-4316-9f00-631f4f34abde',
+    fields: {
+      default: {
+        aspect_ratio: '9:16',
+        n:1
+      },
+      ui: {
+        "quality": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "type": "string",
+          "default": "medium",
+          "description": "The quality of the generated image. Higher quality costs more."
+        },
+        "resolution": {
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "type": "string",
+          "default": "2K"
+        },
+      },
+    },
+  },
+  {
+    label: 'Grok Imagine',
+    create_model_id: '6604b532-ac70-406a-b1ea-eae5447bf791',
+    edit_model_id: 'f95de124-7d4c-4dba-aadf-9d48a6df44fe',
+    fields: {
+      default: {
+        aspect_ratio: '9:16',
+        n:1
+      },
+      ui: {
+        "resolution": {
+          "enum": [
+            "1k",
+            "2k"
+          ],
+          "type": "string",
+          "default": "2k",
+          "description": "The number of images to generate."
+        },
+      },
+    },
+  },
 ];
 
 /** Text-to-image model for initial character look generation. */
