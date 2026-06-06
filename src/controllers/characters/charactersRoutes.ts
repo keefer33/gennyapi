@@ -13,6 +13,7 @@ import { deleteUserCharacterLook } from './deleteUserCharacterLook';
 import { updateUserCharacterLook } from './updateUserCharacterLook';
 import { createCharacterKlingElement } from './createCharacterKlingElement';
 import { getCharacterLookModelOptions } from './getCharacterLookModelOptions';
+import { retryCharacterLookGeneration } from './retryCharacterLookGeneration';
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.post('/:characterId/generate-look', authenticateUser, generateCharacterLo
 router.post('/:characterId/create-element/kling', authenticateUser, createCharacterKlingElement);
 router.post('/:characterId/switch-base-look', authenticateUser, switchCharacterBaseLook);
 router.get('/:characterId/looks', authenticateUser, getUserCharacterLooks);
+router.post('/:characterId/looks/:lookId/retry-generation', authenticateUser, retryCharacterLookGeneration);
 router.patch('/:characterId/looks/:lookId', authenticateUser, updateUserCharacterLook);
 router.delete('/:characterId/looks/:lookId', authenticateUser, deleteUserCharacterLook);
 router.get('/:characterId', authenticateUser, getUserCharacter);

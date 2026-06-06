@@ -2,6 +2,7 @@ import { AppError } from '../app/error';
 import { createUserCharacterRow, deleteUserCharacterRow, getUserCharacterForUser } from '../database/user_characters';
 import type { UserCharacterLookRow, UserCharacterRow } from '../database/types';
 import { createUserCharacterLookRow } from '../database/user_characters_looks';
+import { withPendingLookGenerationMetadata } from './characterLookGenerationMetadata';
 
 export type CharacterLookModelUiField = {
   type?: string;
@@ -221,13 +222,13 @@ export async function createUserCharacterWithBaseLook(
       user_id: userId,
       character_id: characterId,
       base_look: true,
-      metadata: {
+      metadata: withPendingLookGenerationMetadata({
         type: 'create_character_new',
         prompt,
         createModelId: lookModelOption.create_model_id,
         editModelId: lookModelOption.edit_model_id,
         payload: lookPayload,
-      },
+      }),
     });
 
     return { character, baseLook };
@@ -293,10 +294,10 @@ export async function startCharacterLookGeneration(
     character_id: id,
     base_look: false,
     name,
-    metadata: {
+    metadata: withPendingLookGenerationMetadata({
       type: 'create_character_look',
       modelId,
       payload,
-    },
+    }),
   });
 }

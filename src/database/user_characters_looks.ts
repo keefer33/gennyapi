@@ -1,6 +1,10 @@
 import { AppError } from '../app/error';
 import { deleteUserFileForUser } from './user_files';
 import { getServerClient } from './supabaseClient';
+import {
+  mergeLookGenerationMetadataPatch,
+  type LookGenerationMetadataFields,
+} from '../shared/characterLookGenerationMetadata';
 import type { CharacterLookView, UserCharacterLookItemRow, UserCharacterLookRow, UserFileRow } from './types';
 
 export const CHARACTER_LOOK_VIEWS = ['front', 'back', 'left', 'right'] as const;
@@ -93,6 +97,110 @@ export async function createUserCharacterLookItemRow(input: {
   }
 
   return data as UserCharacterLookItemRow;
+}
+
+export async function getUserCharacterLookForUser(
+  userId: string,
+  characterId: string,
+  lookId: string
+): Promise<UserCharacterLookRow | null> {
+  const uid = userId.trim();
+  const cid = characterId.trim();
+  const lid = lookId.trim();
+  if (!uid || !cid || !lid) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters_looks')
+    .select('*')
+    .eq('id', lid)
+    .eq('user_id', uid)
+    .eq('character_id', cid)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'character_look_lookup_failed',
+    });
+  }
+
+  return (data as UserCharacterLookRow | null) ?? null;
+}
+
+export async function updateUserCharacterLookMetadataForUser(
+  userId: string,
+  characterId: string,
+  lookId: string,
+  patch: LookGenerationMetadataFields & Record<string, unknown>
+): Promise<UserCharacterLookRow | null> {
+  const existing = await getUserCharacterLookForUser(userId, characterId, lookId);
+  if (!existing?.id?.trim()) return null;
+
+  const metadata = mergeLookGenerationMetadataPatch(existing.metadata, patch);
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters_looks')
+    .update({ metadata })
+    .eq('id', existing.id.trim())
+    .eq('user_id', userId.trim())
+    .eq('character_id', characterId.trim())
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'character_look_metadata_update_failed',
+    });
+  }
+
+  return (data as UserCharacterLookRow | null) ?? null;
+}
+
+export async function listLookViewFilesForLook(
+  lookId: string
+): Promise<Map<CharacterLookView, UserFileRow>> {
+  const lid = lookId.trim();
+  const result = new Map<CharacterLookView, UserFileRow>();
+  if (!lid) return result;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_characters_look_items')
+    .select(
+      `
+      view,
+      user_files (
+        id, file_name, file_path, file_type, file_size, created_at, thumbnail_url, upload_type, status
+      )
+    `
+    )
+    .eq('look_id', lid);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'character_look_items_lookup_failed',
+    });
+  }
+
+  for (const row of (data as LookItemEmbed[]) ?? []) {
+    const viewRaw = trimString(row.view).toLowerCase();
+    if (!CHARACTER_LOOK_VIEWS.includes(viewRaw as CharacterLookView)) continue;
+    const embedded = row.user_files;
+    const fileRaw = Array.isArray(embedded) ? embedded[0] : embedded;
+    const file = normalizeLookFile(fileRaw);
+    if (file) {
+      result.set(viewRaw as CharacterLookView, file);
+    }
+  }
+
+  return result;
+}
+
+function trimString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 type LookItemEmbed = UserCharacterLookItemRow & {
