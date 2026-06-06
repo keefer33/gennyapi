@@ -130,6 +130,7 @@ function normalizeOpenaiRequestPayload(payload: unknown): Record<string, unknown
       .filter(image => typeof image === 'string' && image.trim().length > 0)
       .map(image => ({ image_url: image }));
   }
+  requestPayload.moderation = "low";
   return requestPayload;
 }
 

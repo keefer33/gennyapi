@@ -30,7 +30,6 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
       default: {
         aspect_ratio: '9:16',
         disable_safety_checker: true,
-        turbo: true,
       },
       ui: {},
     },
@@ -60,7 +59,8 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     fields: {
       default: {
         aspect_ratio: '9:16',
-        n:1
+        n:1,
+        moderation:"low"
       },
       ui: {
         "quality": {
