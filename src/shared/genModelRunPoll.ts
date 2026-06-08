@@ -9,11 +9,10 @@ import { webhookPrunaai } from '../api-vendors/prunaai/webhookPrunaai';
 import { webhookKling } from '../api-vendors/kling/webhookKling';
 import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
 import { getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
-import { getUserFilesByRunId, getUserFilesByRunIdForCharacter } from '../database/user_files';
+import { getUserFilesByRunIdForCharacter } from '../database/user_files';
 import type { GenModelRow, UserFileRow, UserGenModelRuns } from '../database/types';
 import { sleep } from './webhooksUtils';
 
-const ACTIVE_POLLING_STATUSES = new Set(['pending', 'processing', 'finalizing']);
 const TERMINAL_ERROR_STATUSES = new Set(['error', 'failed']);
 
 export type WebhookVendorContext<TApiSchema extends Record<string, unknown> = Record<string, unknown>> = {
@@ -93,71 +92,12 @@ export async function advanceGenModelRunPoll(runRow: UserGenModelRuns): Promise<
   }
 }
 
-export type PollGenModelRunResult = {
-  run: UserGenModelRuns;
-  files: UserFileRow[];
-};
-
-export async function pollGenModelRunUntilTerminal(
-  userId: string,
-  runId: string,
-  options?: { maxWaitMs?: number; pollIntervalMs?: number }
-): Promise<PollGenModelRunResult> {
-  const id = runId.trim();
-  if (!id) {
-    throw new AppError('runId is required', {
-      statusCode: 400,
-      code: 'gen_model_run_poll_missing_id',
-    });
-  }
-
-  const maxWaitMs = options?.maxWaitMs ?? 5 * 60 * 1000;
-  const pollIntervalMs = options?.pollIntervalMs ?? 2000;
-  const deadline = Date.now() + maxWaitMs;
-
-  while (Date.now() < deadline) {
-    const run = await getUserGenModelRunByIdForUser(userId, id);
-    if (!run) {
-      throw new AppError('Run not found', {
-        statusCode: 404,
-        code: 'gen_model_run_not_found',
-      });
-    }
-
-    const status = runStatus(run);
-    if (TERMINAL_ERROR_STATUSES.has(status)) {
-      throw new AppError('Image generation failed', {
-        statusCode: 502,
-        code: 'character_look_generation_failed',
-        expose: true,
-      });
-    }
-
-    if (status === 'completed') {
-      const files = await getUserFilesByRunId(id);
-      if (files.length > 0) {
-        return { run, files };
-      }
-    } else if (ACTIVE_POLLING_STATUSES.has(status)) {
-      await advanceGenModelRunPoll(run);
-    }
-
-    await sleep(pollIntervalMs);
-  }
-
-  throw new AppError('Image generation timed out', {
-    statusCode: 504,
-    code: 'character_look_generation_timeout',
-    expose: true,
-  });
-}
-
 export type PollCharacterLookRunFilesResult = {
   run: UserGenModelRuns;
   file: UserFileRow;
 };
 
-/** Poll `user_files` for a character look run; advances vendor polls until a file appears or the run fails. */
+/** Wait for external polling to persist a character look file; does not call vendor webhooks. */
 export async function pollCharacterLookRunFiles(
   userId: string,
   characterId: string,
@@ -219,10 +159,6 @@ export async function pollCharacterLookRunFiles(
         code: 'character_look_generation_failed',
         expose: true,
       });
-    }
-
-    if (ACTIVE_POLLING_STATUSES.has(status)) {
-      await advanceGenModelRunPoll(run);
     }
 
     await sleep(pollIntervalMs);
