@@ -14,7 +14,15 @@ export async function retryCharacterLookGeneration(req: Request, res: Response):
     const lookId = String(req.params.lookId ?? '').trim();
     if (!characterId || !lookId) throw badRequest('characterId and lookId are required');
 
-    const look = await retryUserCharacterLookGeneration(userId, characterId, lookId);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const look = await retryUserCharacterLookGeneration(userId, characterId, lookId, {
+      modelId: typeof body.modelId === 'string' ? body.modelId : undefined,
+      payload:
+        body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+          ? (body.payload as Record<string, unknown>)
+          : undefined,
+      name: typeof body.name === 'string' ? body.name : undefined,
+    });
     sendOk(res, { look }, 202);
   } catch (error) {
     sendError(res, error);

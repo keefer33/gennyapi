@@ -159,6 +159,18 @@ export type UserCharacterLookRow = {
   metadata?: unknown | null;
 };
 
+/** Matches `public.user_characters_scenes` */
+export type UserCharacterSceneRow = {
+  id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  user_id?: string | null;
+  character_id?: string | null;
+  name?: string | null;
+  metadata?: unknown | null;
+  gen_model_run_id?: string | null;
+};
+
 /** Matches `public.user_characters_look_items` */
 export type UserCharacterLookItemRow = {
   id?: string | null;

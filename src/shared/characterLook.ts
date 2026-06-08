@@ -88,7 +88,7 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
   {
     label: 'Grok Imagine',
     create_model_id: '6604b532-ac70-406a-b1ea-eae5447bf791',
-    edit_model_id: 'f95de124-7d4c-4dba-aadf-9d48a6df44fe',
+    edit_model_id: '0a71319e-0fc1-46b7-9c50-f3e64146ed19',
     fields: {
       default: {
         aspect_ratio: '9:16',

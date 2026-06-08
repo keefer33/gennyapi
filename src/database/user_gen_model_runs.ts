@@ -143,6 +143,31 @@ export async function deleteUserGenModelRun(runId: string): Promise<void> {
   }
 }
 
+/** Deletes a run owned by the user; cascades to linked scenes and files. */
+export async function deleteUserGenModelRunForUser(userId: string, runId: string): Promise<boolean> {
+  const uid = userId.trim();
+  const rid = runId.trim();
+  if (!uid || !rid) return false;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_gen_model_runs')
+    .delete()
+    .eq('id', rid)
+    .eq('user_id', uid)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_gen_model_run_delete_failed',
+    });
+  }
+
+  return Boolean((data as { id?: string | null } | null)?.id?.trim());
+}
+
 export async function getUserGenModelRunByIdForUser(
   userId: string,
   runId: string,

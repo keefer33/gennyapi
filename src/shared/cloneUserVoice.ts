@@ -66,6 +66,12 @@ function normalizeMetadata(metadata: unknown): Record<string, unknown> {
   return {};
 }
 
+function audioSamplesForMetadata(
+  samples: InworldValidatedAudioSample[]
+): Omit<InworldValidatedAudioSample, 'audioData'>[] {
+  return samples.map(({ audioData: _audioData, ...sample }) => sample);
+}
+
 /**
  * Clone a voice via Inworld, persist `user_voices`, upload validated sample to Zipline + `user_files`.
  */
@@ -132,7 +138,7 @@ export async function cloneUserVoice(
         ...inputClone,
         langCode: validatedSample?.langCode ?? language,
         transcription: validatedSample?.transcription ?? null,
-        audioSamplesValidated: cloneResult.audioSamplesValidated,
+        audioSamplesValidated: audioSamplesForMetadata(cloneResult.audioSamplesValidated),
       },
     },
   });
