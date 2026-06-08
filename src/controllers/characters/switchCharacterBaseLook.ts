@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../app/response';
-import { getUserCharacterForUser } from '../../database/user_characters';
 import { switchCharacterBaseLookForLook } from '../../database/user_characters_looks';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import { parseCharacterId, requireCharacterForUser } from './helpers';
 
 /**
  * POST /characters/:characterId/switch-base-look
@@ -11,15 +11,12 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 export async function switchCharacterBaseLook(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    if (!characterId) throw badRequest('characterId is required');
-
+    const characterId = parseCharacterId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const lookId = typeof body.lookId === 'string' ? body.lookId.trim() : '';
     if (!lookId) throw badRequest('lookId is required');
 
-    const existing = await getUserCharacterForUser(userId, characterId);
-    if (!existing) throw notFound('Character not found');
+    await requireCharacterForUser(userId, characterId);
 
     const look = await switchCharacterBaseLookForLook(userId, characterId, lookId);
     if (!look) throw notFound('Look is not linked to this character');

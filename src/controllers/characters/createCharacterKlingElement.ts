@@ -1,18 +1,9 @@
 import type { Request, Response } from 'express';
-import { badRequest, notFound, sendError, sendOk } from '../../app/response';
+import { badRequest, sendError, sendOk } from '../../app/response';
 import { createKlingCharacterElement } from '../../api-vendors/kling/klingCharacterElement';
-import {
-  getUserCharacterForUser,
-  updateUserCharacterRow,
-} from '../../database/user_characters';
+import { updateUserCharacterRow } from '../../database/user_characters';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw badRequest(`${field} is required`);
-  const t = value.trim();
-  if (!t) throw badRequest(`${field} is required`);
-  return t;
-}
+import { parseCharacterId, requireCharacterForUser, requiredString } from './helpers';
 
 function parseReferImages(value: unknown): string[] {
   if (!Array.isArray(value)) throw badRequest('refer_images must be an array');
@@ -52,9 +43,7 @@ function mergeKlingMetadata(
 export async function createCharacterKlingElement(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    if (!characterId) throw badRequest('characterId is required');
-
+    const characterId = parseCharacterId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const voice_url = requiredString(body.voice_url, 'voice_url');
     const voice_name = requiredString(body.voice_name, 'voice_name');
@@ -62,8 +51,7 @@ export async function createCharacterKlingElement(req: Request, res: Response): 
     const frontal_image = requiredString(body.frontal_image, 'frontal_image');
     const refer_images = parseReferImages(body.refer_images);
 
-    const existing = await getUserCharacterForUser(userId, characterId);
-    if (!existing) throw notFound('Character not found');
+    const existing = await requireCharacterForUser(userId, characterId);
 
     const kling = await createKlingCharacterElement({
       voice_url,

@@ -2,12 +2,7 @@ import type { Request, Response } from 'express';
 import { sendError, sendOk } from '../../app/response';
 import { assistCharacterDesign } from '../../shared/assistCharacterDesign';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-
-function optionalString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const t = value.trim();
-  return t || null;
-}
+import { optionalString } from './helpers';
 
 /**
  * POST /characters/assist

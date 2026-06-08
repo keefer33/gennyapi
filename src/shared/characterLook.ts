@@ -2,7 +2,10 @@ import { AppError } from '../app/error';
 import { createUserCharacterRow, deleteUserCharacterRow, getUserCharacterForUser } from '../database/user_characters';
 import type { UserCharacterLookRow, UserCharacterRow } from '../database/types';
 import { createUserCharacterLookRow } from '../database/user_characters_looks';
-import { withPendingLookGenerationMetadata } from './characterLookGenerationMetadata';
+import {
+  normalizePayloadRecord,
+  withPendingLookGenerationMetadata,
+} from './characterLookGenerationMetadata';
 
 export type CharacterLookModelUiField = {
   type?: string;
@@ -141,7 +144,6 @@ export type CharacterLookModelInput = {
 };
 
 export type CreateCharacterInput = {
-  user_id: string;
   name: string;
   description: string;
   gender?: string | null;
@@ -229,13 +231,6 @@ export async function createUserCharacterWithBaseLook(
     }
     throw err;
   }
-}
-
-function normalizePayloadRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
 }
 
 export async function startCharacterLookGeneration(

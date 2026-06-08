@@ -1,21 +1,9 @@
 import type { Request, Response } from 'express';
-import { badRequest, notFound, sendError, sendOk } from '../../app/response';
-import { getUserCharacterForUser, updateUserCharacterRow } from '../../database/user_characters';
+import { badRequest, sendError, sendOk } from '../../app/response';
+import { updateUserCharacterRow } from '../../database/user_characters';
 import type { UserCharacterRow } from '../../database/types';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-
-function optionalString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const t = value.trim();
-  return t || null;
-}
-
-function nonEmptyString(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw badRequest(`${field} must be a string`);
-  const t = value.trim();
-  if (!t) throw badRequest(`${field} cannot be empty`);
-  return t;
-}
+import { nonEmptyString, optionalString, parseCharacterId, requireCharacterForUser } from './helpers';
 
 /**
  * PATCH /characters/:characterId
@@ -24,19 +12,14 @@ function nonEmptyString(value: unknown, field: string): string {
 export async function updateUserCharacter(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    if (!characterId) throw badRequest('characterId is required');
-
+    const characterId = parseCharacterId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const hasField = ['name', 'description', 'voiceId', 'gender', 'age', 'ethnicity'].some(
       (k) => k in body
     );
     if (!hasField) throw badRequest('At least one field is required');
 
-    const existing = await getUserCharacterForUser(userId, characterId);
-    if (!existing) {
-      throw notFound('Character not found');
-    }
+    await requireCharacterForUser(userId, characterId);
 
     const patch: Partial<UserCharacterRow> = {};
     if (body.name !== undefined) patch.name = nonEmptyString(body.name, 'name');

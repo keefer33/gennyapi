@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import type { UserCharacterLookRow } from '../../database/types';
-import { generateCharacterLookViews } from '../../shared/generateCharacterNewLookViews';
+import { generateCharacterLookViews } from '../../shared/generateCharacterLookViews';
 
 function verifyCharacterLookWebhook(req: Request): void {
   const expected =

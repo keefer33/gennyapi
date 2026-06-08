@@ -1,5 +1,12 @@
 import type { CharacterLookView } from '../database/types';
 
+export const CHARACTER_LOOK_VIEWS: CharacterLookView[] = ['front', 'back', 'right', 'left'];
+export const CHARACTER_LOOK_SIDE_VIEWS: Exclude<CharacterLookView, 'front'>[] = [
+  'back',
+  'right',
+  'left',
+];
+
 export const LOOK_GENERATION_STATUSES = ['pending', 'generating', 'completed', 'failed'] as const;
 export type LookGenerationStatus = (typeof LOOK_GENERATION_STATUSES)[number];
 
@@ -21,10 +28,15 @@ export type LookGenerationMetadataFields = {
   generationUpdatedAt?: string;
 };
 
-const ALL_VIEWS: CharacterLookView[] = ['front', 'back', 'right', 'left'];
-
 function trimString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+export function normalizePayloadRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
 }
 
 function isLookGenerationStatus(value: string): value is LookGenerationStatus {
@@ -32,7 +44,7 @@ function isLookGenerationStatus(value: string): value is LookGenerationStatus {
 }
 
 function isCharacterLookView(value: string): value is CharacterLookView {
-  return (ALL_VIEWS as readonly string[]).includes(value);
+  return (CHARACTER_LOOK_VIEWS as readonly string[]).includes(value);
 }
 
 export function normalizeLookMetadataRecord(metadata: unknown): Record<string, unknown> {
@@ -145,7 +157,7 @@ export function lookGenerationErrorFromUnknown(
 export const STALE_LOOK_GENERATION_MS = 20 * 60 * 1000;
 
 export function isStaleLookGeneration(metadata: unknown, completedViewCount: number, createdAt?: string | null): boolean {
-  if (completedViewCount >= ALL_VIEWS.length) return false;
+  if (completedViewCount >= CHARACTER_LOOK_VIEWS.length) return false;
   const parsed = parseLookGenerationMetadata(metadata);
   if (
     parsed.generationStatus !== 'generating' &&
@@ -169,7 +181,7 @@ export function canRetryLookGeneration(
   const parsed = parseLookGenerationMetadata(metadata);
   if (parsed.generationStatus === 'generating') return false;
   if (parsed.generationStatus === 'failed') return true;
-  if (parsed.generationStatus === 'completed' && completedViewCount >= ALL_VIEWS.length) {
+  if (parsed.generationStatus === 'completed' && completedViewCount >= CHARACTER_LOOK_VIEWS.length) {
     return false;
   }
   if (isStaleLookGeneration(metadata, completedViewCount, createdAt)) return true;

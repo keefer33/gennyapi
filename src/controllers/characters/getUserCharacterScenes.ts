@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
-import { badRequest, notFound, sendError, sendOk } from '../../app/response';
-import { getUserCharacterForUser } from '../../database/user_characters';
+import { sendError, sendOk } from '../../app/response';
 import { listUserCharacterScenesForCharacter } from '../../database/user_characters_scenes';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import { parseCharacterId, requireCharacterForUser } from './helpers';
 
 /**
  * GET /characters/:characterId/scenes
@@ -10,11 +10,8 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 export async function getUserCharacterScenes(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    if (!characterId) throw badRequest('characterId is required');
-
-    const character = await getUserCharacterForUser(userId, characterId);
-    if (!character) throw notFound('Character not found');
+    const characterId = parseCharacterId(req);
+    await requireCharacterForUser(userId, characterId);
 
     const scenes = await listUserCharacterScenesForCharacter(userId, characterId);
     sendOk(res, { scenes });

@@ -1,26 +1,9 @@
 import type { Request, Response } from 'express';
 import { badRequest, sendError, sendOk } from '../../app/response';
 import { createUserCharacterWithBaseLook } from '../../shared/characterLook';
+import { normalizePayloadRecord } from '../../shared/characterLookGenerationMetadata';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw badRequest(`${field} is required`);
-  const t = value.trim();
-  if (!t) throw badRequest(`${field} is required`);
-  return t;
-}
-
-function optionalString(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== 'string') return null;
-  const t = value.trim();
-  return t || null;
-}
-
-function normalizePayloadRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
-}
+import { optionalString, requiredString } from './helpers';
 
 function parseLookModel(body: Record<string, unknown>) {
   const lookModel = body.lookModel;
@@ -29,10 +12,11 @@ function parseLookModel(body: Record<string, unknown>) {
     throw badRequest('lookModel must be an object');
   }
   const record = lookModel as Record<string, unknown>;
+  const payload = normalizePayloadRecord(record.payload);
   return {
     createModelId: requiredString(record.createModelId, 'lookModel.createModelId'),
     editModelId: requiredString(record.editModelId, 'lookModel.editModelId'),
-    payload: normalizePayloadRecord(record.payload),
+    payload: Object.keys(payload).length > 0 ? payload : undefined,
   };
 }
 
@@ -47,7 +31,6 @@ export async function createUserCharacter(req: Request, res: Response): Promise<
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     const { character, baseLook } = await createUserCharacterWithBaseLook(userId, {
-      user_id: userId,
       name: requiredString(body.name, 'name'),
       description: requiredString(body.description, 'description'),
       voice_id: optionalString(body.voiceId),

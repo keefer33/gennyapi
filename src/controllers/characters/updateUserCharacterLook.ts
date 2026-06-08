@@ -1,15 +1,8 @@
 import type { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../app/response';
-import { getUserCharacterForUser } from '../../database/user_characters';
 import { updateUserCharacterLookNameForUser } from '../../database/user_characters_looks';
 import { getAuthUserId } from '../../shared/getAuthUserId';
-
-function nonEmptyString(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw badRequest(`${field} must be a string`);
-  const trimmed = value.trim();
-  if (!trimmed) throw badRequest(`${field} cannot be empty`);
-  return trimmed;
-}
+import { nonEmptyString, parseLookId, requireCharacterForUser } from './helpers';
 
 /**
  * PATCH /characters/:characterId/looks/:lookId
@@ -18,16 +11,11 @@ function nonEmptyString(value: unknown, field: string): string {
 export async function updateUserCharacterLook(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    const lookId = String(req.params.lookId ?? '').trim();
-    if (!characterId) throw badRequest('characterId is required');
-    if (!lookId) throw badRequest('lookId is required');
-
+    const { characterId, lookId } = parseLookId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (!('name' in body)) throw badRequest('name is required');
 
-    const existing = await getUserCharacterForUser(userId, characterId);
-    if (!existing) throw notFound('Character not found');
+    await requireCharacterForUser(userId, characterId);
 
     const name = nonEmptyString(body.name, 'name');
     const look = await updateUserCharacterLookNameForUser(userId, characterId, lookId, name);

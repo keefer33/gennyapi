@@ -1,10 +1,18 @@
 import { createGateway, generateText } from 'ai';
 import { AppError } from '../app/error';
 import { pickRandomAiAssistModel } from './aiModelOptions';
-import {
-  CHARACTER_DESIGN_AGES,
-  CHARACTER_DESIGN_GENDERS,
-} from './characterDesignOptions';
+
+/** Aligns with genny `CHARACTER_GENDER_OPTIONS` / voice form. */
+export const CHARACTER_DESIGN_GENDERS = ['male', 'female', 'neutral'] as const;
+
+/** Aligns with genny `CHARACTER_AGE_OPTIONS`. */
+export const CHARACTER_DESIGN_AGES = [
+  'young',
+  'young_adult',
+  'early_middle_aged',
+  'late_middle_aged',
+  'senior',
+] as const;
 
 /** Aligns with genny `MAX_CHARACTER_DESCRIPTION_LENGTH`. */
 export const CHARACTER_DESCRIPTION_MIN = 120;
@@ -215,13 +223,11 @@ export async function assistCharacterDesign(
   const modelId = pickRandomAiAssistModel();
   const model = gateway(modelId);
   const userMessage = buildUserMessage(input);
-console.log("start");
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   });
-  console.log("end");
 
   const parsed = parseAssistJson(result.text ?? '');
   if (!parsed) {

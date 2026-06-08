@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { badRequest, sendError, sendOk } from '../../app/response';
-import { retryUserCharacterLookGeneration } from '../../shared/retryUserCharacterLookGeneration';
+import { sendError, sendOk } from '../../app/response';
+import { retryUserCharacterLookGeneration } from '../../shared/generateCharacterLookViews';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import { parseLookId } from './helpers';
 
 /**
  * POST /characters/:characterId/looks/:lookId/retry-generation
@@ -10,9 +11,7 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 export async function retryCharacterLookGeneration(req: Request, res: Response): Promise<void> {
   try {
     const userId = getAuthUserId(req);
-    const characterId = String(req.params.characterId ?? '').trim();
-    const lookId = String(req.params.lookId ?? '').trim();
-    if (!characterId || !lookId) throw badRequest('characterId and lookId are required');
+    const { characterId, lookId } = parseLookId(req);
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const look = await retryUserCharacterLookGeneration(userId, characterId, lookId, {

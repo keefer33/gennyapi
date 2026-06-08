@@ -10,17 +10,11 @@ import type { UserCharacterSceneRow } from '../database/types';
 import { CHARACTER_APP } from './characterLook';
 import {
   lookGenerationErrorFromUnknown,
+  normalizePayloadRecord,
   withPendingLookGenerationMetadata,
 } from './characterLookGenerationMetadata';
 
 export const CREATE_CHARACTER_SCENE_TYPE = 'create_character_scene';
-
-function normalizePayloadRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
 
 export async function startCharacterSceneGeneration(
   userId: string,
