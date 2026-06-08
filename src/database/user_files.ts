@@ -20,6 +20,31 @@ export async function getUserFilesByRunId(runId: string): Promise<UserFileRow[]>
   return files ?? [];
 }
 
+export async function getUserFilesByRunIdForCharacter(
+  runId: string,
+  characterId: string
+): Promise<UserFileRow[]> {
+  const rid = runId.trim();
+  const cid = characterId.trim();
+  if (!rid || !cid) return [];
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data: files, error: filesErr } = await supabaseServerClient
+    .from('user_files')
+    .select(FILE_SELECT)
+    .eq('gen_model_run_id', rid)
+    .eq('character_id', cid)
+    .eq('status', 'active');
+
+  if (filesErr) {
+    throw new AppError(filesErr.message, {
+      statusCode: 500,
+      code: 'character_look_run_files_fetch_failed',
+    });
+  }
+  return files ?? [];
+}
+
 /** All rows for a run (any status) — for teardown before deleting the run. */
 export async function getUserFilesByRunIdAllStatuses(runId: string): Promise<UserFileRow[]> {
   const { supabaseServerClient } = await getServerClient();

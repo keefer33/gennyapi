@@ -59,28 +59,20 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     fields: {
       default: {
         aspect_ratio: '9:16',
-        n:1,
-        moderation:"low"
+        n: 1,
+        moderation: 'low',
       },
       ui: {
-        "quality": {
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "type": "string",
-          "default": "medium",
-          "description": "The quality of the generated image. Higher quality costs more."
+        quality: {
+          enum: ['low', 'medium', 'high'],
+          type: 'string',
+          default: 'medium',
+          description: 'The quality of the generated image. Higher quality costs more.',
         },
-        "resolution": {
-          "enum": [
-            "1K",
-            "2K",
-            "4K"
-          ],
-          "type": "string",
-          "default": "2K"
+        resolution: {
+          enum: ['1K', '2K', '4K'],
+          type: 'string',
+          default: '2K',
         },
       },
     },
@@ -92,17 +84,14 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     fields: {
       default: {
         aspect_ratio: '9:16',
-        n:1
+        n: 1,
       },
       ui: {
-        "resolution": {
-          "enum": [
-            "1k",
-            "2k"
-          ],
-          "type": "string",
-          "default": "2k",
-          "description": "The number of images to generate."
+        resolution: {
+          enum: ['1k', '2k'],
+          type: 'string',
+          default: '2k',
+          description: 'The number of images to generate.',
         },
       },
     },
@@ -122,7 +111,7 @@ export function findCharacterLookModelOption(
   const createId = createModelId.trim();
   const editId = editModelId.trim();
   return CHARACTER_LOOK_MODEL_OPTIONS.find(
-    (option) => option.create_model_id === createId && option.edit_model_id === editId
+    option => option.create_model_id === createId && option.edit_model_id === editId
   );
 }
 

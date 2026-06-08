@@ -72,10 +72,9 @@ export async function retryUserCharacterLookGeneration(
     metadataPatch.payload = input.payload;
   }
 
-  const updated =
-    (await updateUserCharacterLookMetadataForUser(uid, cid, lid, metadataPatch)) ?? look;
+  const updated = (await updateUserCharacterLookMetadataForUser(uid, cid, lid, metadataPatch)) ?? look;
 
-  void generateCharacterLookViews(updated).catch((err) => {
+  void generateCharacterLookViews(updated).catch(err => {
     console.error('[retryUserCharacterLookGeneration] generation failed', {
       look_id: lid,
       character_id: cid,

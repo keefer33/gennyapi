@@ -9,7 +9,7 @@ import { webhookPrunaai } from '../api-vendors/prunaai/webhookPrunaai';
 import { webhookKling } from '../api-vendors/kling/webhookKling';
 import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
 import { getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
-import { getUserFilesByRunId } from '../database/user_files';
+import { getUserFilesByRunId, getUserFilesByRunIdForCharacter } from '../database/user_files';
 import type { GenModelRow, UserFileRow, UserGenModelRuns } from '../database/types';
 import { sleep } from './webhooksUtils';
 
@@ -139,6 +139,89 @@ export async function pollGenModelRunUntilTerminal(
         return { run, files };
       }
     } else if (ACTIVE_POLLING_STATUSES.has(status)) {
+      await advanceGenModelRunPoll(run);
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  throw new AppError('Image generation timed out', {
+    statusCode: 504,
+    code: 'character_look_generation_timeout',
+    expose: true,
+  });
+}
+
+export type PollCharacterLookRunFilesResult = {
+  run: UserGenModelRuns;
+  file: UserFileRow;
+};
+
+/** Poll `user_files` for a character look run; advances vendor polls until a file appears or the run fails. */
+export async function pollCharacterLookRunFiles(
+  userId: string,
+  characterId: string,
+  runId: string,
+  options?: { maxWaitMs?: number; pollIntervalMs?: number }
+): Promise<PollCharacterLookRunFilesResult> {
+  const id = runId.trim();
+  const cid = characterId.trim();
+  if (!id) {
+    throw new AppError('runId is required', {
+      statusCode: 400,
+      code: 'character_look_run_poll_missing_id',
+    });
+  }
+  if (!cid) {
+    throw new AppError('characterId is required', {
+      statusCode: 400,
+      code: 'character_look_run_poll_missing_character_id',
+    });
+  }
+
+  const maxWaitMs = options?.maxWaitMs ?? 10 * 60 * 1000;
+  const pollIntervalMs = options?.pollIntervalMs ?? 2000;
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    const files = await getUserFilesByRunIdForCharacter(id, cid);
+    if (files.length > 1) {
+      console.error('[pollCharacterLookRunFiles] expected one file for character look run', {
+        run_id: id,
+        character_id: cid,
+        file_count: files.length,
+        file_ids: files.map((file) => file.id),
+      });
+    }
+    if (files.length >= 1) {
+      const run = await getUserGenModelRunByIdForUser(userId, id);
+      if (!run) {
+        throw new AppError('Run not found', {
+          statusCode: 404,
+          code: 'gen_model_run_not_found',
+        });
+      }
+      return { run, file: files[0] };
+    }
+
+    const run = await getUserGenModelRunByIdForUser(userId, id);
+    if (!run) {
+      throw new AppError('Run not found', {
+        statusCode: 404,
+        code: 'gen_model_run_not_found',
+      });
+    }
+
+    const status = runStatus(run);
+    if (TERMINAL_ERROR_STATUSES.has(status)) {
+      throw new AppError('Image generation failed', {
+        statusCode: 502,
+        code: 'character_look_generation_failed',
+        expose: true,
+      });
+    }
+
+    if (ACTIVE_POLLING_STATUSES.has(status)) {
       await advanceGenModelRunPoll(run);
     }
 

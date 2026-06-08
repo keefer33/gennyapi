@@ -301,10 +301,7 @@ type FetchUrlBytesResult = {
 /**
  * Downloads a remote URL to a Buffer. Throws {@link AppError} on failure.
  */
-export async function downloadUrlToBuffer(
-  url: string,
-  opts?: DownloadUrlOptions
-): Promise<Buffer> {
+export async function downloadUrlToBuffer(url: string, opts?: DownloadUrlOptions): Promise<Buffer> {
   const { buffer } = await fetchUrlBytes(url, opts);
   return buffer;
 }
@@ -365,8 +362,7 @@ async function fetchUrlBytes(url: string, opts?: DownloadUrlOptions): Promise<Fe
   }
 
   const rawType = response.headers['content-type'];
-  const contentType =
-    typeof rawType === 'string' ? rawType.split(';')[0]?.trim() || undefined : undefined;
+  const contentType = typeof rawType === 'string' ? rawType.split(';')[0]?.trim() || undefined : undefined;
 
   return { buffer, contentType };
 }

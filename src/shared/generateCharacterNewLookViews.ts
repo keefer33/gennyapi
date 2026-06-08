@@ -6,11 +6,8 @@ import {
   updateUserCharacterLookMetadataForUser,
 } from '../database/user_characters_looks';
 import type { CharacterLookView, UserCharacterLookRow, UserFileRow } from '../database/types';
-import {
-  lookGenerationErrorFromUnknown,
-  parseLookGenerationMetadata,
-} from './characterLookGenerationMetadata';
-import { pollGenModelRunUntilTerminal } from './genModelRunPoll';
+import { lookGenerationErrorFromUnknown, parseLookGenerationMetadata } from './characterLookGenerationMetadata';
+import { pollCharacterLookRunFiles } from './genModelRunPoll';
 import { CHARACTER_APP, CHARACTER_LOOK_EDIT_MODEL_ID, CHARACTER_LOOK_MODEL_ID } from './characterLook';
 
 const CREATE_CHARACTER_NEW_TYPE = 'create_character_new';
@@ -33,7 +30,7 @@ const VIEW_EDIT_PROMPTS: Record<Exclude<CharacterLookView, 'front'>, string> = {
     "The person's RIGHT side faces the camera: RIGHT ear, RIGHT cheek, and RIGHT shoulder visible;",
     'LEFT side of face and body hidden.',
     'Nose points toward the LEFT side of the image.',
-    'This is the character\'s right profile — NOT their left profile.',
+    "This is the character's right profile — NOT their left profile.",
     LOOK_EDIT_BASE_RULES,
   ].join(' '),
   left: [
@@ -41,7 +38,7 @@ const VIEW_EDIT_PROMPTS: Record<Exclude<CharacterLookView, 'front'>, string> = {
     "The person's LEFT side faces the camera: LEFT ear, LEFT cheek, and LEFT shoulder visible;",
     'RIGHT side of face and body hidden.',
     'Nose points toward the RIGHT side of the image.',
-    'This is the character\'s left profile — NOT their right profile.',
+    "This is the character's left profile — NOT their right profile.",
     LOOK_EDIT_BASE_RULES,
   ].join(' '),
 };
@@ -117,11 +114,7 @@ async function markViewCompleted(
   });
 }
 
-async function markLookCompleted(
-  userId: string,
-  characterId: string,
-  lookId: string
-): Promise<void> {
+async function markLookCompleted(userId: string, characterId: string, lookId: string): Promise<void> {
   await updateUserCharacterLookMetadataForUser(userId, characterId, lookId, {
     generationStatus: 'completed',
     currentView: undefined,
@@ -143,13 +136,7 @@ async function runLookGeneration(
   try {
     await markLookGenerating(userId, characterId, lookId, view);
 
-    const genModelRun = await executePlaygroundModelRun(
-      userId,
-      modelId,
-      payload,
-      CHARACTER_APP,
-      characterId
-    );
+    const genModelRun = await executePlaygroundModelRun(userId, modelId, payload, CHARACTER_APP, characterId);
     runId = genModelRun.id?.trim() ?? '';
     if (!runId) {
       throw new AppError(`Failed to start ${view} look generation`, {
@@ -160,11 +147,10 @@ async function runLookGeneration(
 
     await markLookGenerating(userId, characterId, lookId, view, runId);
 
-    const { files } = await pollGenModelRunUntilTerminal(userId, runId, {
+    const { file } = await pollCharacterLookRunFiles(userId, characterId, runId, {
       maxWaitMs: 10 * 60 * 1000,
       pollIntervalMs: 2000,
     });
-    const file = files[0];
     if (!file?.id?.trim()) {
       throw new AppError(`No ${view} look image was generated`, {
         statusCode: 502,
@@ -201,15 +187,7 @@ async function runLookGenerationIfNeeded(
   if (existing?.id?.trim()) {
     return existing;
   }
-  return runLookGeneration(
-    userId,
-    characterId,
-    lookId,
-    modelId,
-    payload,
-    view,
-    completedViews
-  );
+  return runLookGeneration(userId, characterId, lookId, modelId, payload, view, completedViews);
 }
 
 async function generateSideViewsFromFront(
@@ -277,10 +255,7 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
   const existingFiles = await listLookViewFilesForLook(lookId);
   const parsed = parseLookGenerationMetadata(lookRow.metadata);
   let completedViews: CharacterLookView[] = [
-    ...new Set([
-      ...(parsed.completedViews ?? []),
-      ...([...existingFiles.keys()] as CharacterLookView[]),
-    ]),
+    ...new Set([...(parsed.completedViews ?? []), ...([...existingFiles.keys()] as CharacterLookView[])]),
   ];
 
   if (completedViews.length >= ALL_VIEWS.length) {
@@ -372,10 +347,7 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
   const existingFiles = await listLookViewFilesForLook(lookId);
   const parsed = parseLookGenerationMetadata(lookRow.metadata);
   let completedViews: CharacterLookView[] = [
-    ...new Set([
-      ...(parsed.completedViews ?? []),
-      ...([...existingFiles.keys()] as CharacterLookView[]),
-    ]),
+    ...new Set([...(parsed.completedViews ?? []), ...([...existingFiles.keys()] as CharacterLookView[])]),
   ];
 
   if (completedViews.length >= ALL_VIEWS.length) {
@@ -409,15 +381,7 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
     existingFiles.set('front', frontFile);
     completedViews = [...new Set<CharacterLookView>([...completedViews, 'front'])];
 
-    await generateSideViewsFromFront(
-      userId,
-      characterId,
-      lookId,
-      frontFile,
-      modelId,
-      existingFiles,
-      completedViews
-    );
+    await generateSideViewsFromFront(userId, characterId, lookId, frontFile, modelId, existingFiles, completedViews);
 
     await markLookCompleted(userId, characterId, lookId);
     console.log('[generateCreateCharacterLookViews] completed', {
