@@ -15,6 +15,9 @@ const CREATE_CHARACTER_LOOK_TYPE = 'create_character_look';
 const ALL_VIEWS: CharacterLookView[] = ['front', 'back', 'right', 'left'];
 const SIDE_VIEWS: Exclude<CharacterLookView, 'front'>[] = ['back', 'right', 'left'];
 
+/** Temporary test: generate front only, skip back/right/left. */
+const FRONT_VIEW_ONLY_TEST = true;
+
 const LOOK_EDIT_BASE_RULES =
   'Keep the same character, clothing, proportions, and plain white studio background. Full-body head-to-toe, standing upright, arms at sides. Camera is fixed; only the person turns. Not a three-quarter view.';
 
@@ -118,9 +121,23 @@ async function markLookCompleted(userId: string, characterId: string, lookId: st
   await updateUserCharacterLookMetadataForUser(userId, characterId, lookId, {
     generationStatus: 'completed',
     currentView: undefined,
-    completedViews: ALL_VIEWS,
+    completedViews: FRONT_VIEW_ONLY_TEST ? (['front'] as CharacterLookView[]) : ALL_VIEWS,
     lastError: undefined,
   });
+}
+
+async function finishLookGenerationAfterFront(
+  userId: string,
+  characterId: string,
+  lookId: string,
+  flow: string
+): Promise<void> {
+  if (!FRONT_VIEW_ONLY_TEST) return;
+  console.log(`[${flow}] FRONT_VIEW_ONLY_TEST — stopping after front view`, {
+    look_id: lookId,
+    character_id: characterId,
+  });
+  await markLookCompleted(userId, characterId, lookId);
 }
 
 async function runLookGeneration(
@@ -262,6 +279,10 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
     await markLookCompleted(userId, characterId, lookId);
     return;
   }
+  if (FRONT_VIEW_ONLY_TEST && completedViews.includes('front')) {
+    await markLookCompleted(userId, characterId, lookId);
+    return;
+  }
 
   console.log('[generateCreateCharacterNewLookViews] starting', {
     look_id: lookId,
@@ -296,6 +317,16 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
     );
     existingFiles.set('front', frontFile);
     completedViews = [...new Set<CharacterLookView>([...completedViews, 'front'])];
+
+    if (FRONT_VIEW_ONLY_TEST) {
+      await finishLookGenerationAfterFront(
+        userId,
+        characterId,
+        lookId,
+        'generateCreateCharacterNewLookViews'
+      );
+      return;
+    }
 
     await generateSideViewsFromFront(
       userId,
@@ -354,6 +385,10 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
     await markLookCompleted(userId, characterId, lookId);
     return;
   }
+  if (FRONT_VIEW_ONLY_TEST && completedViews.includes('front')) {
+    await markLookCompleted(userId, characterId, lookId);
+    return;
+  }
 
   console.log('[generateCreateCharacterLookViews] starting', {
     look_id: lookId,
@@ -380,6 +415,16 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
     );
     existingFiles.set('front', frontFile);
     completedViews = [...new Set<CharacterLookView>([...completedViews, 'front'])];
+
+    if (FRONT_VIEW_ONLY_TEST) {
+      await finishLookGenerationAfterFront(
+        userId,
+        characterId,
+        lookId,
+        'generateCreateCharacterLookViews'
+      );
+      return;
+    }
 
     await generateSideViewsFromFront(userId, characterId, lookId, frontFile, modelId, existingFiles, completedViews);
 
