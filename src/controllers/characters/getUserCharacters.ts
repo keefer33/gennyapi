@@ -22,10 +22,15 @@ export async function getUserCharacters(req: Request, res: Response): Promise<vo
     const limit = paginate ? Math.min(100, Math.max(1, parseIntQuery(limitRaw, 24))) : undefined;
     const page = paginate ? Math.max(0, parseIntQuery(req.query.page, 0)) : 0;
     const offset = limit != null ? page * limit : undefined;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
     const { characters, total } = await listUserCharactersForUser(
       userId,
-      limit != null ? { limit, offset: offset ?? 0 } : undefined
+      limit != null
+        ? { limit, offset: offset ?? 0, search: search || undefined }
+        : search
+          ? { search }
+          : undefined
     );
 
     const characterIds = characters

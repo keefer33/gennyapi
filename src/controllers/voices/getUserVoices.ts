@@ -22,9 +22,16 @@ export async function getUserVoices(req: Request, res: Response): Promise<void> 
     const page = paginate ? Math.max(0, parseIntQuery(req.query.page, 0)) : 0;
     const offset = limit != null ? page * limit : undefined;
 
+    const search =
+      typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
     const { voices, total } = await listUserVoicesForUser(
       userId,
-      limit != null ? { limit, offset: offset ?? 0 } : undefined
+      limit != null
+        ? { limit, offset: offset ?? 0, search: search || undefined }
+        : search
+          ? { search }
+          : undefined
     );
 
     sendOk(res, { voices, total });

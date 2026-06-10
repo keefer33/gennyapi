@@ -54,6 +54,13 @@ export function parseSceneId(req: Request): { characterId: string; sceneId: stri
   return { characterId, sceneId };
 }
 
+export function parseVideoId(req: Request): { characterId: string; videoId: string } {
+  const characterId = parseCharacterId(req);
+  const videoId = String(req.params.videoId ?? '').trim();
+  if (!videoId) throw badRequest('videoId is required');
+  return { characterId, videoId };
+}
+
 export async function requireCharacterForUser(
   userId: string,
   characterId: string

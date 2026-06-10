@@ -75,9 +75,13 @@ type UserVoiceListRow = UserVoiceRow & {
   user_files?: UserFileRow[] | null;
 };
 
+function escapeIlikePattern(term: string): string {
+  return term.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
 export async function listUserVoicesForUser(
   userId: string,
-  opts?: { limit?: number; offset?: number }
+  opts?: { limit?: number; offset?: number; search?: string }
 ): Promise<{ voices: UserVoiceWithFilesRow[]; total: number }> {
   const { supabaseServerClient } = await getServerClient();
 
@@ -87,6 +91,12 @@ export async function listUserVoicesForUser(
     .eq('user_id', userId)
     .neq('type', 'system')
     .order('created_at', { ascending: false });
+
+  const search = opts?.search?.trim();
+  if (search) {
+    const pattern = `%${escapeIlikePattern(search)}%`;
+    query = query.or(`name.ilike.${pattern},description.ilike.${pattern}`);
+  }
 
   if (opts?.limit != null) {
     const offset = Math.max(0, opts.offset ?? 0);

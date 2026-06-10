@@ -50,7 +50,12 @@ export async function createUserCharacterRow(row: Partial<UserCharacterRow>): Pr
 export type ListUserCharactersOptions = {
   limit?: number;
   offset?: number;
+  search?: string;
 };
+
+function escapeIlikePattern(term: string): string {
+  return term.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
 
 export async function listUserCharactersForUser(
   userId: string,
@@ -63,6 +68,12 @@ export async function listUserCharactersForUser(
     .select('*', { count: 'exact' })
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
+
+  const search = opts?.search?.trim();
+  if (search) {
+    const pattern = `%${escapeIlikePattern(search)}%`;
+    query = query.or(`name.ilike.${pattern},description.ilike.${pattern}`);
+  }
 
   if (opts?.limit != null) {
     const offset = Math.max(0, opts.offset ?? 0);
