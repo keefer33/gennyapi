@@ -37,6 +37,14 @@ export type GennyToolPromptMeta = {
   description: string;
 };
 
+export type GennyBotSystemPromptSections = {
+  playgroundTools: GennyToolPromptMeta[];
+  voiceTools: GennyToolPromptMeta[];
+  characterTools: GennyToolPromptMeta[];
+  lookModelCatalog: string;
+  videoModelCatalog: string;
+};
+
 /** User file row shape embedded in generation status / markdown builder. */
 export type GenerationUserFile = {
   id?: string | null;

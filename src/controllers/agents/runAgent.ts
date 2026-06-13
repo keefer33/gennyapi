@@ -54,10 +54,15 @@ function isVoiceToolSlug(toolSlug: string): boolean {
   return toolSlug.startsWith('LOCAL_GENNY_BOT_VOICES_');
 }
 
+function isCharacterToolSlug(toolSlug: string): boolean {
+  return toolSlug.startsWith('LOCAL_GENNY_BOT_CHARACTERS_');
+}
+
 function isGenerationToolSlug(toolSlug: string): boolean {
   return (
     isLocalGennyToolSlug(toolSlug) &&
     !isVoiceToolSlug(toolSlug) &&
+    !isCharacterToolSlug(toolSlug) &&
     toolSlug !== GENNY_STATUS_TOOL_SLUG &&
     toolSlug !== GENNY_COST_TOOL_SLUG
   );
@@ -179,9 +184,14 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     const {
       gennyBotAigenTools,
       gennyBotVoiceTools,
+      gennyBotCharacterTools,
       systemPrompt: gennyBotSystemPrompt,
     } = await getAgentCustomTools((req as any).user.authToken, userId);
-    const allTools = await loadComposioTools(userId, [gennyBotAigenTools, gennyBotVoiceTools]);
+    const allTools = await loadComposioTools(userId, [
+      gennyBotAigenTools,
+      gennyBotVoiceTools,
+      gennyBotCharacterTools,
+    ]);
     const hasTools = Object.keys(allTools).length > 0;
 
     let sessionMessages: ChatMessage[] = [];

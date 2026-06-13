@@ -6,6 +6,7 @@ export type StoredVoiceDesignPreview = {
   voiceId: string;
   previewText: string;
   previewAudio: string;
+  previewUrl?: string;
   designPrompt: string;
   langCode: string;
   expiresAt: number;
@@ -21,7 +22,7 @@ export function storeVoiceDesignPreviews(
   userId: string,
   designPrompt: string,
   langCode: string,
-  previews: InworldPreviewVoice[]
+  previews: Array<InworldPreviewVoice & { previewUrl?: string }>
 ): void {
   const uid = userId.trim();
   if (!uid) return;
@@ -33,6 +34,7 @@ export function storeVoiceDesignPreviews(
       voiceId,
       previewText: preview.previewText?.trim() ?? '',
       previewAudio: preview.previewAudio ?? '',
+      ...(preview.previewUrl?.trim() ? { previewUrl: preview.previewUrl.trim() } : {}),
       designPrompt: designPrompt.trim(),
       langCode: langCode.trim() || 'EN_US',
       expiresAt,

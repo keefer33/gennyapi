@@ -13,9 +13,40 @@ const FILE_SELECT = `
   )
 `;
 
+async function fetchActiveUserFileByUrl(
+  supabaseServerClient: SupabaseServerClients['supabaseServerClient'],
+  userId: string,
+  url: string
+) {
+  const buildQuery = () =>
+    supabaseServerClient
+      .from('user_files')
+      .select(FILE_SELECT)
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+  const { data: byPath, error: pathError } = await buildQuery().eq('file_path', url).maybeSingle();
+  if (pathError) {
+    throw new AppError(pathError.message, {
+      statusCode: 500,
+      code: 'user_file_by_path_fetch_failed',
+    });
+  }
+  if (byPath) return byPath;
+
+  const { data: byThumbnail, error: thumbError } = await buildQuery().eq('thumbnail_url', url).maybeSingle();
+  if (thumbError) {
+    throw new AppError(thumbError.message, {
+      statusCode: 500,
+      code: 'user_file_by_thumbnail_fetch_failed',
+    });
+  }
+  return byThumbnail;
+}
+
 /**
  * GET /user/files/by-path?file_path=<encoded url or path>
- * Returns one active user file owned by the JWT user matching `file_path`.
+ * Returns one active user file owned by the JWT user matching `file_path` or `thumbnail_url`.
  */
 export async function getUserFileByPath(req: Request, res: Response): Promise<void> {
   try {
@@ -29,20 +60,7 @@ export async function getUserFileByPath(req: Request, res: Response): Promise<vo
 
     const { supabaseServerClient }: SupabaseServerClients = await getServerClient();
 
-    const { data, error } = await supabaseServerClient
-      .from('user_files')
-      .select(FILE_SELECT)
-      .eq('user_id', userId)
-      .eq('file_path', filePath)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (error) {
-      throw new AppError(error.message, {
-        statusCode: 500,
-        code: 'user_file_by_path_fetch_failed',
-      });
-    }
+    const data = await fetchActiveUserFileByUrl(supabaseServerClient, userId, filePath);
 
     if (!data) {
       throw notFound('File not found');

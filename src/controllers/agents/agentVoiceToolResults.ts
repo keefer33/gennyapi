@@ -1,4 +1,3 @@
-import { inworldDesignVoice } from '../../api-vendors/inworld/designVoice';
 import {
   getUserVoiceWithFilesForUser,
   listUserVoicesForUser,
@@ -12,10 +11,11 @@ import {
 import { assistSpeechScript } from '../../shared/assistSpeechScript';
 import { assistVoiceDesign } from '../../shared/assistVoiceDesign';
 import { cloneUserVoice } from '../../shared/cloneUserVoice';
-import { publishUserVoice } from '../../shared/publishUserVoice';
+import { designAndCreateUserVoices } from '../../shared/designUserVoices';
+import { deleteUserVoice } from '../../shared/deleteUserVoice';
 import { synthesizeUserVoiceSpeech } from '../../shared/synthesizeUserVoiceSpeech';
+import { updateUserVoice } from '../../shared/updateUserVoice';
 import { inworldVoiceIdFromMetadata } from '../../shared/voiceMetadata';
-import { getVoiceDesignPreview, storeVoiceDesignPreviews } from './agentVoicePreviewStore';
 
 function toolOk(data: Record<string, unknown>): Record<string, unknown> {
   return { success: true, ...data };
@@ -199,6 +199,57 @@ export async function assistVoiceDesignToolResult(input: {
   }
 }
 
+function summarizeDesignedVoice(voice: UserVoiceWithFilesRow, index: number): Record<string, unknown> {
+  const files = Array.isArray(voice.files) ? voice.files : [];
+  const previewFile = files.find(f => f.file_path?.trim()) ?? files[0];
+  const preview_url = previewFile?.file_path?.trim() || null;
+  const preview_key = String.fromCharCode(65 + index);
+  return {
+    voice_id: voice.id,
+    preview_key,
+    name: voice.name?.trim() || null,
+    preview_label: `Preview ${preview_key}`,
+    preview_url,
+    inworld_voice_id: inworldVoiceIdFromMetadata(voice.metadata),
+    preview_files: files.map(summarizeVoiceFile),
+  };
+}
+
+function buildDesignVoiceMarkdown(voices: Array<Record<string, unknown>>): string {
+  const lines = [
+    'Here are your designed voice previews — all saved in your library.',
+    'Listen and tell me **which one to keep** (A, B, or C) and the **final name**.',
+    '',
+  ];
+
+  for (const voice of voices) {
+    const previewKey = typeof voice.preview_key === 'string' ? voice.preview_key : '?';
+    const name = typeof voice.name === 'string' && voice.name.trim() ? voice.name.trim() : `Preview ${previewKey}`;
+    const voiceId = typeof voice.voice_id === 'string' ? voice.voice_id.trim() : '';
+    const previewUrl = typeof voice.preview_url === 'string' ? voice.preview_url.trim() : '';
+
+    lines.push(`### Preview ${previewKey}: ${name}`);
+    if (voiceId) lines.push(`voice_id: \`${voiceId}\``);
+    if (previewUrl) lines.push(`[Preview ${previewKey}](${previewUrl})`);
+    lines.push('');
+  }
+
+  lines.push(
+    'Reply with your choice (A/B/C) and final name. I will UPDATE_VOICE for the keeper and DELETE_VOICE for the others.'
+  );
+  return lines.join('\n');
+}
+
+function voiceIdByPreview(voices: Array<Record<string, unknown>>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const voice of voices) {
+    const key = typeof voice.preview_key === 'string' ? voice.preview_key : '';
+    const id = typeof voice.voice_id === 'string' ? voice.voice_id.trim() : '';
+    if (key && id) out[key] = id;
+  }
+  return out;
+}
+
 export async function designVoiceToolResult(
   userId: string,
   input: {
@@ -206,6 +257,11 @@ export async function designVoiceToolResult(
     previewText?: string;
     language?: string;
     numberOfSamples?: number;
+    baseName?: string;
+    base_name?: string;
+    gender?: string;
+    age?: string;
+    accent?: string;
   }
 ): Promise<Record<string, unknown>> {
   try {
@@ -219,80 +275,100 @@ export async function designVoiceToolResult(
         ? 3
         : Math.min(3, Math.max(1, Math.round(input.numberOfSamples)));
 
-    const result = await inworldDesignVoice({
+    const result = await designAndCreateUserVoices(userId, {
       designPrompt,
       previewText,
       langCode: trimOptional(input.language) ?? 'EN_US',
       numberOfSamples,
+      baseName: trimOptional(input.baseName) ?? trimOptional(input.base_name),
+      gender: trimOptional(input.gender) ?? null,
+      age: trimOptional(input.age) ?? null,
+      accent: trimOptional(input.accent) ?? null,
     });
 
-    storeVoiceDesignPreviews(userId, designPrompt, result.langCode, result.previewVoices);
+    const voices = result.voices.map((voice, index) => summarizeDesignedVoice(voice, index));
+    const withPreviewUrl = voices.filter(v => typeof v.preview_url === 'string' && v.preview_url);
+    if (withPreviewUrl.length === 0) {
+      return toolError('Voices were saved but no preview URLs were available for playback.');
+    }
 
     return toolOk({
       langCode: result.langCode,
-      designPrompt,
-      previewText,
-      previews: result.previewVoices.map(preview => ({
-        inworld_voice_id: preview.voiceId,
-        previewText: preview.previewText,
-        preview_audio_stored: true,
-      })),
+      designPrompt: result.designPrompt,
+      previewText: result.previewText,
+      voices,
+      voice_id_by_preview: voiceIdByPreview(voices),
+      markdown: buildDesignVoiceMarkdown(voices),
+      display_instruction:
+        'Your reply MUST include the markdown field exactly as provided so each preview keeps its voice_id in chat history for UPDATE_VOICE and DELETE_VOICE on the next turn. Do not omit voice_id lines or invent URLs.',
+      notes:
+        'Each preview has preview_key (A/B/C), voice_id, and preview_url. After the user picks, call UPDATE_VOICE with that voice_id and name, then DELETE_VOICE for the other voice_ids.',
       next_step:
-        'Ask the user which preview they prefer, then call PUBLISH_VOICE with inworld_voice_id and display_name. Previews are cached for 30 minutes.',
+        'Wait for the user to pick A/B/C and a final name, then UPDATE_VOICE for the keeper and DELETE_VOICE for the rest.',
     });
   } catch (err: unknown) {
     return toolError(err instanceof Error ? err.message : 'Voice design failed');
   }
 }
 
-export async function publishVoiceToolResult(
+export async function updateVoiceToolResult(
   userId: string,
   input: {
-    inworld_voice_id?: string;
+    voice_id?: string;
+    name?: string;
     display_name?: string;
     description?: string;
-    previewText?: string;
-    designPrompt?: string;
-    language?: string;
     gender?: string;
     age?: string;
     accent?: string;
   }
 ): Promise<Record<string, unknown>> {
   try {
-    const voiceId = (input.inworld_voice_id ?? '').trim();
-    const displayName = (input.display_name ?? '').trim();
-    if (!voiceId) return toolError('inworld_voice_id is required');
-    if (!displayName) return toolError('display_name is required');
+    const voiceId = (input.voice_id ?? '').trim();
+    const displayName = (input.name ?? input.display_name ?? '').trim();
+    if (!voiceId) return toolError('voice_id is required');
+    if (!displayName) return toolError('name is required');
 
-    const cached = getVoiceDesignPreview(userId, voiceId);
-    if (!cached?.previewAudio) {
-      return toolError(
-        'Design preview not found or expired. Run DESIGN_VOICE again, then publish using an inworld_voice_id from that result.'
-      );
-    }
-
-    const result = await publishUserVoice(userId, {
-      voiceId,
-      displayName,
-      previewAudio: cached.previewAudio,
-      description: trimOptional(input.description) ?? cached.designPrompt,
-      previewText: trimOptional(input.previewText) ?? cached.previewText,
-      designPrompt: trimOptional(input.designPrompt) ?? cached.designPrompt,
-      language: trimOptional(input.language) ?? cached.langCode,
-      gender: trimOptional(input.gender),
-      age: trimOptional(input.age),
-      accent: trimOptional(input.accent),
-      source: 'voice_design',
+    await updateUserVoice(userId, voiceId, {
+      name: displayName,
+      ...(trimOptional(input.description) ? { description: trimOptional(input.description) } : {}),
+      ...(trimOptional(input.gender) ? { gender: trimOptional(input.gender) } : {}),
+      ...(trimOptional(input.age) ? { age: trimOptional(input.age) } : {}),
+      ...(trimOptional(input.accent) ? { accent: trimOptional(input.accent) } : {}),
     });
+
+    const voice = await getUserVoiceWithFilesForUser(userId, voiceId);
+    if (!voice) return toolError('Voice not found after update');
 
     return toolOk({
-      voice: summarizeVoiceRow({ ...result.voice, files: [result.file] }),
-      inworld_voice_id: result.inworld.voiceId,
-      message: `Voice "${displayName}" was saved to the user's library.`,
+      voice: summarizeVoiceRow(voice),
+      voice_id: voiceId,
+      message: `Voice updated to "${displayName}".`,
     });
   } catch (err: unknown) {
-    return toolError(err instanceof Error ? err.message : 'Failed to publish voice');
+    return toolError(err instanceof Error ? err.message : 'Failed to update voice');
+  }
+}
+
+/** @deprecated Use updateVoiceToolResult — kept for any stale tool registrations. */
+export const publishVoiceToolResult = updateVoiceToolResult;
+
+export async function deleteVoiceToolResult(
+  userId: string,
+  input: { voice_id?: string }
+): Promise<Record<string, unknown>> {
+  try {
+    const voiceId = (input.voice_id ?? '').trim();
+    if (!voiceId) return toolError('voice_id is required');
+
+    await deleteUserVoice(userId, voiceId);
+
+    return toolOk({
+      voice_id: voiceId,
+      message: 'Voice deleted from the user library.',
+    });
+  } catch (err: unknown) {
+    return toolError(err instanceof Error ? err.message : 'Failed to delete voice');
   }
 }
 

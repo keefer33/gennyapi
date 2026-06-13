@@ -17,13 +17,47 @@ import {
   assistVoiceDesignToolResult,
   cloneVoiceFromLibraryToolResult,
   cloneVoiceToolResult,
+  deleteVoiceToolResult,
   designVoiceToolResult,
   getVoiceToolResult,
   listUserVoicesToolResult,
-  publishVoiceToolResult,
+  updateVoiceToolResult,
   searchVoiceLibraryToolResult,
   synthesizeVoiceSpeechToolResult,
 } from './agentVoiceToolResults';
+import {
+  characterLookModelEnum,
+  characterVideoModelEnum,
+  CHARACTER_LOOK_GENERATION_AGENT_GUIDANCE,
+  CHARACTER_LOOK_MODEL_CATALOG,
+  CHARACTER_VIDEO_MODEL_CATALOG,
+} from './agentCharacterModels';
+import {
+  assistCharacterDesignToolResult,
+  createCharacterFromImageToolResult,
+  createCharacterFromTextToolResult,
+  createCharacterKlingElementToolResult,
+  deleteCharacterLookToolResult,
+  deleteCharacterSceneToolResult,
+  deleteCharacterToolResult,
+  deleteCharacterVideoToolResult,
+  generateCharacterLookToolResult,
+  generateCharacterSceneToolResult,
+  generateCharacterVideoToolResult,
+  getCharacterLookModelOptionsToolResult,
+  getCharacterToolResult,
+  getCharacterVideoModelOptionsToolResult,
+  listCharacterLooksToolResult,
+  listCharacterScenesToolResult,
+  listCharacterVideosToolResult,
+  listUserCharactersToolResult,
+  retryCharacterLookToolResult,
+  switchCharacterBaseLookToolResult,
+  updateCharacterLookToolResult,
+  updateCharacterSceneToolResult,
+  updateCharacterToolResult,
+  updateCharacterVideoToolResult,
+} from './agentCharacterToolResults';
 
 export default async function getAgentCustomTools(_authToken: string, userId: string) {
   const models = await getGenModelsList();
@@ -65,7 +99,7 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     experimental_createTool('LIST_USER_VOICES', {
       name: 'List user voices',
       description:
-        'List voices in the authenticated user\'s library (cloned, designed, or published). Optional search filters name/description.',
+        "List voices in the authenticated user's library (cloned, designed, or published). Optional search filters name/description.",
       inputParams: z.object({
         search: z.string().optional().describe('Optional name or description search'),
         limit: z.number().int().min(1).max(50).optional().describe('Max voices to return (default 20)'),
@@ -105,9 +139,7 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
         designPrompt: z.string().optional().describe('Current voice description draft'),
         previewText: z.string().optional().describe('Current preview script draft'),
         gender: z.enum(['male', 'female', 'neutral']).optional(),
-        age: z
-          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
-          .optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
         accent: z.string().optional().describe('Accent label, e.g. American or British'),
         defaultName: z.string().optional().describe('Preferred display name for the voice'),
       }),
@@ -116,47 +148,52 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     experimental_createTool('DESIGN_VOICE', {
       name: 'Design voice previews',
       description:
-        'Generate up to 3 Inworld voice previews from designPrompt + previewText. Stores previews server-side for PUBLISH_VOICE.',
+        'Generate up to 3 Inworld voice previews and save each as a user voice with preview_url for chat playback.',
       inputParams: z.object({
         designPrompt: z.string().describe('Inworld voice description, 30–250 characters'),
         previewText: z.string().describe('Preview script spoken in samples, 50–200 characters'),
         language: z.string().optional().describe('Language code, default EN_US'),
         numberOfSamples: z.number().int().min(1).max(3).optional().describe('Preview count (default 3)'),
+        baseName: z.string().optional().describe('Base display name; samples become "Name 1", "Name 2", etc.'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
+        accent: z.string().optional(),
       }),
       execute: async input => designVoiceToolResult(userId, input),
     }),
-    experimental_createTool('PUBLISH_VOICE', {
-      name: 'Publish designed voice',
+    experimental_createTool('UPDATE_VOICE', {
+      name: 'Update user voice',
       description:
-        'Save a DESIGN_VOICE preview to the user library. Requires inworld_voice_id from design previews (cached ~30 min).',
+        'Rename or update a saved user voice. After DESIGN_VOICE, use voice_id from the preview the user chose (see voice_id in your prior message or voice_id_by_preview from DESIGN_VOICE).',
       inputParams: z.object({
-        inworld_voice_id: z.string().describe('Inworld voiceId from DESIGN_VOICE previews'),
-        display_name: z.string().describe('Display name for the saved voice'),
+        voice_id: z.string().describe('Genny user_voices.id'),
+        name: z.string().describe('New display name for the voice'),
         description: z.string().optional(),
-        previewText: z.string().optional(),
-        designPrompt: z.string().optional(),
-        language: z.string().optional(),
         gender: z.enum(['male', 'female', 'neutral']).optional(),
-        age: z
-          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
-          .optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
         accent: z.string().optional(),
       }),
-      execute: async input => publishVoiceToolResult(userId, input),
+      execute: async input => updateVoiceToolResult(userId, input),
+    }),
+    experimental_createTool('DELETE_VOICE', {
+      name: 'Delete user voice',
+      description:
+        'Delete a user voice by voice_id. After DESIGN_VOICE, delete previews the user did not choose (use voice_id from your prior message).',
+      inputParams: z.object({
+        voice_id: z.string().describe('Genny user_voices.id to delete'),
+      }),
+      execute: async input => deleteVoiceToolResult(userId, input),
     }),
     experimental_createTool('CLONE_VOICE', {
       name: 'Clone voice from audio',
-      description:
-        'Clone a voice from a public http(s) audio sample URL. Saves the clone to the user library.',
+      description: 'Clone a voice from a public http(s) audio sample URL. Saves the clone to the user library.',
       inputParams: z.object({
         audio_url: z.string().describe('Public URL to a clear speech sample (e.g. from attachments)'),
         name: z.string().describe('Name for the cloned voice'),
         description: z.string().optional(),
         language: z.string().optional().describe('Language code, default EN_US'),
         gender: z.enum(['male', 'female', 'neutral']).optional(),
-        age: z
-          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
-          .optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
         accent: z.string().optional(),
       }),
       execute: async input => cloneVoiceToolResult(userId, input),
@@ -172,9 +209,7 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
         description: z.string().optional(),
         language: z.string().optional().describe('Language code, e.g. EN_US'),
         gender: z.enum(['male', 'female', 'neutral']).optional(),
-        age: z
-          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
-          .optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
         accent: z.string().optional(),
       }),
       execute: async input => cloneVoiceFromLibraryToolResult(userId, input),
@@ -193,14 +228,322 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     }),
     experimental_createTool('SYNTHESIZE_VOICE_SPEECH', {
       name: 'Synthesize voice speech',
-      description:
-        'Generate TTS audio from text using a saved Genny voice_id. Returns audio_url and speech_id.',
+      description: 'Generate TTS audio from text using a saved Genny voice_id. Returns audio_url and speech_id.',
       inputParams: z.object({
         voice_id: z.string().describe('Genny user_voices.id'),
         text: z.string().describe('Script to speak (max 2000 characters)'),
         title: z.string().optional().describe('Optional label for the speech entry'),
       }),
       execute: async input => synthesizeVoiceSpeechToolResult(userId, input),
+    }),
+  ];
+
+  const characterTools = [
+    experimental_createTool('LIST_USER_CHARACTERS', {
+      name: 'List user characters',
+      description: "List characters in the authenticated user's library. Optional search filters name/description.",
+      inputParams: z.object({
+        search: z.string().optional().describe('Optional name or description search'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max characters to return (default 20)'),
+      }),
+      execute: async input => listUserCharactersToolResult(userId, input),
+    }),
+    experimental_createTool('GET_CHARACTER', {
+      name: 'Get character details',
+      description: 'Get one character by character_id, including base look thumbnail when available.',
+      inputParams: z.object({
+        character_id: z.string().describe('Genny user_characters.id'),
+      }),
+      execute: async input => getCharacterToolResult(userId, input.character_id ?? ''),
+    }),
+    experimental_createTool('ASSIST_CHARACTER_DESIGN', {
+      name: 'Assist character design',
+      description:
+        'AI help writing a visual character description (120–4000 chars) plus name, gender, age, and ethnicity. Use before CREATE_CHARACTER_FROM_TEXT or CREATE_CHARACTER_FROM_IMAGE.',
+      inputParams: z.object({
+        description: z.string().optional().describe('Current character description draft'),
+        name: z.string().optional().describe('Preferred display name'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
+        ethnicity: z.string().optional().describe('Heritage or regional appearance label'),
+        reference_image_url: z
+          .string()
+          .optional()
+          .describe('Optional reference photo URL for image-based character design'),
+      }),
+      execute: async input => assistCharacterDesignToolResult(input),
+    }),
+    experimental_createTool('CREATE_CHARACTER_FROM_TEXT', {
+      name: 'Create character from text',
+      description: `Create a character from a text description and enqueue base look generation (4-view turnaround). Configured look models: ${CHARACTER_LOOK_MODEL_CATALOG}.`,
+      inputParams: z.object({
+        name: z.string().describe('Character display name'),
+        description: z.string().describe('Visual character description, 120–4000 characters'),
+        look_model: characterLookModelEnum.describe(
+          `Character look model key. Options: ${CHARACTER_LOOK_MODEL_CATALOG}`
+        ),
+        voice_id: z.string().optional().describe('Optional Genny voice_id for speech/video'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
+        ethnicity: z.string().optional(),
+        payload_json: z
+          .string()
+          .optional()
+          .describe('JSON object string of look model fields, e.g. {"resolution":"2k"}'),
+      }),
+      execute: async input => createCharacterFromTextToolResult(userId, input),
+    }),
+    experimental_createTool('CREATE_CHARACTER_FROM_IMAGE', {
+      name: 'Create character from image',
+      description: `Create a character from a reference photo and enqueue base look generation. Configured look models: ${CHARACTER_LOOK_MODEL_CATALOG}.`,
+      inputParams: z.object({
+        name: z.string().describe('Character display name'),
+        description: z.string().describe('Visual character description, 120–4000 characters'),
+        look_model: characterLookModelEnum.describe(
+          `Character look model key. Options: ${CHARACTER_LOOK_MODEL_CATALOG}`
+        ),
+        reference_image_url: z.string().describe('Public http(s) URL of the reference photo'),
+        voice_id: z.string().optional().describe('Optional Genny voice_id for speech/video'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
+        ethnicity: z.string().optional(),
+        payload_json: z
+          .string()
+          .optional()
+          .describe('JSON object string of look model fields, e.g. {"resolution":"2k"}'),
+      }),
+      execute: async input => createCharacterFromImageToolResult(userId, input),
+    }),
+    experimental_createTool('UPDATE_CHARACTER', {
+      name: 'Update character',
+      description: 'Update character name, description, voice_id, gender, age, or ethnicity by character_id.',
+      inputParams: z.object({
+        character_id: z.string().describe('Genny user_characters.id'),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        voice_id: z.string().optional().describe('Genny user_voices.id'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z.enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior']).optional(),
+        ethnicity: z.string().optional(),
+      }),
+      execute: async input => updateCharacterToolResult(userId, input),
+    }),
+    experimental_createTool('DELETE_CHARACTER', {
+      name: 'Delete character',
+      description: 'Delete a character and its associated looks, scenes, and videos.',
+      inputParams: z.object({
+        character_id: z.string().describe('Genny user_characters.id to delete'),
+      }),
+      execute: async input => deleteCharacterToolResult(userId, input.character_id ?? ''),
+    }),
+    experimental_createTool('GET_CHARACTER_LOOK_MODEL_OPTIONS', {
+      name: 'Get character look model options',
+      description: `Advanced: field defaults and UI options for configured character look models (${CHARACTER_LOOK_MODEL_CATALOG}). For creation, use look_model enum on CREATE_CHARACTER_FROM_TEXT / FROM_IMAGE instead.`,
+      inputParams: z.object({}),
+      execute: async () => getCharacterLookModelOptionsToolResult(),
+    }),
+    experimental_createTool('GET_CHARACTER_VIDEO_MODEL_OPTIONS', {
+      name: 'Get character video model options',
+      description: `Advanced: field defaults and UI options for configured character video models (${CHARACTER_VIDEO_MODEL_CATALOG}). For generation, use video_model enum on GENERATE_CHARACTER_VIDEO instead.`,
+      inputParams: z.object({}),
+      execute: async () => getCharacterVideoModelOptionsToolResult(),
+    }),
+    experimental_createTool('LIST_CHARACTER_LOOKS', {
+      name: 'List character looks',
+      description:
+        'List looks for a character with generation_status, view_urls, and preview_url. Use to poll base look and additional look generation.',
+      inputParams: z.object({
+        character_id: z.string().describe('Genny user_characters.id'),
+      }),
+      execute: async input => listCharacterLooksToolResult(userId, input.character_id ?? ''),
+    }),
+    experimental_createTool('GENERATE_CHARACTER_LOOK', {
+      name: 'Generate character look',
+      description:
+        `Start additional look generation for an existing character (Genny auto-generates front, back, right, and left views). Configured look models: ${CHARACTER_LOOK_MODEL_CATALOG}. ${CHARACTER_LOOK_GENERATION_AGENT_GUIDANCE}`,
+      inputParams: z.object({
+        character_id: z.string().describe('Genny user_characters.id'),
+        look_model: characterLookModelEnum.describe(
+          `Character look model key. Options: ${CHARACTER_LOOK_MODEL_CATALOG}`
+        ),
+        name: z.string().describe('Display name for the new look'),
+        prompt: z
+          .string()
+          .describe(
+            'Edit prompt for the new front view only: describe outfit/appearance changes while keeping the same character identity. Do not mention 4-view, turnaround, or multiple camera angles.'
+          ),
+        images: z
+          .array(z.string())
+          .describe(
+            'Reference image URLs. First URL must be front_image_url (single front-facing full-body shot from LIST_CHARACTER_LOOKS). Additional URLs are optional extras (logo, fabric, etc.).'
+          ),
+        payload_json: z
+          .string()
+          .optional()
+          .describe('JSON object string of extra model fields (not images — use the images field for URLs)'),
+      }),
+      execute: async input => generateCharacterLookToolResult(userId, input),
+    }),
+    experimental_createTool('UPDATE_CHARACTER_LOOK', {
+      name: 'Update character look',
+      description: 'Rename a character look by character_id and look_id.',
+      inputParams: z.object({
+        character_id: z.string(),
+        look_id: z.string().describe('user_characters_looks.id'),
+        name: z.string().describe('New look display name'),
+      }),
+      execute: async input => updateCharacterLookToolResult(userId, input),
+    }),
+    experimental_createTool('DELETE_CHARACTER_LOOK', {
+      name: 'Delete character look',
+      description: 'Delete a character look by character_id and look_id.',
+      inputParams: z.object({
+        character_id: z.string(),
+        look_id: z.string(),
+      }),
+      execute: async input => deleteCharacterLookToolResult(userId, input),
+    }),
+    experimental_createTool('SWITCH_CHARACTER_BASE_LOOK', {
+      name: 'Switch character base look',
+      description: "Set which look is the character's base look (thumbnail and default for scenes/videos).",
+      inputParams: z.object({
+        character_id: z.string(),
+        look_id: z.string().describe('look_id to promote to base look'),
+      }),
+      execute: async input => switchCharacterBaseLookToolResult(userId, input),
+    }),
+    experimental_createTool('RETRY_CHARACTER_LOOK', {
+      name: 'Retry character look generation',
+      description: 'Retry failed or stale look generation for an existing look_id.',
+      inputParams: z.object({
+        character_id: z.string(),
+        look_id: z.string(),
+        look_model: characterLookModelEnum
+          .optional()
+          .describe(`Override look model key. Options: ${CHARACTER_LOOK_MODEL_CATALOG}`),
+        name: z.string().optional().describe('Override look name'),
+        prompt: z.string().optional(),
+        images: z
+          .array(z.string())
+          .optional()
+          .describe('Reference image URLs when overriding look_model before front view exists'),
+        payload_json: z
+          .string()
+          .optional()
+          .describe('JSON object string of extra model fields (not images — use the images field for URLs)'),
+      }),
+      execute: async input => retryCharacterLookToolResult(userId, input),
+    }),
+    experimental_createTool('LIST_CHARACTER_SCENES', {
+      name: 'List character scenes',
+      description: 'List scenes for a character with generation_status, generation_id, and image_url when complete.',
+      inputParams: z.object({
+        character_id: z.string(),
+      }),
+      execute: async input => listCharacterScenesToolResult(userId, input.character_id ?? ''),
+    }),
+    experimental_createTool('GENERATE_CHARACTER_SCENE', {
+      name: 'Generate character scene',
+      description:
+        `Generate a scene image for a character. Configured look models: ${CHARACTER_LOOK_MODEL_CATALOG}. Pass reference image URLs in images (e.g. front_image_url from LIST_CHARACTER_LOOKS).`,
+      inputParams: z.object({
+        character_id: z.string(),
+        look_model: characterLookModelEnum.describe(
+          `Character look model key. Options: ${CHARACTER_LOOK_MODEL_CATALOG}`
+        ),
+        name: z.string().describe('Scene display name'),
+        prompt: z.string().describe('Scene generation prompt'),
+        images: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Reference image URLs for scene generation (e.g. [front_image_url] from LIST_CHARACTER_LOOKS). Required.'
+          ),
+        payload_json: z
+          .string()
+          .optional()
+          .describe('JSON object string of extra model fields (not images — use the images field for URLs)'),
+      }),
+      execute: async input => generateCharacterSceneToolResult(userId, input),
+    }),
+    experimental_createTool('UPDATE_CHARACTER_SCENE', {
+      name: 'Update character scene',
+      description: 'Rename a character scene.',
+      inputParams: z.object({
+        character_id: z.string(),
+        scene_id: z.string(),
+        name: z.string(),
+      }),
+      execute: async input => updateCharacterSceneToolResult(userId, input),
+    }),
+    experimental_createTool('DELETE_CHARACTER_SCENE', {
+      name: 'Delete character scene',
+      description: 'Delete a character scene.',
+      inputParams: z.object({
+        character_id: z.string(),
+        scene_id: z.string(),
+      }),
+      execute: async input => deleteCharacterSceneToolResult(userId, input),
+    }),
+    experimental_createTool('LIST_CHARACTER_VIDEOS', {
+      name: 'List character videos',
+      description: 'List videos for a character with generation_status, generation_id, and video_url when complete.',
+      inputParams: z.object({
+        character_id: z.string(),
+      }),
+      execute: async input => listCharacterVideosToolResult(userId, input.character_id ?? ''),
+    }),
+    experimental_createTool('GENERATE_CHARACTER_VIDEO', {
+      name: 'Generate character video',
+      description:
+        `Generate a talking-head video for a character. Configured video models: ${CHARACTER_VIDEO_MODEL_CATALOG}. Reference image auto-loaded from base look when omitted.`,
+      inputParams: z.object({
+        character_id: z.string(),
+        video_model: characterVideoModelEnum.describe(
+          `Character video model key. Options: ${CHARACTER_VIDEO_MODEL_CATALOG}`
+        ),
+        name: z.string().describe('Video display name'),
+        source_look_id: z.string().optional().describe('Optional look_id for reference image (default: base look)'),
+        base_look_image: z.string().optional().describe('Override reference image URL'),
+        audio: z.string().describe('Speech audio URL (from SYNTHESIZE_VOICE_SPEECH or user attachment)'),
+        video_prompt: z.string().optional().describe('How the person should appear while talking'),
+        voice_prompt: z.string().optional().describe('Speaking style, tone, or emotion'),
+        payload_json: z.string().optional().describe('JSON object string of extra model fields'),
+      }),
+      execute: async input => generateCharacterVideoToolResult(userId, input),
+    }),
+    experimental_createTool('UPDATE_CHARACTER_VIDEO', {
+      name: 'Update character video',
+      description: 'Rename a character video.',
+      inputParams: z.object({
+        character_id: z.string(),
+        video_id: z.string(),
+        name: z.string(),
+      }),
+      execute: async input => updateCharacterVideoToolResult(userId, input),
+    }),
+    experimental_createTool('DELETE_CHARACTER_VIDEO', {
+      name: 'Delete character video',
+      description: 'Delete a character video.',
+      inputParams: z.object({
+        character_id: z.string(),
+        video_id: z.string(),
+      }),
+      execute: async input => deleteCharacterVideoToolResult(userId, input),
+    }),
+    experimental_createTool('CREATE_CHARACTER_KLING_ELEMENT', {
+      name: 'Create Kling character element',
+      description:
+        'Register a Kling AI character element from frontal image, reference images, and voice sample. Saves element_id to character metadata.',
+      inputParams: z.object({
+        character_id: z.string(),
+        voice_url: z.string().describe('Public voice sample URL'),
+        voice_name: z.string(),
+        description: z.string().describe('Character description for Kling'),
+        frontal_image: z.string().describe('Frontal character image URL'),
+        refer_images: z.array(z.string()).describe('Additional reference image URLs'),
+      }),
+      execute: async input => createCharacterKlingElementToolResult(userId, input),
     }),
   ];
 
@@ -266,11 +609,17 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     tools: voiceTools,
   });
 
+  const gennyBotCharacterTools = experimental_createToolkit('GENNY_BOT_CHARACTERS', {
+    name: 'Genny Bot Character Tools',
+    description: 'Character design, looks, scenes, and videos.',
+    tools: characterTools,
+  });
+
   const voiceToolMeta = [
     {
       slug: 'LIST_USER_VOICES',
       name: 'List user voices',
-      description: 'Browse the user\'s saved voices.',
+      description: "Browse the user's saved voices.",
     },
     {
       slug: 'SEARCH_VOICE_LIBRARY',
@@ -290,12 +639,17 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     {
       slug: 'DESIGN_VOICE',
       name: 'Design voice previews',
-      description: 'Create Inworld design previews (up to 3).',
+      description: 'Create up to 3 designed user voices with preview_url links.',
     },
     {
-      slug: 'PUBLISH_VOICE',
-      name: 'Publish designed voice',
-      description: 'Save a design preview to the user library.',
+      slug: 'UPDATE_VOICE',
+      name: 'Update user voice',
+      description: 'Rename or update a saved voice by voice_id.',
+    },
+    {
+      slug: 'DELETE_VOICE',
+      name: 'Delete user voice',
+      description: 'Delete a saved voice by voice_id.',
     },
     {
       slug: 'CLONE_VOICE',
@@ -319,27 +673,106 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     },
   ];
 
-  const systemPrompt = buildGennyBotSystemPrompt([
-    ...toolPromptMeta,
+  const characterToolMeta = [
+    { slug: 'LIST_USER_CHARACTERS', name: 'List user characters', description: 'Browse saved characters.' },
+    { slug: 'GET_CHARACTER', name: 'Get character details', description: 'Look up a character by character_id.' },
     {
-      slug: 'CALCULATE_MODEL_COST',
-      name: 'Calculate Model Cost',
-      description:
-        'Estimate cost from toolName (schema name of the tool) and form_values_json (JSON string of tools input fields) before starting a generation.',
+      slug: 'ASSIST_CHARACTER_DESIGN',
+      name: 'Assist character design',
+      description: 'Draft description and metadata before creating.',
     },
     {
-      slug: 'GET_GENERATION_STATUS',
-      name: 'Get Generation Status',
-      description: 'Check generation completion/failure and return cost when available.',
+      slug: 'CREATE_CHARACTER_FROM_TEXT',
+      name: 'Create character from text',
+      description: `Create character from description. Look models: ${CHARACTER_LOOK_MODEL_CATALOG}.`,
     },
     {
-      slug: 'DESCRIBE_REMOTE_FILE',
-      name: 'Describe reference file for generation',
-      description:
-        'Analyze a file URL to inform prompts and file-input fields for i2i, i2v, and similar models.',
+      slug: 'CREATE_CHARACTER_FROM_IMAGE',
+      name: 'Create character from image',
+      description: `Create character from reference photo. Look models: ${CHARACTER_LOOK_MODEL_CATALOG}.`,
     },
-    ...voiceToolMeta,
-  ]);
+    { slug: 'UPDATE_CHARACTER', name: 'Update character', description: 'Update character fields by character_id.' },
+    { slug: 'DELETE_CHARACTER', name: 'Delete character', description: 'Delete a character by character_id.' },
+    {
+      slug: 'GET_CHARACTER_LOOK_MODEL_OPTIONS',
+      name: 'Get character look model options',
+      description: `Advanced field details. Look models: ${CHARACTER_LOOK_MODEL_CATALOG}.`,
+    },
+    {
+      slug: 'GET_CHARACTER_VIDEO_MODEL_OPTIONS',
+      name: 'Get character video model options',
+      description: `Advanced field details. Video models: ${CHARACTER_VIDEO_MODEL_CATALOG}.`,
+    },
+    {
+      slug: 'LIST_CHARACTER_LOOKS',
+      name: 'List character looks',
+      description: 'Poll look generation status and preview URLs.',
+    },
+    {
+      slug: 'GENERATE_CHARACTER_LOOK',
+      name: 'Generate character look',
+      description: 'Start additional 4-view look generation.',
+    },
+    { slug: 'UPDATE_CHARACTER_LOOK', name: 'Update character look', description: 'Rename a look.' },
+    { slug: 'DELETE_CHARACTER_LOOK', name: 'Delete character look', description: 'Delete a look.' },
+    {
+      slug: 'SWITCH_CHARACTER_BASE_LOOK',
+      name: 'Switch character base look',
+      description: 'Change which look is the base look.',
+    },
+    {
+      slug: 'RETRY_CHARACTER_LOOK',
+      name: 'Retry character look',
+      description: 'Retry failed look generation.',
+    },
+    {
+      slug: 'LIST_CHARACTER_SCENES',
+      name: 'List character scenes',
+      description: 'Poll scene generation and image URLs.',
+    },
+    { slug: 'GENERATE_CHARACTER_SCENE', name: 'Generate character scene', description: 'Create a scene image.' },
+    { slug: 'UPDATE_CHARACTER_SCENE', name: 'Update character scene', description: 'Rename a scene.' },
+    { slug: 'DELETE_CHARACTER_SCENE', name: 'Delete character scene', description: 'Delete a scene.' },
+    {
+      slug: 'LIST_CHARACTER_VIDEOS',
+      name: 'List character videos',
+      description: 'Poll video generation and video URLs.',
+    },
+    { slug: 'GENERATE_CHARACTER_VIDEO', name: 'Generate character video', description: 'Create a talking video.' },
+    { slug: 'UPDATE_CHARACTER_VIDEO', name: 'Update character video', description: 'Rename a video.' },
+    { slug: 'DELETE_CHARACTER_VIDEO', name: 'Delete character video', description: 'Delete a video.' },
+    {
+      slug: 'CREATE_CHARACTER_KLING_ELEMENT',
+      name: 'Create Kling character element',
+      description: 'Register Kling element on a character.',
+    },
+  ];
 
-  return { gennyBotAigenTools, gennyBotVoiceTools, systemPrompt };
+  const systemPrompt = buildGennyBotSystemPrompt({
+    playgroundTools: [
+      ...toolPromptMeta,
+      {
+        slug: 'CALCULATE_MODEL_COST',
+        name: 'Calculate Model Cost',
+        description:
+          'Estimate cost from toolName (schema name of the tool) and form_values_json (JSON string of tools input fields) before starting a generation.',
+      },
+      {
+        slug: 'GET_GENERATION_STATUS',
+        name: 'Get Generation Status',
+        description: 'Check generation completion/failure and return cost when available.',
+      },
+      {
+        slug: 'DESCRIBE_REMOTE_FILE',
+        name: 'Describe reference file for generation',
+        description: 'Analyze a file URL to inform prompts and file-input fields for i2i, i2v, and similar models.',
+      },
+    ],
+    voiceTools: voiceToolMeta,
+    characterTools: characterToolMeta,
+    lookModelCatalog: CHARACTER_LOOK_MODEL_CATALOG,
+    videoModelCatalog: CHARACTER_VIDEO_MODEL_CATALOG,
+  });
+
+  return { gennyBotAigenTools, gennyBotVoiceTools, gennyBotCharacterTools, systemPrompt };
 }

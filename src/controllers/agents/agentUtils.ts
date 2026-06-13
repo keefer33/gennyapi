@@ -17,6 +17,7 @@ import {
   RunAgentAttachmentInput,
   RunAgentHttpError,
   GennyToolPromptMeta,
+  GennyBotSystemPromptSections,
   GenerationUserFile,
   GenerationModelInfo,
 } from './types';
@@ -117,11 +118,7 @@ export function coerceAgentToolResult(output: unknown): Record<string, unknown> 
     if (!record) return null;
 
     const hasWrapper =
-      'data' in record ||
-      'successful' in record ||
-      'error' in record ||
-      'logId' in record ||
-      'log_id' in record;
+      'data' in record || 'successful' in record || 'error' in record || 'logId' in record || 'log_id' in record;
 
     const data = record.data;
     const dataRecord = objectRecord(data) ?? tryParseJsonObject(data);
@@ -238,9 +235,7 @@ function jsonSchemaArrayItemsToZod(propSchema: Record<string, unknown>): z.ZodTy
   if (Array.isArray(items) && items.length > 0) {
     const members = items.map(item => jsonSchemaPropToZod(item));
     elementSchema =
-      members.length === 1
-        ? members[0]!
-        : z.tuple(members as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+      members.length === 1 ? members[0]! : z.tuple(members as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
   } else if (items && typeof items === 'object' && !Array.isArray(items)) {
     elementSchema = jsonSchemaPropToZod(items);
   } else {
@@ -302,12 +297,8 @@ export function jsonSchemaPropToZod(propSchema: any): z.ZodTypeAny {
 export function jsonSchemaInputToZodObject(inputSchema: any): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const schema = inputSchema?.inputSchema ?? inputSchema;
   const schemaRecord =
-    schema && typeof schema === 'object' && !Array.isArray(schema)
-      ? (schema as Record<string, unknown>)
-      : {};
-  const requiredKeys: string[] = Array.isArray(schemaRecord.required)
-    ? (schemaRecord.required as string[])
-    : [];
+    schema && typeof schema === 'object' && !Array.isArray(schema) ? (schema as Record<string, unknown>) : {};
+  const requiredKeys: string[] = Array.isArray(schemaRecord.required) ? (schemaRecord.required as string[]) : [];
   const properties = objectRecord(schemaRecord.properties) ?? {};
 
   const shape: Record<string, z.ZodTypeAny> = {};
@@ -366,11 +357,7 @@ export function getModelFunctionSchema(
 export function getToolInputSchema(functionSchema: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!functionSchema) return null;
 
-  const candidates: unknown[] = [
-    functionSchema.inputSchema,
-    functionSchema.parameters,
-    functionSchema,
-  ];
+  const candidates: unknown[] = [functionSchema.inputSchema, functionSchema.parameters, functionSchema];
 
   for (const candidate of candidates) {
     if (!isJsonSchemaObjectSchema(candidate)) continue;
@@ -390,8 +377,7 @@ export function getToolInputSchema(functionSchema: Record<string, unknown> | nul
       type: 'object',
       properties: rootProps,
       required: Array.isArray(functionSchema.required) ? functionSchema.required : undefined,
-      description:
-        typeof functionSchema.description === 'string' ? functionSchema.description : undefined,
+      description: typeof functionSchema.description === 'string' ? functionSchema.description : undefined,
       'x-order-properties': functionSchema['x-order-properties'],
     };
   }
@@ -419,7 +405,9 @@ function escapeHtmlAttr(value: string): string {
 }
 
 export function markdownCell(value: unknown): string {
-  return String(value ?? '—').replace(/\|/g, '\\|').replace(/\n/g, '<br />');
+  return String(value ?? '—')
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, '<br />');
 }
 
 export function markdownLink(label: string, url: string | null | undefined): string {
@@ -610,7 +598,7 @@ export async function getGenerationStatusToolResult(
       status: 'error',
     };
   }
-console.log('item', item);
+  console.log('item', item);
   const rawStatus = typeof item.status === 'string' ? item.status : '';
   const status = rawStatus.trim().toLowerCase();
   const userFiles = Array.isArray((item as { user_files?: unknown }).user_files)
@@ -629,8 +617,8 @@ console.log('item', item);
       payload: item.payload,
     });
     return {
-     // markdown,
-     // display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
+      // markdown,
+      // display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
       generation_files: generationFiles,
       generation_id: generationId,
       cost,
@@ -647,47 +635,72 @@ console.log('item', item);
   };
 }
 
-export function buildGennyBotSystemPrompt(tools: GennyToolPromptMeta[]): string {
-  const toolList = tools
-    .map((tool, index) => `${index + 1}. ${tool.name} - ${tool.description} (toolSlug: ${tool.slug})`)
-    .join('\n');
+export function buildGennyBotSystemPrompt(sections: GennyBotSystemPromptSections): string {
+  const formatToolList = (tools: GennyToolPromptMeta[]): string =>
+    tools.map((tool, index) => `${index + 1}. ${tool.name} - ${tool.description} (toolSlug: ${tool.slug})`).join('\n');
+
+  const playgroundToolList = formatToolList(sections.playgroundTools);
+  const voiceToolList = formatToolList(sections.voiceTools);
+  const characterToolList = formatToolList(sections.characterTools);
 
   return [
     'You are a generation-focused assistant.',
-    'Your primary task is helping the user create image/video generations and manage voices (design, clone, publish, speech) using tools.',
+    'Your primary task is helping the user create image/video generations, manage voices (design, clone, speech), and manage characters (design, looks, scenes, videos) using tools.',
     '',
     'Composio context:',
     '- Composio is a tool-routing layer that lets the model discover and execute external tools.',
-    '- This session includes custom toolkits LOCAL_GENNY_BOT (image/video generation) and LOCAL_GENNY_BOT_VOICES (voice design, clone, speech).',
-    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>).",
+    '- This session includes custom toolkits LOCAL_GENNY_BOT (playground image/video generation), LOCAL_GENNY_BOT_VOICES (voice design, clone, speech), and LOCAL_GENNY_BOT_CHARACTERS (character design, looks, scenes, videos).',
+    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>, LOCAL_GENNY_BOT_CHARACTERS_<TOOL_SLUG>).",
     '- When calling tools, use the runtime-prefixed tool names.',
     '- When the user asks for a list of available tools (or "available genny tools"), DO NOT display the LOCAL_ prefixes. Instead, list tools using their friendly name and description. You may include the plain toolSlug if helpful.',
     '',
     'Tooling priority:',
-    '- Always prefer LOCAL_GENNY_BOT / LOCAL_GENNY_BOT_VOICES tools over other Composio tools when the task is generation- or voice-related.',
+    '- Always prefer LOCAL_GENNY_BOT / LOCAL_GENNY_BOT_VOICES / LOCAL_GENNY_BOT_CHARACTERS tools over other Composio tools when the task is generation-, voice-, or character-related.',
     '- Use other tools only when LOCAL_GENNY_BOT tools cannot satisfy the request.',
     '- The user may also have other connected Composio tools (from the Genny Bot Tools page). Use them when needed for non-generation tasks or when explicitly requested by the user.',
     '',
-    'Available LOCAL_GENNY_BOT tools:',
-    toolList,
+    'CRITICAL — character vs playground models:',
+    '- For character creation, looks, scenes, and videos: ONLY use LOCAL_GENNY_BOT_CHARACTERS_* tools.',
+    '- NEVER use playground image/video models (LOCAL_GENNY_BOT_<model>) for characters.',
+    `- Configured character look models: ${sections.lookModelCatalog}. Pass these keys as look_model on character tools.`,
+    `- Configured character video models: ${sections.videoModelCatalog}. Pass these keys as video_model on GENERATE_CHARACTER_VIDEO.`,
+    '- When the user asks what models they can use for characters, answer ONLY from the character look/video model lists above — not from playground generation models.',
+    '',
+    'Playground generation tools (LOCAL_GENNY_BOT — general image/video, NOT for characters):',
+    playgroundToolList,
+    '',
+    'Voice tools (LOCAL_GENNY_BOT_VOICES):',
+    voiceToolList,
+    '',
+    'Character tools (LOCAL_GENNY_BOT_CHARACTERS):',
+    characterToolList,
     '',
     'Status-check requirement:',
     '- Use LOCAL_GENNY_BOT_GET_GENERATION_STATUS to check whether a generation has completed.',
     '- This status tool can also return generation cost data (when available).',
     '- After starting a generation, check the status at least once before giving final results.',
     '- If the status is still processing, tell the user it is still processing and that they can ask you to check again later. Do not keep calling the status tool in a loop unless the user explicitly asks you to wait and continue checking.',
-    '- If LOCAL_GENNY_BOT_GET_GENERATION_STATUS returns status "completed" with a markdown field, your final response MUST be exactly that markdown content.',
-    '- Preserve all markdown image tags, links, tables, headings, and generated file metadata from the markdown field.',
-    '- Do not summarize, rewrite, omit, or wrap the returned markdown in a code block.',
     '',
     'Voice workflows (LOCAL_GENNY_BOT_VOICES_* tools):',
-    '- Design: ASSIST_VOICE_DESIGN (optional) → DESIGN_VOICE → user picks preview → PUBLISH_VOICE with inworld_voice_id + display_name.',
+    '- Design: ASSIST_VOICE_DESIGN (optional) → DESIGN_VOICE. When DESIGN_VOICE returns markdown, your reply MUST be exactly that markdown (includes voice_id per preview for later turns). User picks A/B/C → UPDATE_VOICE (voice_id + name) for keeper → DELETE_VOICE (voice_id) for others.',
     '- Clone from sample: CLONE_VOICE with a public audio_url.',
     '- Clone from community library: SEARCH_VOICE_LIBRARY → user picks voice → CLONE_VOICE_FROM_LIBRARY with library_voice_id + preview_url from search results.',
     '- Speech: LIST_USER_VOICES or GET_VOICE → ASSIST_SPEECH_SCRIPT (optional) → SYNTHESIZE_VOICE_SPEECH. Share audio_url from the result.',
-    '- Voice preview audio can be shared in markdown links like [Preview: Name](preview_url). Include preview links when listing voices.',
+    '- Voice preview audio can be shared in markdown links like [Preview: Name](preview_url). When listing DESIGN_VOICE previews, always include voice_id lines from the tool markdown.',
     '- designPrompt 30–250 chars; previewText 50–200 chars; speech text max 2000 chars.',
-    '- Genny voice_id is the user saved voice id; library_voice_id is ElevenLabs community id before cloning; inworld_voice_id is only for publishing design previews.',
+    '- Genny voice_id is user_voices.id — required for UPDATE_VOICE and DELETE_VOICE. library_voice_id is ElevenLabs community id before cloning.',
+    '',
+    'Character workflows (LOCAL_GENNY_BOT_CHARACTERS_* tools):',
+    '- Create from text: ASSIST_CHARACTER_DESIGN (optional) → pick look_model → CREATE_CHARACTER_FROM_TEXT. Create from photo: CREATE_CHARACTER_FROM_IMAGE with reference_image_url + look_model.',
+    '- When create tools return markdown, your reply MUST be exactly that markdown (includes character_id and base_look_id for later turns).',
+    '- Base look / additional looks: LIST_CHARACTER_LOOKS polls generation_status until completed. When it returns markdown, your reply MUST include that markdown exactly (real preview_url links + look_id lines). Never invent aifile.link URLs.',
+    '- GENERATE_CHARACTER_LOOK: pass images[0] = front_image_url (single front-facing full-body shot, NOT preview_url or multi-view sheets). Optional images[1+] for logos/assets. Prompt describes ONLY the outfit/appearance change for one front view — never say "4-view", "turnaround", or ask for front/back/left/right (Genny adds those views automatically). Do not put image URLs in payload_json.',
+    '- Failed looks: RETRY_CHARACTER_LOOK with look_id. UPDATE_CHARACTER_LOOK / DELETE_CHARACTER_LOOK to rename or remove.',
+    '- Scenes: GENERATE_CHARACTER_SCENE with look_model + prompt + images. Poll LIST_CHARACTER_SCENES or GET_GENERATION_STATUS with generation_id.',
+    '- Videos: attach voice via UPDATE_CHARACTER voice_id or use audio URL directly. GENERATE_CHARACTER_VIDEO with video_model + base_look_image + audio. Poll LIST_CHARACTER_VIDEOS or GET_GENERATION_STATUS.',
+    '- Voice + character: LIST_USER_VOICES / SYNTHESIZE_VOICE_SPEECH for audio_url used in GENERATE_CHARACTER_VIDEO.',
+    '- character_id, look_id, scene_id, video_id, and generation_id MUST appear in your message text (via tool markdown) so multi-turn rename/delete/poll works.',
+    '- description 120–4000 chars for character creation.',
     '',
     'Meta-tools note:',
     '- Composio already injects and documents meta-tools at runtime (search, schemas, execute, connection management, workbench).',

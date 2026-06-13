@@ -19,6 +19,7 @@ export const CREATE_CHARACTER_VIDEO_TYPE = 'create_character_video';
 
 export const CHARACTER_VIDEO_MODEL_OPTIONS: CharacterLookModelOption[] = [
   {
+    key: 'pruna_p_video_avatar',
     label: 'Pruna AI P Video Avatar',
     create_model_id: 'fae0f07a-a756-4616-b280-3678ed221653',
     edit_model_id: 'fae0f07a-a756-4616-b280-3678ed221653',
@@ -48,6 +49,7 @@ export const CHARACTER_VIDEO_MODEL_OPTIONS: CharacterLookModelOption[] = [
     },
   },
   {
+    key: 'kling_avatar',
     label: 'Kling AI Avatar',
     create_model_id: '93bd0780-ee97-4205-a1ea-767b2731e3e2',
     edit_model_id: '93bd0780-ee97-4205-a1ea-767b2731e3e2',
@@ -66,6 +68,22 @@ export const CHARACTER_VIDEO_MODEL_OPTIONS: CharacterLookModelOption[] = [
     },
   },
 ];
+
+export function findCharacterVideoModelByKey(key: string): CharacterLookModelOption | undefined {
+  const normalized = key.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return CHARACTER_VIDEO_MODEL_OPTIONS.find(option => option.key === normalized);
+}
+
+export function getCharacterVideoModelKeys(): string[] {
+  return CHARACTER_VIDEO_MODEL_OPTIONS.map(option => option.key);
+}
+
+export function formatCharacterVideoModelCatalog(): string {
+  return CHARACTER_VIDEO_MODEL_OPTIONS.map(
+    option => `${option.label} (\`${option.key}\`)`
+  ).join(', ');
+}
 
 export async function startCharacterVideoGeneration(
   userId: string,

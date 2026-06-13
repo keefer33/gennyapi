@@ -15,6 +15,8 @@ export type CharacterLookModelUiField = {
 };
 
 export type CharacterLookModelOption = {
+  /** Stable agent-facing key (enum value). */
+  key: string;
   label: string;
   create_model_id: string;
   edit_model_id: string;
@@ -26,6 +28,7 @@ export type CharacterLookModelOption = {
 
 export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
   {
+    key: 'pruna_p_image',
     label: 'Pruna AI P-Image',
     create_model_id: 'df7aa4eb-bb74-41ad-b825-aba3ffab6e56',
     edit_model_id: '6cac6e6a-e1cd-4192-97c6-9ca0b607f917',
@@ -38,6 +41,7 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     },
   },
   {
+    key: 'nano_banana_2',
     label: 'Google Nano Banana 2',
     create_model_id: '11afc97d-9255-4db8-9dcc-4fef63ff9a44',
     edit_model_id: 'bf5a5370-d39c-4d28-9b63-c67f4685b567',
@@ -56,6 +60,7 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     },
   },
   {
+    key: 'gpt_image_2',
     label: 'OpenAI GPT-IMAGE-2',
     create_model_id: '528fb6d8-2aed-42ba-b841-c4945ab4ea6b',
     edit_model_id: '377a54f4-0c4f-4316-9f00-631f4f34abde',
@@ -81,6 +86,7 @@ export const CHARACTER_LOOK_MODEL_OPTIONS: CharacterLookModelOption[] = [
     },
   },
   {
+    key: 'grok_imagine',
     label: 'Grok Imagine',
     create_model_id: '6604b532-ac70-406a-b1ea-eae5447bf791',
     edit_model_id: '0a71319e-0fc1-46b7-9c50-f3e64146ed19',
@@ -116,6 +122,22 @@ export function findCharacterLookModelOption(
   return CHARACTER_LOOK_MODEL_OPTIONS.find(
     option => option.create_model_id === createId && option.edit_model_id === editId
   );
+}
+
+export function findCharacterLookModelByKey(key: string): CharacterLookModelOption | undefined {
+  const normalized = key.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return CHARACTER_LOOK_MODEL_OPTIONS.find(option => option.key === normalized);
+}
+
+export function getCharacterLookModelKeys(): string[] {
+  return CHARACTER_LOOK_MODEL_OPTIONS.map(option => option.key);
+}
+
+export function formatCharacterLookModelCatalog(): string {
+  return CHARACTER_LOOK_MODEL_OPTIONS.map(
+    option => `${option.label} (\`${option.key}\`)`
+  ).join(', ');
 }
 
 export function mergeCharacterLookModelPayload(
