@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticateUser } from '../../middlewares/auth';
+import { assistSpeechScriptHandler } from './assistSpeechScript';
 import { assistVoiceDesignHandler } from './assistVoiceDesign';
 import { cloneVoice } from './cloneVoice';
 import { deleteVoice } from './deleteVoice';
@@ -28,6 +29,7 @@ router.post('/clone', authenticateUser, cloneVoice);
 router.post('/design', authenticateUser, designVoice);
 router.post('/design/assist', authenticateUser, assistVoiceDesignHandler);
 router.post('/publish', authenticateUser, publishVoice);
+router.post('/speech/assist', authenticateUser, assistSpeechScriptHandler);
 router.post('/speech', authenticateUser, synthesizeSpeech);
 router.patch('/:voiceId', authenticateUser, updateVoice);
 router.delete('/:voiceId', authenticateUser, deleteVoice);

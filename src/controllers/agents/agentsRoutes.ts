@@ -5,6 +5,7 @@ import {
   getAgentModels,
 } from './agentsEndpoints';
 import { runAgent } from './runAgent';
+import { transcribeChatAudioHandler } from './transcribeChatAudio';
 import { visionDescribe } from './visionDescribe';
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.post('/vision', visionDescribe);
 // User agents CRUD
 router.get('/', getAgentModels );
 router.post('/run', authenticateUser, runAgent);
+router.post('/transcribe', authenticateUser, transcribeChatAudioHandler);
 
 export default router;

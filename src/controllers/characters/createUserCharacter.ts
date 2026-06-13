@@ -22,7 +22,7 @@ function parseLookModel(body: Record<string, unknown>) {
 
 /**
  * POST /characters
- * Body: { name, description, voiceId?, gender?, age?, ethnicity?, lookModel? }
+ * Body: { name, description, voiceId?, gender?, age?, ethnicity?, lookModel?, referenceImageUrl? }
  * Creates the character and enqueues base look generation (via DB webhook).
  */
 export async function createUserCharacter(req: Request, res: Response): Promise<void> {
@@ -38,6 +38,7 @@ export async function createUserCharacter(req: Request, res: Response): Promise<
       age: optionalString(body.age),
       ethnicity: optionalString(body.ethnicity),
       lookModel: parseLookModel(body),
+      referenceImageUrl: optionalString(body.referenceImageUrl),
     });
 
     sendOk(res, { character, baseLook }, 201);

@@ -151,6 +151,8 @@ export type CreateCharacterInput = {
   ethnicity?: string | null;
   voice_id?: string | null;
   lookModel?: CharacterLookModelInput;
+  /** When set, base look front view uses the edit model with `images` in the payload. */
+  referenceImageUrl?: string | null;
 };
 
 export type CreateCharacterWithBaseLookResult = {
@@ -209,17 +211,30 @@ export async function createUserCharacterWithBaseLook(
       });
     }
     const lookPayload = mergeCharacterLookModelPayload(lookModelOption, input.lookModel?.payload);
+    const referenceImageUrl = input.referenceImageUrl?.trim();
     const baseLook = await createUserCharacterLookRow({
       user_id: userId,
       character_id: characterId,
       base_look: true,
-      metadata: withPendingLookGenerationMetadata({
-        type: 'create_character_new',
-        prompt,
-        createModelId: lookModelOption.create_model_id,
-        editModelId: lookModelOption.edit_model_id,
-        payload: lookPayload,
-      }),
+      metadata: withPendingLookGenerationMetadata(
+        referenceImageUrl
+          ? {
+              type: 'create_character_look',
+              modelId: lookModelOption.edit_model_id,
+              payload: {
+                ...lookPayload,
+                prompt,
+                images: [referenceImageUrl],
+              },
+            }
+          : {
+              type: 'create_character_new',
+              prompt,
+              createModelId: lookModelOption.create_model_id,
+              editModelId: lookModelOption.edit_model_id,
+              payload: lookPayload,
+            }
+      ),
     });
 
     return { character, baseLook };

@@ -11,6 +11,20 @@ export const CHARACTER_LOOK_VIEWS = ['front', 'back', 'left', 'right'] as const;
 
 export const DEFAULT_BASE_LOOK_NAME = 'Base Look';
 
+/** Embedded `user_files` columns returned on look list/detail endpoints. */
+const LOOK_FILE_EMBED_SELECT = `
+  id,
+  file_name,
+  file_path,
+  file_type,
+  file_size,
+  created_at,
+  thumbnail_url,
+  upload_type,
+  status,
+  generated_info
+`;
+
 export async function createUserCharacterLookRow(input: {
   user_id: string;
   character_id: string;
@@ -172,7 +186,7 @@ export async function listLookViewFilesForLook(
       `
       view,
       user_files (
-        id, file_name, file_path, file_type, file_size, created_at, thumbnail_url, upload_type, status
+        ${LOOK_FILE_EMBED_SELECT}
       )
     `
     )
@@ -250,7 +264,7 @@ export async function listUserCharacterLooksForCharacter(
       user_characters_look_items (
         id, created_at, look_id, file_id, view, metadata,
         user_files (
-          id, file_name, file_path, file_type, file_size, created_at, thumbnail_url, upload_type, status
+          ${LOOK_FILE_EMBED_SELECT}
         )
       )
     `

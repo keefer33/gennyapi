@@ -76,26 +76,9 @@ export function messageRowsToModelMessages(rows: MessageRow[], chatMetadata?: un
 
       for (const p of contentArray) {
         const partType = typeof (p as any).type === 'string' ? (p as any).type : undefined;
+        if (partType === 'media') continue;
+
         const url = typeof (p as any).url === 'string' ? (p as any).url : undefined;
-        const imageUrl = typeof (p as any).imageUrl === 'string' ? (p as any).imageUrl : undefined;
-        const image = typeof (p as any).image === 'string' ? (p as any).image : undefined;
-        const videoUrl = typeof (p as any).videoUrl === 'string' ? (p as any).videoUrl : undefined;
-        const fileUrl = typeof (p as any).fileUrl === 'string' ? (p as any).fileUrl : undefined;
-
-        if (partType === 'image' && (image || imageUrl)) {
-          attachmentLines.push(`- ${(p as any).mediaType ?? 'image'} - ${image ?? imageUrl}`);
-          continue;
-        }
-        if (partType === 'video' && videoUrl) {
-          attachmentLines.push(`- ${(p as any).mediaType ?? 'video'} - ${videoUrl}`);
-          continue;
-        }
-        if (partType === 'file' && fileUrl) {
-          attachmentLines.push(`- ${(p as any).mediaType ?? 'file'} - ${fileUrl}`);
-          continue;
-        }
-
-        // persisted raw attachment inputs
         if (partType && url) {
           attachmentLines.push(`- ${partType} - ${url}`);
         }

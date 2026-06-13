@@ -65,11 +65,6 @@ export type ChatMessageTextPart = {
   text: string;
 };
 
-export type ChatMessageImagePart = {
-  type: 'image';
-  imageUrl: string;
-};
-
 export type ChatMessageToolCallPart = {
   type: 'tool-call';
   toolCallId: string;
@@ -85,13 +80,9 @@ export type ChatMessageToolResultPart = {
   isError?: boolean;
 };
 
-export type StoredPart =
-  | ChatMessageTextPart
-  | ChatMessageImagePart
-  | ChatMessageToolCallPart
-  | ChatMessageToolResultPart;
+export type StoredPart = ChatMessageTextPart | ChatMessageToolCallPart | ChatMessageToolResultPart;
 
 export type ChatMessage = {
   role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string | Array<ChatMessageTextPart | ChatMessageImagePart | ChatMessageToolCallPart | ChatMessageToolResultPart>;
+  content: string | Array<ChatMessageTextPart | ChatMessageToolCallPart | ChatMessageToolResultPart>;
 };

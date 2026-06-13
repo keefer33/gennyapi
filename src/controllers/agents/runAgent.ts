@@ -20,6 +20,7 @@ import {
   sendRunAgentError,
   getSelectedModelRow,
   normalizeAttachments,
+  coerceAgentToolResult,
 } from './agentUtils';
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { insertUserUsageLog } from '../../database/user_usage_log';
@@ -49,9 +50,14 @@ function isLocalGennyToolSlug(toolSlug: string): boolean {
   return toolSlug.startsWith('LOCAL_GENNY_BOT_');
 }
 
+function isVoiceToolSlug(toolSlug: string): boolean {
+  return toolSlug.startsWith('LOCAL_GENNY_BOT_VOICES_');
+}
+
 function isGenerationToolSlug(toolSlug: string): boolean {
   return (
     isLocalGennyToolSlug(toolSlug) &&
+    !isVoiceToolSlug(toolSlug) &&
     toolSlug !== GENNY_STATUS_TOOL_SLUG &&
     toolSlug !== GENNY_COST_TOOL_SLUG
   );
@@ -74,19 +80,7 @@ function extractLocalGennyToolCalls(input: unknown): LocalGennyToolCall[] {
 }
 
 function normalizeToolOutput(output: unknown): unknown {
-  const wrapper = objectRecord(output);
-  if (!wrapper) return output;
-
-  const data = objectRecord(wrapper.data);
-  const isComposioWrapper = 'successful' in wrapper || 'error' in wrapper || 'logId' in wrapper;
-  if (!data || !isComposioWrapper) return output;
-
-  return {
-    ...data,
-    ...(typeof wrapper.error === 'string' && wrapper.error.trim() ? { error: wrapper.error } : {}),
-    ...(typeof wrapper.successful === 'boolean' ? { successful: wrapper.successful } : {}),
-    ...(typeof wrapper.logId === 'string' && wrapper.logId.trim() ? { logId: wrapper.logId } : {}),
-  };
+  return coerceAgentToolResult(output) ?? output;
 }
 
 function generationFilesFromOutput(
@@ -182,11 +176,12 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     }
 
     //leave this here, it connects users to the composio tools
-    const { gennyBotAigenTools, systemPrompt: gennyBotSystemPrompt } = await getAgentCustomTools(
-      (req as any).user.authToken,
-      userId
-    );
-    const allTools = await loadComposioTools(userId, gennyBotAigenTools);
+    const {
+      gennyBotAigenTools,
+      gennyBotVoiceTools,
+      systemPrompt: gennyBotSystemPrompt,
+    } = await getAgentCustomTools((req as any).user.authToken, userId);
+    const allTools = await loadComposioTools(userId, [gennyBotAigenTools, gennyBotVoiceTools]);
     const hasTools = Object.keys(allTools).length > 0;
 
     let sessionMessages: ChatMessage[] = [];
@@ -336,8 +331,13 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
               } catch (e) {
                 console.warn('[runChat] Failed to save generated file, sending data URL:', e);
               }
-              if (writeSSE) writeSSE({ type: 'file', url: urlToSend, mediaType: file.mediaType });
-              collectedParts.push({ type: 'image', imageUrl: urlToSend });
+              const markdownSnippet = file.mediaType.startsWith('image/')
+                ? `\n\n![Generated image](${urlToSend})\n\n`
+                : file.mediaType.startsWith('video/')
+                  ? `\n\n[Generated video](${urlToSend})\n\n`
+                  : `\n\n[Generated file](${urlToSend})\n\n`;
+              currentText += markdownSnippet;
+              if (writeSSE) writeSSE({ type: 'text', content: markdownSnippet });
             }
             break;
           }

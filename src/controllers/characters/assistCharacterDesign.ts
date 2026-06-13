@@ -6,7 +6,7 @@ import { optionalString } from './helpers';
 
 /**
  * POST /characters/assist
- * Body: { description?, name?, gender?, age?, ethnicity? }
+ * Body: { description?, name?, gender?, age?, ethnicity?, referenceImageUrl? }
  */
 export async function assistCharacterDesignHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -19,6 +19,7 @@ export async function assistCharacterDesignHandler(req: Request, res: Response):
       gender: optionalString(body.gender),
       age: optionalString(body.age),
       ethnicity: optionalString(body.ethnicity),
+      referenceImageUrl: optionalString(body.referenceImageUrl),
     });
 
     sendOk(res, result);

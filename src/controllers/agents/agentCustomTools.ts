@@ -12,6 +12,18 @@ import {
 } from './agentUtils';
 import { getGenModelsList } from '../../database/gen_models';
 import { describeFileFromUrl, DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION } from '../../shared/describeFileVision';
+import {
+  assistSpeechScriptToolResultForUser,
+  assistVoiceDesignToolResult,
+  cloneVoiceFromLibraryToolResult,
+  cloneVoiceToolResult,
+  designVoiceToolResult,
+  getVoiceToolResult,
+  listUserVoicesToolResult,
+  publishVoiceToolResult,
+  searchVoiceLibraryToolResult,
+  synthesizeVoiceSpeechToolResult,
+} from './agentVoiceToolResults';
 
 export default async function getAgentCustomTools(_authToken: string, userId: string) {
   const models = await getGenModelsList();
@@ -49,9 +61,152 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     ];
   });
 
+  const voiceTools = [
+    experimental_createTool('LIST_USER_VOICES', {
+      name: 'List user voices',
+      description:
+        'List voices in the authenticated user\'s library (cloned, designed, or published). Optional search filters name/description.',
+      inputParams: z.object({
+        search: z.string().optional().describe('Optional name or description search'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max voices to return (default 20)'),
+      }),
+      execute: async input => listUserVoicesToolResult(userId, input),
+    }),
+    experimental_createTool('SEARCH_VOICE_LIBRARY', {
+      name: 'Search voice library',
+      description:
+        'Search the ElevenLabs community voice library. Returns library_voice_id, preview_url, and metadata. Use before CLONE_VOICE_FROM_LIBRARY.',
+      inputParams: z.object({
+        search: z.string().optional().describe('Search by name, description, or use case'),
+        page: z.number().int().min(0).optional().describe('Page index (default 0)'),
+        page_size: z.number().int().min(1).max(100).optional().describe('Results per page (default 30)'),
+        gender: z.string().optional(),
+        language: z.string().optional(),
+        accent: z.string().optional(),
+        category: z.string().optional(),
+        featured: z.boolean().optional().describe('When true and no filters, returns featured voices'),
+      }),
+      execute: async input => searchVoiceLibraryToolResult(input),
+    }),
+    experimental_createTool('GET_VOICE', {
+      name: 'Get voice details',
+      description:
+        'Get one saved voice by Genny voice_id from the user library, including Inworld provider id when set.',
+      inputParams: z.object({
+        voice_id: z.string().describe('Genny user_voices.id'),
+      }),
+      execute: async input => getVoiceToolResult(userId, input.voice_id ?? ''),
+    }),
+    experimental_createTool('ASSIST_VOICE_DESIGN', {
+      name: 'Assist voice design',
+      description:
+        'AI help writing an Inworld voice designPrompt (30–250 chars) and previewText (50–200 chars). Use before DESIGN_VOICE.',
+      inputParams: z.object({
+        designPrompt: z.string().optional().describe('Current voice description draft'),
+        previewText: z.string().optional().describe('Current preview script draft'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z
+          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
+          .optional(),
+        accent: z.string().optional().describe('Accent label, e.g. American or British'),
+        defaultName: z.string().optional().describe('Preferred display name for the voice'),
+      }),
+      execute: async input => assistVoiceDesignToolResult(input),
+    }),
+    experimental_createTool('DESIGN_VOICE', {
+      name: 'Design voice previews',
+      description:
+        'Generate up to 3 Inworld voice previews from designPrompt + previewText. Stores previews server-side for PUBLISH_VOICE.',
+      inputParams: z.object({
+        designPrompt: z.string().describe('Inworld voice description, 30–250 characters'),
+        previewText: z.string().describe('Preview script spoken in samples, 50–200 characters'),
+        language: z.string().optional().describe('Language code, default EN_US'),
+        numberOfSamples: z.number().int().min(1).max(3).optional().describe('Preview count (default 3)'),
+      }),
+      execute: async input => designVoiceToolResult(userId, input),
+    }),
+    experimental_createTool('PUBLISH_VOICE', {
+      name: 'Publish designed voice',
+      description:
+        'Save a DESIGN_VOICE preview to the user library. Requires inworld_voice_id from design previews (cached ~30 min).',
+      inputParams: z.object({
+        inworld_voice_id: z.string().describe('Inworld voiceId from DESIGN_VOICE previews'),
+        display_name: z.string().describe('Display name for the saved voice'),
+        description: z.string().optional(),
+        previewText: z.string().optional(),
+        designPrompt: z.string().optional(),
+        language: z.string().optional(),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z
+          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
+          .optional(),
+        accent: z.string().optional(),
+      }),
+      execute: async input => publishVoiceToolResult(userId, input),
+    }),
+    experimental_createTool('CLONE_VOICE', {
+      name: 'Clone voice from audio',
+      description:
+        'Clone a voice from a public http(s) audio sample URL. Saves the clone to the user library.',
+      inputParams: z.object({
+        audio_url: z.string().describe('Public URL to a clear speech sample (e.g. from attachments)'),
+        name: z.string().describe('Name for the cloned voice'),
+        description: z.string().optional(),
+        language: z.string().optional().describe('Language code, default EN_US'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z
+          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
+          .optional(),
+        accent: z.string().optional(),
+      }),
+      execute: async input => cloneVoiceToolResult(userId, input),
+    }),
+    experimental_createTool('CLONE_VOICE_FROM_LIBRARY', {
+      name: 'Clone voice from library',
+      description:
+        'Clone an ElevenLabs community library voice into the user library using library_voice_id and preview_url from SEARCH_VOICE_LIBRARY.',
+      inputParams: z.object({
+        library_voice_id: z.string().describe('ElevenLabs voice id from SEARCH_VOICE_LIBRARY'),
+        preview_url: z.string().describe('preview_url from SEARCH_VOICE_LIBRARY for the chosen voice'),
+        name: z.string().optional().describe('Display name override (defaults to library voice name)'),
+        description: z.string().optional(),
+        language: z.string().optional().describe('Language code, e.g. EN_US'),
+        gender: z.enum(['male', 'female', 'neutral']).optional(),
+        age: z
+          .enum(['young', 'young_adult', 'early_middle_aged', 'late_middle_aged', 'senior'])
+          .optional(),
+        accent: z.string().optional(),
+      }),
+      execute: async input => cloneVoiceFromLibraryToolResult(userId, input),
+    }),
+    experimental_createTool('ASSIST_SPEECH_SCRIPT', {
+      name: 'Assist speech script',
+      description:
+        'AI help writing an Inworld TTS script with delivery tags, pauses, and non-verbals (max 2000 chars). Use before SYNTHESIZE_VOICE_SPEECH.',
+      inputParams: z.object({
+        text: z.string().optional().describe('Current script draft to enhance'),
+        title: z.string().optional().describe('Optional speech title'),
+        voice_id: z.string().optional().describe('Genny voice_id for voice-aware scripting'),
+        random: z.boolean().optional().describe('When true, invent a fresh random script'),
+      }),
+      execute: async input => assistSpeechScriptToolResultForUser(userId, input),
+    }),
+    experimental_createTool('SYNTHESIZE_VOICE_SPEECH', {
+      name: 'Synthesize voice speech',
+      description:
+        'Generate TTS audio from text using a saved Genny voice_id. Returns audio_url and speech_id.',
+      inputParams: z.object({
+        voice_id: z.string().describe('Genny user_voices.id'),
+        text: z.string().describe('Script to speak (max 2000 characters)'),
+        title: z.string().optional().describe('Optional label for the speech entry'),
+      }),
+      execute: async input => synthesizeVoiceSpeechToolResult(userId, input),
+    }),
+  ];
+
   const gennyBotAigenTools = experimental_createToolkit('GENNY_BOT', {
     name: 'Genny Bot Ai Gen Tools',
-    description: 'Genny Bot Ai Gen Tools that allow you to generate images and videos.',
+    description: 'Genny Bot tools for image and video generation.',
     tools: [
       ...dynamicTools,
       experimental_createTool('CALCULATE_MODEL_COST', {
@@ -105,6 +260,65 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     ],
   });
 
+  const gennyBotVoiceTools = experimental_createToolkit('GENNY_BOT_VOICES', {
+    name: 'Genny Bot Voice Tools',
+    description: 'Voice design, cloning, publishing, and speech synthesis.',
+    tools: voiceTools,
+  });
+
+  const voiceToolMeta = [
+    {
+      slug: 'LIST_USER_VOICES',
+      name: 'List user voices',
+      description: 'Browse the user\'s saved voices.',
+    },
+    {
+      slug: 'SEARCH_VOICE_LIBRARY',
+      name: 'Search voice library',
+      description: 'Search ElevenLabs community voices.',
+    },
+    {
+      slug: 'GET_VOICE',
+      name: 'Get voice details',
+      description: 'Look up a voice by Genny voice_id.',
+    },
+    {
+      slug: 'ASSIST_VOICE_DESIGN',
+      name: 'Assist voice design',
+      description: 'Draft designPrompt and previewText before designing.',
+    },
+    {
+      slug: 'DESIGN_VOICE',
+      name: 'Design voice previews',
+      description: 'Create Inworld design previews (up to 3).',
+    },
+    {
+      slug: 'PUBLISH_VOICE',
+      name: 'Publish designed voice',
+      description: 'Save a design preview to the user library.',
+    },
+    {
+      slug: 'CLONE_VOICE',
+      name: 'Clone voice from audio',
+      description: 'Clone from a sample audio URL.',
+    },
+    {
+      slug: 'CLONE_VOICE_FROM_LIBRARY',
+      name: 'Clone voice from library',
+      description: 'Clone an ElevenLabs community voice into the user library.',
+    },
+    {
+      slug: 'ASSIST_SPEECH_SCRIPT',
+      name: 'Assist speech script',
+      description: 'Draft TTS scripts with Inworld steering tags.',
+    },
+    {
+      slug: 'SYNTHESIZE_VOICE_SPEECH',
+      name: 'Synthesize voice speech',
+      description: 'Generate speech audio from a saved voice.',
+    },
+  ];
+
   const systemPrompt = buildGennyBotSystemPrompt([
     ...toolPromptMeta,
     {
@@ -124,7 +338,8 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
       description:
         'Analyze a file URL to inform prompts and file-input fields for i2i, i2v, and similar models.',
     },
+    ...voiceToolMeta,
   ]);
 
-  return { gennyBotAigenTools, systemPrompt };
+  return { gennyBotAigenTools, gennyBotVoiceTools, systemPrompt };
 }

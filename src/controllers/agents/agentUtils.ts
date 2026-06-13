@@ -91,11 +91,63 @@ export function normalizeAttachments(attachments: RunAgentBody['attachments']): 
   });
 }
 
+function tryParseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return objectRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+/** Unwrap Composio / AI SDK tool payloads into a flat result object. */
+export function coerceAgentToolResult(output: unknown): Record<string, unknown> | null {
+  let current: unknown = output;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (typeof current === 'string') {
+      const parsed = tryParseJsonObject(current);
+      if (!parsed) return null;
+      current = parsed;
+    }
+
+    const record = objectRecord(current);
+    if (!record) return null;
+
+    const hasWrapper =
+      'data' in record ||
+      'successful' in record ||
+      'error' in record ||
+      'logId' in record ||
+      'log_id' in record;
+
+    const data = record.data;
+    const dataRecord = objectRecord(data) ?? tryParseJsonObject(data);
+
+    if (hasWrapper && dataRecord) {
+      current = dataRecord;
+      continue;
+    }
+
+    return record;
+  }
+
+  return objectRecord(current);
+}
+
+type AgentCustomToolkit = Awaited<ReturnType<typeof getAgentCustomTools>>['gennyBotAigenTools'];
+
 export async function loadComposioTools(
   userId: string,
-  customToolkit: Awaited<ReturnType<typeof getAgentCustomTools>>['gennyBotAigenTools']
+  customToolkits: AgentCustomToolkit | AgentCustomToolkit[]
 ): Promise<Record<string, unknown>> {
   if (!process.env.COMPOSIO_API_KEY) {
+    return {};
+  }
+  const toolkits = Array.isArray(customToolkits) ? customToolkits : [customToolkits];
+  if (toolkits.length === 0) {
     return {};
   }
   try {
@@ -105,7 +157,7 @@ export async function loadComposioTools(
     });
     const session = await composio.create(userId, {
       experimental: {
-        customToolkits: [customToolkit],
+        customToolkits: toolkits,
       },
       manageConnections: true,
     });
@@ -558,7 +610,7 @@ export async function getGenerationStatusToolResult(
       status: 'error',
     };
   }
-
+console.log('item', item);
   const rawStatus = typeof item.status === 'string' ? item.status : '';
   const status = rawStatus.trim().toLowerCase();
   const userFiles = Array.isArray((item as { user_files?: unknown }).user_files)
@@ -577,8 +629,8 @@ export async function getGenerationStatusToolResult(
       payload: item.payload,
     });
     return {
-      markdown,
-      display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
+     // markdown,
+     // display_instruction: 'Display the markdown exactly as provided. Do not summarize it or wrap it in a code block.',
       generation_files: generationFiles,
       generation_id: generationId,
       cost,
@@ -602,17 +654,17 @@ export function buildGennyBotSystemPrompt(tools: GennyToolPromptMeta[]): string 
 
   return [
     'You are a generation-focused assistant.',
-    'Your primary task is helping the user create image and video generations using tools.',
+    'Your primary task is helping the user create image/video generations and manage voices (design, clone, publish, speech) using tools.',
     '',
     'Composio context:',
     '- Composio is a tool-routing layer that lets the model discover and execute external tools.',
-    '- This session includes a custom toolkit called LOCAL_GENNY_BOT.',
-    "- Composio adds the prefix 'LOCAL_' to toolkit names and 'LOCAL_GENNY_BOT_' to tool slugs at runtime.",
-    '- When calling tools, you may need to use the runtime-prefixed tool names (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>).',
-    '- When the user asks for a list of available tools (or "available genny tools"), DO NOT display the LOCAL_/LOCAL_GENNY_BOT_ prefixes. Instead, list tools using their friendly name and description. You may include the plain toolSlug (without LOCAL_ prefixes) if helpful.',
+    '- This session includes custom toolkits LOCAL_GENNY_BOT (image/video generation) and LOCAL_GENNY_BOT_VOICES (voice design, clone, speech).',
+    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>).",
+    '- When calling tools, use the runtime-prefixed tool names.',
+    '- When the user asks for a list of available tools (or "available genny tools"), DO NOT display the LOCAL_ prefixes. Instead, list tools using their friendly name and description. You may include the plain toolSlug if helpful.',
     '',
     'Tooling priority:',
-    '- Always prefer LOCAL_GENNY_BOT image/video/audio generation tools over other Composio tools when the task is generation-related.',
+    '- Always prefer LOCAL_GENNY_BOT / LOCAL_GENNY_BOT_VOICES tools over other Composio tools when the task is generation- or voice-related.',
     '- Use other tools only when LOCAL_GENNY_BOT tools cannot satisfy the request.',
     '- The user may also have other connected Composio tools (from the Genny Bot Tools page). Use them when needed for non-generation tasks or when explicitly requested by the user.',
     '',
@@ -627,6 +679,15 @@ export function buildGennyBotSystemPrompt(tools: GennyToolPromptMeta[]): string 
     '- If LOCAL_GENNY_BOT_GET_GENERATION_STATUS returns status "completed" with a markdown field, your final response MUST be exactly that markdown content.',
     '- Preserve all markdown image tags, links, tables, headings, and generated file metadata from the markdown field.',
     '- Do not summarize, rewrite, omit, or wrap the returned markdown in a code block.',
+    '',
+    'Voice workflows (LOCAL_GENNY_BOT_VOICES_* tools):',
+    '- Design: ASSIST_VOICE_DESIGN (optional) → DESIGN_VOICE → user picks preview → PUBLISH_VOICE with inworld_voice_id + display_name.',
+    '- Clone from sample: CLONE_VOICE with a public audio_url.',
+    '- Clone from community library: SEARCH_VOICE_LIBRARY → user picks voice → CLONE_VOICE_FROM_LIBRARY with library_voice_id + preview_url from search results.',
+    '- Speech: LIST_USER_VOICES or GET_VOICE → ASSIST_SPEECH_SCRIPT (optional) → SYNTHESIZE_VOICE_SPEECH. Share audio_url from the result.',
+    '- Voice preview audio can be shared in markdown links like [Preview: Name](preview_url). Include preview links when listing voices.',
+    '- designPrompt 30–250 chars; previewText 50–200 chars; speech text max 2000 chars.',
+    '- Genny voice_id is the user saved voice id; library_voice_id is ElevenLabs community id before cloning; inworld_voice_id is only for publishing design previews.',
     '',
     'Meta-tools note:',
     '- Composio already injects and documents meta-tools at runtime (search, schemas, execute, connection management, workbench).',

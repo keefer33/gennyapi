@@ -330,10 +330,18 @@ async function runLookViewPipeline(
   }
 }
 
+function referenceImagesFromPayload(payload: Record<string, unknown>): string[] {
+  if (!Array.isArray(payload.images)) return [];
+  return payload.images
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 /** New character: text-to-image front, then edit-image back/right/left. */
 async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow): Promise<void> {
-  const metadata = normalizeLookMetadataRecord(lookRow.metadata);
-  const prompt = trimString(metadata.prompt);
+  const initialMetadata = normalizeLookMetadataRecord(lookRow.metadata);
+  const prompt = trimString(initialMetadata.prompt);
   if (!prompt) {
     throw new AppError('Character look metadata.prompt is required', {
       statusCode: 400,
@@ -341,16 +349,26 @@ async function generateCreateCharacterNewLookViews(lookRow: UserCharacterLookRow
     });
   }
 
-  const createModelId = trimString(metadata.createModelId) || CHARACTER_LOOK_MODEL_ID;
-  const editModelId = trimString(metadata.editModelId) || CHARACTER_LOOK_EDIT_MODEL_ID;
-  const basePayload = normalizePayloadRecord(metadata.payload);
+  await runLookViewPipeline(lookRow, 'generateCreateCharacterNewLookViews', (metadata) => {
+    const createModelId = trimString(metadata.createModelId) || CHARACTER_LOOK_MODEL_ID;
+    const editModelId = trimString(metadata.editModelId) || CHARACTER_LOOK_EDIT_MODEL_ID;
+    const basePayload = normalizePayloadRecord(metadata.payload);
+    const referenceImages = referenceImagesFromPayload(basePayload);
+    const resolvedPrompt = trimString(metadata.prompt) || prompt;
 
-  await runLookViewPipeline(lookRow, 'generateCreateCharacterNewLookViews', () => {
+    if (referenceImages.length > 0) {
+      return {
+        modelId: editModelId,
+        payload: { ...basePayload, prompt: resolvedPrompt, images: referenceImages },
+        sideModelId: editModelId,
+      };
+    }
+
     const frontPayload =
       Object.keys(basePayload).length > 0
-        ? { ...basePayload, prompt }
+        ? { ...basePayload, prompt: resolvedPrompt }
         : {
-            prompt,
+            prompt: resolvedPrompt,
             aspect_ratio: '9:16',
             disable_safety_checker: true,
           };
@@ -377,25 +395,36 @@ async function generateCreateCharacterLookViews(lookRow: UserCharacterLookRow): 
   }));
 }
 
-/** Dispatches look view generation based on `metadata.type`. */
-export async function generateCharacterLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+async function resolveLookRowForGeneration(lookRow: UserCharacterLookRow): Promise<UserCharacterLookRow> {
   const userId = trimString(lookRow.user_id);
   const characterId = trimString(lookRow.character_id);
   const lookId = trimString(lookRow.id);
-  const metadataType = trimString(normalizeLookMetadataRecord(lookRow.metadata).type);
+  if (!userId || !characterId || !lookId) return lookRow;
+
+  const fresh = await getUserCharacterLookForUser(userId, characterId, lookId);
+  return fresh ?? lookRow;
+}
+
+/** Dispatches look view generation based on `metadata.type`. */
+export async function generateCharacterLookViews(lookRow: UserCharacterLookRow): Promise<void> {
+  const resolvedLook = await resolveLookRowForGeneration(lookRow);
+  const userId = trimString(resolvedLook.user_id);
+  const characterId = trimString(resolvedLook.character_id);
+  const lookId = trimString(resolvedLook.id);
+  const metadataType = trimString(normalizeLookMetadataRecord(resolvedLook.metadata).type);
 
   try {
     if (metadataType === CREATE_CHARACTER_NEW_TYPE) {
-      await generateCreateCharacterNewLookViews(lookRow);
+      await generateCreateCharacterNewLookViews(resolvedLook);
       return;
     }
 
     if (metadataType === CREATE_CHARACTER_LOOK_TYPE) {
-      await generateCreateCharacterLookViews(lookRow);
+      await generateCreateCharacterLookViews(resolvedLook);
     }
   } catch (err) {
     if (userId && characterId && lookId) {
-      const parsed = parseLookGenerationMetadata(lookRow.metadata);
+      const parsed = parseLookGenerationMetadata(resolvedLook.metadata);
       if (parsed.generationStatus !== 'failed') {
         await markLookFailed(userId, characterId, lookId, err);
       }

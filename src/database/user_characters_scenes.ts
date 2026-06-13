@@ -7,6 +7,20 @@ import type { UserCharacterSceneRow, UserFileRow } from './types';
 import { getServerClient } from './supabaseClient';
 import { deleteUserGenModelRunForUser } from './user_gen_model_runs';
 
+/** Embedded `user_files` columns returned on scene list endpoints. */
+const SCENE_FILE_EMBED_SELECT = `
+  id,
+  file_name,
+  file_path,
+  file_type,
+  file_size,
+  created_at,
+  thumbnail_url,
+  upload_type,
+  status,
+  generated_info
+`;
+
 export async function createUserCharacterSceneRow(input: {
   user_id: string;
   character_id: string;
@@ -183,7 +197,7 @@ export async function listUserCharacterScenesForCharacter(
       user_gen_model_runs (
         id, status,
         user_files (
-          id, file_name, file_path, file_type, file_size, created_at, thumbnail_url, upload_type, status
+          ${SCENE_FILE_EMBED_SELECT}
         )
       )
     `

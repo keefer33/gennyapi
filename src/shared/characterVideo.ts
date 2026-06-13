@@ -24,7 +24,7 @@ export const CHARACTER_VIDEO_MODEL_OPTIONS: CharacterLookModelOption[] = [
     edit_model_id: 'fae0f07a-a756-4616-b280-3678ed221653',
     fields: {
       default: {
-        disable_safety_checker: true,
+        disable_safety_filter: true,
       },
       ui: {
         "resolution": {
