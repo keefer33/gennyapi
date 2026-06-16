@@ -19,6 +19,7 @@ export async function calculatePlaygroundRunCost(
     case 'prunaai':
     case 'kling':
     case 'skyreels':
+    case 'ltx':
       return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
     case 'wavespeed':
       return getWavespeedCost(

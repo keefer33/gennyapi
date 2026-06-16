@@ -8,6 +8,7 @@ import { webhookEachlabs } from '../api-vendors/eachlabs/webhookEachlabs';
 import { webhookPrunaai } from '../api-vendors/prunaai/webhookPrunaai';
 import { webhookKling } from '../api-vendors/kling/webhookKling';
 import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
+import { webhookLtx } from '../api-vendors/ltx/webhookLtx';
 import { getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
 import { getUserFilesByRunIdForCharacter } from '../database/user_files';
 import type { GenModelRow, UserFileRow, UserGenModelRuns } from '../database/types';
@@ -86,6 +87,9 @@ export async function advanceGenModelRunPoll(runRow: UserGenModelRuns): Promise<
       break;
     case 'skyreels':
       await webhookSkyreels(vendorContext);
+      break;
+    case 'ltx':
+      await webhookLtx(vendorContext);
       break;
     default:
       break;
