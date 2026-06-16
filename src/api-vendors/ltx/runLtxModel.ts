@@ -7,17 +7,34 @@ import { GenModelRow } from '../../database/types';
  * @see https://docs.ltx.video/api-documentation/api-reference/async-video-generation/submit-text-to-video
  */
 export type LtxApiSchema = {
+  type?: string;
+  method?: string;
   server?: string;
   /** Submit path, e.g. `/v2/text-to-video`, `/v2/image-to-video`, `/v2/audio-to-video`. */
   api_path?: string;
-  /** Poll endpoint segment for GET `/v2/{polling_path}/{id}` (defaults from api_path). */
+  /** Poll path prefix before job id, e.g. `/v2/audio-to-video` → GET `{server}{polling_path}/{id}`. */
   polling_path?: string;
   /** Injected as `model` when omitted from the request payload. */
   vendor_model_name?: string;
 };
 
 const DEFAULT_SERVER = 'https://api.ltx.video';
-const DEFAULT_SUBMIT_PATH = '/v2/text-to-video';
+const DEFAULT_API_PATH = '/v2/text-to-video';
+
+export function trimLtxString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function ltxPathPrefix(path: string): string {
+  const trimmed = path.replace(/\/+$/, '');
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+export function ltxPollPrefix(apiSchema: LtxApiSchema): string {
+  return ltxPathPrefix(
+    trimLtxString(apiSchema.polling_path) || trimLtxString(apiSchema.api_path) || DEFAULT_API_PATH
+  );
+}
 
 type LtxSubmitResponse = {
   id?: string;
@@ -29,20 +46,16 @@ type LtxSubmitResponse = {
   };
 };
 
-function trimString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
 function ltxErrorMessage(data: unknown, fallback: string): string {
   if (!data || typeof data !== 'object') return fallback;
   const row = data as Record<string, unknown>;
   const nested = row.error;
   if (nested && typeof nested === 'object' && 'message' in nested) {
-    const msg = trimString((nested as { message?: unknown }).message);
+    const msg = trimLtxString((nested as { message?: unknown }).message);
     if (msg) return msg;
   }
   if ('message' in row) {
-    const msg = trimString(row.message);
+    const msg = trimLtxString(row.message);
     if (msg) return msg;
   }
   return fallback;
@@ -51,11 +64,10 @@ function ltxErrorMessage(data: unknown, fallback: string): string {
 export async function runLtxModel(genModel: GenModelRow, payload: unknown) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema as LtxApiSchema | null) ?? {};
   const server = (typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '') || DEFAULT_SERVER;
-  const apiPath =
-    (typeof apiSchema.api_path === 'string' && apiSchema.api_path.trim()) || DEFAULT_SUBMIT_PATH;
-  const vendorModelName = trimString(apiSchema.vendor_model_name);
+  const apiPath = trimLtxString(apiSchema.api_path) || DEFAULT_API_PATH;
+  const vendorModelName = trimLtxString(apiSchema.vendor_model_name);
 
-  const apiKey = trimString(genModel.gen_models_apis_id?.vendor_api?.api_key);
+  const apiKey = trimLtxString(genModel.gen_models_apis_id?.vendor_api?.api_key);
   if (!apiKey) {
     throw new AppError('LTX API key is not configured for this model', {
       statusCode: 500,
@@ -65,12 +77,12 @@ export async function runLtxModel(genModel: GenModelRow, payload: unknown) {
   }
 
   const base = server.replace(/\/+$/, '');
-  const path = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  const path = ltxPathPrefix(apiPath);
   const endpoint = `${base}${path}`;
 
   const requestPayload =
     payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...(payload as Record<string, unknown>) } : {};
-  if (vendorModelName && !trimString(requestPayload.model)) {
+  if (vendorModelName && !trimLtxString(requestPayload.model)) {
     requestPayload.model = vendorModelName;
   }
 
@@ -95,7 +107,7 @@ export async function runLtxModel(genModel: GenModelRow, payload: unknown) {
     });
   }
 
-  const jobId = trimString(data.id);
+  const jobId = trimLtxString(data.id);
   if (!jobId) {
     throw new AppError('LTX response did not include job id', {
       statusCode: 502,
