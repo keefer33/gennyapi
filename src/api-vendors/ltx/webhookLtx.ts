@@ -107,7 +107,7 @@ export async function webhookLtx(context: WebhookVendorContext<LtxPollApiSchema>
     return;
   }
 
-  const endpoint = `${base}/v2/${encodeURIComponent(pollEndpoint)}/${encodeURIComponent(jobId)}`;
+  const endpoint = `${base}/${encodeURIComponent(pollEndpoint)}/${encodeURIComponent(jobId)}`;
   const response = await axios.get(endpoint, {
     headers: {
       Accept: 'application/json',
