@@ -8,6 +8,7 @@ import { createUserFileRow } from '../database/user_files';
 import { createUserVoiceRow } from '../database/user_voices';
 import type { UserFileRow, UserVoiceRow } from '../database/types';
 import { downloadUrlToBuffer, getMimeType } from './fileUtils';
+import { audioFilenameWithDetectedExtension, detectAudioFormat } from './audioFormatUtils';
 import { uploadFileToZipline } from './ziplineApi';
 import { getZiplineTokenForUser } from '../controllers/zipline/ziplineUtils';
 
@@ -38,9 +39,8 @@ export type CloneUserVoiceResult = {
   };
 };
 
-function cloneSampleFilename(inworldVoiceId: string, voiceName: string): string {
-  const base = (voiceName || inworldVoiceId).replace(/[^\w.-]+/g, '_').slice(0, 80);
-  return `${base || inworldVoiceId}-clone-sample.wav`;
+function cloneSampleFilename(inworldVoiceId: string, voiceName: string, buffer: Buffer): string {
+  return audioFilenameWithDetectedExtension(voiceName || inworldVoiceId, buffer, 'clone-sample');
 }
 
 function bufferFromBase64Audio(data: string): Buffer {
@@ -161,13 +161,14 @@ export async function cloneUserVoice(
     });
   }
 
-  const validatedBuffer = bufferFromBase64Audio(validatedAudioBase64);
-  const filename = cloneSampleFilename(inworldVoiceId, name);
+  const sampleBuffer = sourceAudio;
+  const audioFormat = detectAudioFormat(sampleBuffer);
+  const filename = cloneSampleFilename(inworldVoiceId, name, sampleBuffer);
   const token = options?.ziplineToken ?? (await getZiplineTokenForUser(userId));
 
   let ziplineBody: Awaited<ReturnType<typeof uploadFileToZipline>>;
   try {
-    ziplineBody = await uploadFileToZipline(validatedBuffer, filename, token);
+    ziplineBody = await uploadFileToZipline(sampleBuffer, filename, token);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new AppError(message, {
@@ -186,13 +187,13 @@ export async function cloneUserVoice(
     });
   }
 
-  const fileType = uploaded.type ?? getMimeType(filename);
+  const fileType = uploaded.type ?? audioFormat.mimeType ?? getMimeType(filename);
   const fileRow = await createUserFileRow({
     user_id: userId,
     voice_id: userVoiceId,
     file_name: (uploaded as { name?: string }).name ?? filename,
     file_path: uploaded.url,
-    file_size: validatedBuffer.length,
+    file_size: sampleBuffer.length,
     file_type: fileType,
     status: 'active',
     upload_type: 'voice_clone',

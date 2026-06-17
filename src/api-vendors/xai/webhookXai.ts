@@ -8,7 +8,7 @@ import {
 } from '../../shared/webhooksUtils';
 import type { WebhookVendorContext } from '../../controllers/webhooks/webhookPolling';
 
-const XAI_INSTANT_IMAGE_VENDOR_MODEL = 'grok-imagine-image';
+const XAI_INSTANT_IMAGE_VENDOR_MODEL = 'grok-imagine-image-quality';
 
 type XaiPollingResponse = {
   status?: string;
@@ -24,6 +24,7 @@ type XaiPollingResponse = {
 };
 
 type XaiApiSchema = {
+  type?: unknown;
   server?: unknown;
   polling_path?: unknown;
   api_path?: unknown;
@@ -90,7 +91,7 @@ function xaiErrorMessage(responseData: unknown): string | null {
 export async function webhookXai(context: WebhookVendorContext<XaiApiSchema>): Promise<void> {
   const { run, runId, rowStatus, apiSchema, apiKey, vendorModelName } = context;
   const duration = durationForRun(run);
-  const isInstantImage = vendorModelName === XAI_INSTANT_IMAGE_VENDOR_MODEL;
+  const isInstantImage = apiSchema.type === 'instant';
   const server = typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '';
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
   const apiPath = typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim() : '';

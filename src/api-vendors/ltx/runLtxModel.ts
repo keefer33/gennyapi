@@ -61,6 +61,67 @@ function ltxErrorMessage(data: unknown, fallback: string): string {
   return fallback;
 }
 
+const LTX_RESOLUTION_BY_PRESET: Record<string, Record<string, string>> = {
+  '1080p': {
+    '16:9': '1920x1080',
+    '9:16': '1080x1920',
+  },
+  '1440p': {
+    '16:9': '2560x1440',
+    '9:16': '1440x2560',
+  },
+  '4k': {
+    '16:9': '3840x2160',
+    '9:16': '2160x3840',
+  },
+};
+
+function normalizeLtxResolutionPreset(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return normalized === '4k' ? '4k' : normalized;
+}
+
+/** Maps UI presets (`1080p` + `16:9`) to LTX pixel resolution strings (`1920x1080`). */
+export function ltxResolutionFromPreset(resolution: unknown, aspectRatio: unknown): string {
+  const preset = normalizeLtxResolutionPreset(trimLtxString(resolution));
+  const ratio = trimLtxString(aspectRatio) || '16:9';
+  const byAspect = LTX_RESOLUTION_BY_PRESET[preset];
+  if (!byAspect) {
+    throw new AppError(`Unsupported LTX resolution preset: ${trimLtxString(resolution) || '(empty)'}`, {
+      statusCode: 400,
+      code: 'ltx_invalid_resolution',
+      expose: true,
+    });
+  }
+  const pixels = byAspect[ratio];
+  if (!pixels) {
+    throw new AppError(`Unsupported LTX aspect ratio: ${ratio}`, {
+      statusCode: 400,
+      code: 'ltx_invalid_aspect_ratio',
+      expose: true,
+    });
+  }
+  return pixels;
+}
+
+function isLtxPixelResolution(value: string): boolean {
+  return /^\d+x\d+$/i.test(value.trim());
+}
+
+function applyLtxResolutionPreset(requestPayload: Record<string, unknown>): void {
+  const resolutionRaw = trimLtxString(requestPayload.resolution);
+  if (!resolutionRaw || isLtxPixelResolution(resolutionRaw)) {
+    delete requestPayload.aspect_ratio;
+    return;
+  }
+
+  requestPayload.resolution = ltxResolutionFromPreset(
+    resolutionRaw,
+    requestPayload.aspect_ratio ?? '16:9'
+  );
+  delete requestPayload.aspect_ratio;
+}
+
 export async function runLtxModel(genModel: GenModelRow, payload: unknown) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema as LtxApiSchema | null) ?? {};
   const server = (typeof apiSchema.server === 'string' ? apiSchema.server.trim() : '') || DEFAULT_SERVER;
@@ -84,7 +145,11 @@ export async function runLtxModel(genModel: GenModelRow, payload: unknown) {
     payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...(payload as Record<string, unknown>) } : {};
   if (vendorModelName && !trimLtxString(requestPayload.model)) {
     requestPayload.model = vendorModelName;
+  } else {
+    requestPayload.model = requestPayload.model === 'fast' ? 'ltx-2-3-fast' : 'ltx-2-3-pro';
   }
+
+  applyLtxResolutionPreset(requestPayload);
 
   const response = await axios.post(endpoint, requestPayload, {
     headers: {

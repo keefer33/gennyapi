@@ -1,6 +1,7 @@
 import { createUserFileRow } from '../database/user_files';
 import { getZiplineTokenForUser } from '../controllers/zipline/ziplineUtils';
-import { getMimeType } from './fileUtils';
+import { audioFilenameForInworldDesignPreview, MP3_AUDIO_FORMAT } from './audioFormatUtils';
+import { prepareInworldDesignPreviewMp3 } from './transcodeAudioToMp3';
 import { uploadFileToZipline } from './ziplineApi';
 
 function bufferFromBase64Audio(data: string): Buffer {
@@ -10,11 +11,6 @@ function bufferFromBase64Audio(data: string): Buffer {
     throw new Error('previewAudio is empty');
   }
   return Buffer.from(base64.replace(/\s/g, ''), 'base64');
-}
-
-function previewFilename(inworldVoiceId: string, index: number): string {
-  const suffix = inworldVoiceId.replace(/[^\w.-]+/g, '_').slice(-24) || `preview-${index + 1}`;
-  return `voice-design-preview-${String.fromCharCode(65 + index)}-${suffix}.mp3`;
 }
 
 export async function uploadVoiceDesignPreviewAudio(
@@ -28,20 +24,24 @@ export async function uploadVoiceDesignPreviewAudio(
   if (!uid || !voiceId || !previewAudio.trim()) return null;
 
   try {
-    const buffer = bufferFromBase64Audio(previewAudio);
-    const filename = previewFilename(voiceId, index);
+    const previewBuffer = bufferFromBase64Audio(previewAudio);
+    const mp3Buffer = await prepareInworldDesignPreviewMp3(previewBuffer);
+    const suffix = voiceId.replace(/[^\w.-]+/g, '_').slice(-24) || `preview-${index + 1}`;
+    const filename = audioFilenameForInworldDesignPreview(
+      `voice-design-preview-${String.fromCharCode(65 + index)}`,
+      suffix
+    );
     const token = await getZiplineTokenForUser(uid);
-    const ziplineBody = await uploadFileToZipline(buffer, filename, token);
+    const ziplineBody = await uploadFileToZipline(mp3Buffer, filename, token);
     const uploaded = ziplineBody?.files?.[0];
     if (!uploaded?.url) return null;
 
-    const fileType = uploaded.type ?? getMimeType(filename);
     await createUserFileRow({
       user_id: uid,
       file_name: (uploaded as { name?: string }).name ?? filename,
       file_path: uploaded.url,
-      file_size: buffer.length,
-      file_type: fileType,
+      file_size: mp3Buffer.length,
+      file_type: MP3_AUDIO_FORMAT.mimeType,
       status: 'active',
       upload_type: 'voice_design_preview',
       generated_info: {

@@ -4,7 +4,8 @@ import { badRequest } from '../app/response';
 import { createUserFileRow } from '../database/user_files';
 import { createUserVoiceRow } from '../database/user_voices';
 import type { UserFileRow, UserVoiceRow } from '../database/types';
-import { getMimeType } from './fileUtils';
+import { audioFilenameForInworldDesignPreview, MP3_AUDIO_FORMAT } from './audioFormatUtils';
+import { prepareInworldDesignPreviewMp3 } from './transcodeAudioToMp3';
 import { uploadFileToZipline } from './ziplineApi';
 import { getZiplineTokenForUser } from '../controllers/zipline/ziplineUtils';
 
@@ -43,11 +44,6 @@ function bufferFromBase64Audio(data: string): Buffer {
     });
   }
   return Buffer.from(base64.replace(/\s/g, ''), 'base64');
-}
-
-function previewFilename(inworldVoiceId: string, voiceName: string): string {
-  const base = (voiceName || inworldVoiceId).replace(/[^\w.-]+/g, '_').slice(0, 80);
-  return `${base || inworldVoiceId}-preview.mp3`;
 }
 
 export async function publishUserVoice(
@@ -122,12 +118,13 @@ export async function publishUserVoice(
   }
 
   const previewBuffer = bufferFromBase64Audio(input.previewAudio);
-  const filename = previewFilename(inworldVoiceId, displayName);
+  const mp3Buffer = await prepareInworldDesignPreviewMp3(previewBuffer);
+  const filename = audioFilenameForInworldDesignPreview(voiceNameOrId(inworldVoiceId, displayName), 'preview');
   const token = await getZiplineTokenForUser(userId);
 
   let ziplineBody: Awaited<ReturnType<typeof uploadFileToZipline>>;
   try {
-    ziplineBody = await uploadFileToZipline(previewBuffer, filename, token);
+    ziplineBody = await uploadFileToZipline(mp3Buffer, filename, token);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new AppError(message, {
@@ -146,14 +143,13 @@ export async function publishUserVoice(
     });
   }
 
-  const fileType = uploaded.type ?? getMimeType(filename);
   const fileRow = await createUserFileRow({
     user_id: userId,
     voice_id: userVoiceId,
     file_name: (uploaded as { name?: string }).name ?? filename,
     file_path: uploaded.url,
-    file_size: previewBuffer.length,
-    file_type: fileType,
+    file_size: mp3Buffer.length,
+    file_type: MP3_AUDIO_FORMAT.mimeType,
     status: 'active',
     upload_type: 'voice_design',
     generated_info: {
@@ -170,4 +166,8 @@ export async function publishUserVoice(
     file: fileRow,
     inworld: { voiceId: inworldVoiceId },
   };
+}
+
+function voiceNameOrId(inworldVoiceId: string, voiceName: string): string {
+  return voiceName || inworldVoiceId;
 }

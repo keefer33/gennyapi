@@ -254,7 +254,7 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
 
   let query = supabaseServerClient
     .from('user_files')
-    .select(FILE_SELECT, { count: 'planned' })
+    .select(FILE_SELECT, { count: 'exact' })
     .eq('user_id', userId)
     .eq('status', 'active');
 
