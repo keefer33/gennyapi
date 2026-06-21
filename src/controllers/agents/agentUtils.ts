@@ -21,6 +21,7 @@ import {
   GenerationUserFile,
   GenerationModelInfo,
 } from './types';
+import { handleUpdateChat } from '../../database/user_models_chats';
 
 export function createSSEWriter(res: Response): SSEWriter {
   return (data: Record<string, unknown>) => {
@@ -138,7 +139,9 @@ type AgentCustomToolkit = Awaited<ReturnType<typeof getAgentCustomTools>>['genny
 
 export async function loadComposioTools(
   userId: string,
-  customToolkits: AgentCustomToolkit | AgentCustomToolkit[]
+  customToolkits: AgentCustomToolkit | AgentCustomToolkit[],
+  sessionId?: string,
+  chatId?: string | null
 ): Promise<Record<string, unknown>> {
   if (!process.env.COMPOSIO_API_KEY) {
     return {};
@@ -152,12 +155,26 @@ export async function loadComposioTools(
       apiKey: process.env.COMPOSIO_API_KEY,
       provider: new VercelProvider(),
     });
-    const session = await composio.create(userId, {
-      experimental: {
-        customToolkits: toolkits,
-      },
-      manageConnections: true,
-    });
+    let session: { sessionId?: string; tools: () => Promise<unknown> };
+    if (sessionId) {
+      session = await composio.use(sessionId);
+    } else {
+      session = await composio.create(userId, {
+        experimental: {
+          customToolkits: toolkits,
+        },
+        manageConnections: true,
+      });
+      if (chatId && session.sessionId) {
+        await handleUpdateChat(userId, chatId, {
+          metadata: {
+            composio: {
+              sessionId: session.sessionId,
+            },
+          },
+        });
+      }
+    }
     const composioTools = await session.tools();
     return (composioTools ?? {}) as Record<string, unknown>;
   } catch (composioErr) {

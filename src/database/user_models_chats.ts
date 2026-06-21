@@ -24,6 +24,9 @@ export type ChatGenerationMetadata = {
 
 export type ChatMetadata = {
   generations?: ChatGenerationMetadata[];
+  composio?: {
+    sessionId?: string;
+  };
   [key: string]: unknown;
 };
 
@@ -35,6 +38,24 @@ function toChatMetadata(value: unknown): ChatMetadata {
   const record = objectRecord(value);
   return record ? (record as ChatMetadata) : {};
 }
+
+function mergeMetadataRecords(existing: ChatMetadata, patch: ChatMetadata): ChatMetadata {
+  const next: ChatMetadata = { ...existing };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const previous = objectRecord(existing[key]);
+      next[key] = previous ? { ...previous, ...(value as Record<string, unknown>) } : value;
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+export type UpdateChatInput = {
+  chat_name?: string | null;
+  metadata?: ChatMetadata;
+};
 
 /** Ensures the chat exists and belongs to `userId`; throws `AppError` (404) otherwise. */
 export async function checkChatOwnership(
@@ -99,11 +120,31 @@ export const handleGetChat = async (userId: string, chat_id: string) => {
   return { data };
 };
 
-export const handleUpdateChat = async (userId: string, chat_id: string, chat_name: string) => {
+export const handleUpdateChat = async (
+  userId: string,
+  chat_id: string,
+  input: UpdateChatInput = {}
+) => {
+  const updates: Record<string, unknown> = {};
+
+  if (input.chat_name !== undefined) {
+    updates.chat_name =
+      typeof input.chat_name === 'string' ? input.chat_name.trim() || null : null;
+  }
+
+  if (input.metadata !== undefined) {
+    const existing = await handleGetChatMetadata(userId, chat_id);
+    updates.metadata = mergeMetadataRecords(existing, toChatMetadata(input.metadata));
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return handleGetChat(userId, chat_id);
+  }
+
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_MODELS_CHATS_TABLE)
-    .update({ chat_name: chat_name.trim() || null })
+    .update(updates)
     .eq("id", chat_id)
     .eq("user_id", userId)
     .select("id, created_at, updated_at, user_id, chat_name, metadata")
@@ -157,21 +198,7 @@ export const mergeChatGenerationMetadata = async (
 ): Promise<ChatMetadata> => {
   if (generations.length === 0) return handleGetChatMetadata(userId, chat_id);
 
-  const { supabaseServerClient } = await getServerClient();
-  const { data: existingRow, error: readError } = await supabaseServerClient
-    .from(USER_MODELS_CHATS_TABLE)
-    .select('metadata')
-    .eq('id', chat_id)
-    .eq('user_id', userId)
-    .single();
-  if (readError || !existingRow) {
-    throw new AppError('Chat not found', {
-      statusCode: 404,
-      code: 'chat_not_found',
-    });
-  }
-
-  const metadata = toChatMetadata((existingRow as { metadata?: unknown }).metadata);
+  const metadata = await handleGetChatMetadata(userId, chat_id);
   const byId = new Map<string, ChatGenerationMetadata>();
   for (const generation of metadata.generations ?? []) {
     if (generation?.generation_id) byId.set(generation.generation_id, generation);
@@ -188,21 +215,15 @@ export const mergeChatGenerationMetadata = async (
     });
   }
 
-  const nextMetadata: ChatMetadata = {
-    ...metadata,
-    generations: Array.from(byId.values()),
-  };
-  const { error: updateError } = await supabaseServerClient
-    .from(USER_MODELS_CHATS_TABLE)
-    .update({ metadata: nextMetadata })
-    .eq('id', chat_id)
-    .eq('user_id', userId);
-  if (updateError) {
-    throw new AppError(updateError.message, {
-      statusCode: 500,
-      code: 'user_models_chats_metadata_update_failed',
-    });
-  }
+  const nextGenerations = Array.from(byId.values());
+  await handleUpdateChat(userId, chat_id, {
+    metadata: {
+      generations: nextGenerations,
+    },
+  });
 
-  return nextMetadata;
+  return {
+    ...metadata,
+    generations: nextGenerations,
+  };
 };

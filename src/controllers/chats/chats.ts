@@ -65,7 +65,7 @@ export const updateChat = async (req: Request, res: Response) => {
     if (!chat_id) {
       throw badRequest('chat_id is required');
     }
-    const result = await handleUpdateChat(userId, chat_id, chat_name ?? '');
+    const result = await handleUpdateChat(userId, chat_id, { chat_name: chat_name ?? '' });
     sendOk(res, result.data);
   } catch (error) {
     sendError(res, error);

@@ -2,7 +2,24 @@
 FROM node:latest
 
 # Install ffmpeg for video thumbnail generation
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+ffmpeg \
+libnss3 \
+libdbus-1-3 \
+libatk1.0-0 \
+libgbm-dev \
+libasound2 \
+libxrandr2 \
+libxkbcommon-dev \
+libxfixes3 \
+libxcomposite1 \
+libxdamage1 \
+libatk-bridge2.0-0 \
+libpango-1.0-0 \
+libcairo2 \
+libcups2
+
+RUN rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app

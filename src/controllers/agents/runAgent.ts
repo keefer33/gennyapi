@@ -107,13 +107,12 @@ function generationFilesFromOutput(
         ...(fileType ? { file_type: fileType } : {}),
       };
     })
-    .filter((file): file is NonNullable<NonNullable<ChatGenerationMetadata['tool_result']>['files']>[number] => file != null);
+    .filter(
+      (file): file is NonNullable<NonNullable<ChatGenerationMetadata['tool_result']>['files']>[number] => file != null
+    );
 }
 
-function metadataEntriesFromToolResult(
-  toolCalls: LocalGennyToolCall[],
-  output: unknown
-): ChatGenerationMetadata[] {
+function metadataEntriesFromToolResult(toolCalls: LocalGennyToolCall[], output: unknown): ChatGenerationMetadata[] {
   const outputRecord = objectRecord(output);
   if (!outputRecord) return [];
 
@@ -180,22 +179,8 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         break;
     }
 
-    //leave this here, it connects users to the composio tools
-    const {
-      gennyBotAigenTools,
-      gennyBotVoiceTools,
-      gennyBotCharacterTools,
-      systemPrompt: gennyBotSystemPrompt,
-    } = await getAgentCustomTools((req as any).user.authToken, userId);
-    const allTools = await loadComposioTools(userId, [
-      gennyBotAigenTools,
-      gennyBotVoiceTools,
-      gennyBotCharacterTools,
-    ]);
-    const hasTools = Object.keys(allTools).length > 0;
-
     let sessionMessages: ChatMessage[] = [];
-    let chatMetadata: unknown = null;
+    let chatMetadata: any | unknown = null;
     if (chat_id) {
       chatMetadata = await handleGetChatMetadata(userId, chat_id);
       const msgResult = await handleListChatMessages(userId, chat_id, { order: 'asc' });
@@ -203,6 +188,25 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         sessionMessages = messageRowsToModelMessages(msgResult?.data as unknown as MessageRow[], chatMetadata);
       }
     }
+
+    //leave this here, it connects users to the composio tools
+    const {
+      gennyBotAigenTools,
+      gennyBotVoiceTools,
+      gennyBotCharacterTools,
+      systemPrompt: gennyBotSystemPrompt,
+    } = await getAgentCustomTools((req as any).user.authToken, userId);
+    const composioSessionId =
+      chatMetadata && typeof chatMetadata === 'object' && !Array.isArray(chatMetadata)
+        ? (chatMetadata as { composio?: { sessionId?: string } }).composio?.sessionId
+        : undefined;
+    const allTools = await loadComposioTools(
+      userId,
+      [gennyBotAigenTools, gennyBotVoiceTools, gennyBotCharacterTools],
+      composioSessionId,
+      chat_id
+    );
+    const hasTools = Object.keys(allTools).length > 0;
 
     const normalizedAttachments = normalizeAttachments(attachments);
     const attachmentLines = normalizedAttachments.map(a => `- ${String(a.type ?? 'file')} - ${a.url}`);
