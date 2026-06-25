@@ -13,6 +13,7 @@ import playgroundRoutes from '../controllers/playground/playgroundRoutes';
 import charactersRoutes from '../controllers/characters/charactersRoutes';
 import voicesRoutes from '../controllers/voices/voicesRoutes';
 import remotionRoutes from '../controllers/remotion/remotionRoutes';
+import storyboardsRoutes from '../controllers/storyboards/storyboardsRoutes';
 import { sendOk } from './response';
 
 export function createAppRouter() {
@@ -32,6 +33,7 @@ export function createAppRouter() {
   router.use('/characters', charactersRoutes);
   router.use('/voices', voicesRoutes);
   router.use('/remotion', remotionRoutes);
+  router.use('/storyboards', storyboardsRoutes);
 
   router.get('/health', (_req: Request, res: Response) => {
     sendOk(res, {

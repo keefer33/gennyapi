@@ -193,6 +193,24 @@ export type UserCharacterLookItemRow = {
   metadata?: unknown | null;
 };
 
+/** Matches `public.user_storyboards` */
+export type UserStoryboardRow = {
+  id?: string | null;
+  user_id?: string | null;
+  created_at?: string | null;
+  title?: string | null;
+  settings?: unknown | null;
+};
+
+/** Matches `public.user_storyboard_scenes` */
+export type UserStoryboardSceneRow = {
+  id?: string | null;
+  storyboard_id?: string | null;
+  created_at?: string | null;
+  title?: string | null;
+  scene?: unknown | null;
+};
+
 /** Matches `public.user_tags` */
 export type UserTagRow = {
   id?: string | null;
