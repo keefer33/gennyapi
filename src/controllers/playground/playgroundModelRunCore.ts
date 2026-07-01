@@ -18,6 +18,7 @@ import { runKlingModel } from '../../api-vendors/kling/runKlingModel';
 import { runSkyreelsModel } from '../../api-vendors/skyreels/runSkyreelsModel';
 import { runLtxModel } from '../../api-vendors/ltx/runLtxModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
+import { startGenModelRunPolling } from '../../shared/startGenModelRunPolling';
 
 type PlaygroundApiSchema = {
   type?: unknown;
@@ -150,6 +151,10 @@ export async function executePlaygroundModelRun(
     });
 
     await updateUserUsageBalance(userId, cost, 'debit');
+
+    if (genModelRun.id) {
+      startGenModelRunPolling(userId, genModelRun.id);
+    }
 
     return genModelRun;
   } catch (err: unknown) {

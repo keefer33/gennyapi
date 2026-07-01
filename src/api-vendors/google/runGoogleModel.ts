@@ -4,7 +4,7 @@ import type { GenModelRow } from '../../database/types';
 import { base64WithoutDataUrl, mimeFromBase64DataUrl } from '../../shared/fileUtils';
 import {
   DEFAULT_GOOGLE_GEMINI_SERVER,
-  googleInteractionsEndpoint,
+  GOOGLE_OMNI_PLACEHOLDER_PREFIX,
   isOmniModel,
   trimString,
   type GoogleApiSchema,
@@ -205,7 +205,7 @@ function inferOmniVideoTask(
   return 'text_to_video';
 }
 
-async function googleOmniRequestPayload(model: string, payload: unknown): Promise<Record<string, unknown>> {
+export async function buildGoogleOmniRequestPayload(model: string, payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   if (originalPayload.input !== undefined) {
     const request = { ...originalPayload };
@@ -354,6 +354,16 @@ async function googleVideoRequestPayload(payload: unknown): Promise<Record<strin
   };
 }
 
+function deferredGoogleOmniResponse(model: string) {
+  return {
+    id: `${GOOGLE_OMNI_PLACEHOLDER_PREFIX}${Date.now()}`,
+    request_id: null,
+    status: 'pending',
+    deferred_to_webhook: true,
+    model,
+  };
+}
+
 function deferredGoogleImageResponse(model: string) {
   return {
     id: `google-image-${Date.now()}`,
@@ -391,36 +401,6 @@ async function postGoogleRequest(
   return response;
 }
 
-async function runGoogleOmniModel(
-  genModel: GenModelRow,
-  apiSchema: GoogleApiSchema,
-  vendorModelName: string,
-  payload: unknown
-) {
-  const response = await postGoogleRequest(
-    genModel,
-    googleInteractionsEndpoint(apiSchema),
-    await googleOmniRequestPayload(vendorModelName, payload)
-  );
-
-  const interactionId = trimString(response.data?.id);
-  if (!interactionId) {
-    throw new AppError('Google Omni response missing interaction id', {
-      statusCode: 502,
-      code: 'google_omni_response_missing_interaction_id',
-      details: response.data,
-      expose: true,
-    });
-  }
-
-  const status = trimString(response.data?.status).toLowerCase() || 'pending';
-  return {
-    ...(response.data as Record<string, unknown>),
-    id: interactionId,
-    status: status === 'completed' ? 'completed' : 'pending',
-  };
-}
-
 async function runGoogleVeoModel(genModel: GenModelRow, apiSchema: GoogleApiSchema, payload: unknown) {
   const response = await postGoogleRequest(
     genModel,
@@ -442,6 +422,7 @@ async function runGoogleVeoModel(genModel: GenModelRow, apiSchema: GoogleApiSche
     ...(response.data as Record<string, unknown>),
     id: operationName,
     status: 'pending',
+    deferred_to_webhook: true,
   };
 }
 
@@ -454,7 +435,7 @@ export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
   }
 
   if (isOmniModel(vendorModelName, apiSchema)) {
-    return runGoogleOmniModel(genModel, apiSchema, vendorModelName, payload);
+    return deferredGoogleOmniResponse(vendorModelName);
   }
 
   return runGoogleVeoModel(genModel, apiSchema, payload);

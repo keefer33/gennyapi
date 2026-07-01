@@ -15,13 +15,17 @@ import {
 } from '../../shared/webhooksUtils';
 
 import {
+  googleInteractionsEndpoint,
   googleOmniPollingEndpoint,
   googleServer,
+  isGoogleOmniPlaceholderTaskId,
   isGoogleVideoModel,
   isOmniModel,
   trimString,
   type GoogleApiSchema,
 } from './googleApiShared';
+import { buildGoogleOmniRequestPayload } from './runGoogleModel';
+import { updateUserGenModelRun } from '../../database/user_gen_model_runs';
 
 type GoogleImage = {
   base64: string;
@@ -37,6 +41,7 @@ const GOOGLE_IMAGE_SYSTEM_INSTRUCTION =
   'You are an image generation model. Always return an image response for the user request. Do not return text-only output.';
 
 function isGeminiImageRequest(apiSchema: GoogleApiSchema, vendorModelName: string): boolean {
+  if (isOmniModel(vendorModelName, apiSchema)) return false;
   const requestType = typeof apiSchema.request_type === 'string' ? apiSchema.request_type.trim().toLowerCase() : '';
   const apiPath = typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim().toLowerCase() : '';
   const modelName = vendorModelName.toLowerCase();
@@ -513,30 +518,66 @@ async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>)
 }
 
 async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
-  const { run, runId, rowStatus, apiSchema, apiKey } = context;
-  const taskId = trimString(run.task_id);
-  let lastResponse: unknown = {};
+  const { apiSchema, apiKey, vendorModelName } = context;
+  let { run, runId, rowStatus } = context;
+  let taskId = trimString(run.task_id);
+  let lastResponse: unknown = run.response ?? {};
 
   if (!taskId) {
     throw new Error('google omni task_id missing');
   }
 
   try {
-    const endpoint = googleOmniPollingEndpoint(apiSchema, taskId);
-    console.log('[webhookGoogle] omni poll', {
-      endpoint,
-      run_id: run.id,
-      task_id: taskId,
-      db_status: rowStatus,
-    });
-    const response = await axios.get(endpoint, {
-      headers: googleHeaders(apiKey),
-      validateStatus: () => true,
-    });
+    if (isGoogleOmniPlaceholderTaskId(taskId)) {
+      const createEndpoint = googleInteractionsEndpoint(apiSchema);
+      console.log('[webhookGoogle] omni create', {
+        endpoint: createEndpoint,
+        run_id: run.id,
+        db_status: rowStatus,
+      });
+      const createResponse = await axios.post(
+        createEndpoint,
+        await buildGoogleOmniRequestPayload(vendorModelName, run.payload),
+        {
+          headers: googleHeaders(apiKey),
+          validateStatus: () => true,
+        }
+      );
 
-    lastResponse = response.data ?? {};
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`google omni polling failed with status ${response.status}`);
+      lastResponse = createResponse.data ?? {};
+      if (createResponse.status < 200 || createResponse.status >= 300) {
+        throw new Error(`google omni create failed with status ${createResponse.status}`);
+      }
+
+      const interactionId = trimString((lastResponse as Record<string, unknown>).id);
+      if (!interactionId) {
+        throw new Error('google omni create response missing interaction id');
+      }
+
+      taskId = interactionId;
+      await updateUserGenModelRun({
+        id: runId,
+        task_id: interactionId,
+        response: lastResponse,
+      });
+      run = { ...run, task_id: interactionId, response: lastResponse };
+    } else {
+      const endpoint = googleOmniPollingEndpoint(apiSchema, taskId);
+      console.log('[webhookGoogle] omni poll', {
+        endpoint,
+        run_id: run.id,
+        task_id: taskId,
+        db_status: rowStatus,
+      });
+      const response = await axios.get(endpoint, {
+        headers: googleHeaders(apiKey),
+        validateStatus: () => true,
+      });
+
+      lastResponse = response.data ?? {};
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`google omni polling failed with status ${response.status}`);
+      }
     }
 
     if ((lastResponse as Record<string, unknown>).error) {

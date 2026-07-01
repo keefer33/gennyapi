@@ -1,4 +1,9 @@
 export const DEFAULT_GOOGLE_GEMINI_SERVER = 'https://generativelanguage.googleapis.com/v1beta';
+export const GOOGLE_OMNI_PLACEHOLDER_PREFIX = 'google-omni-';
+
+export function isGoogleOmniPlaceholderTaskId(taskId: string): boolean {
+  return taskId.startsWith(GOOGLE_OMNI_PLACEHOLDER_PREFIX);
+}
 
 export type GoogleApiSchema = {
   server?: string;
