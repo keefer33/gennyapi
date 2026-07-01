@@ -551,7 +551,7 @@ async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>):
       });
       const createResponse = await axios.post(
         createEndpoint,
-        await buildGoogleOmniRequestPayload(vendorModelName, run.payload),
+        await buildGoogleOmniRequestPayload(vendorModelName, run.payload, { userId: run.user_id }),
         {
           headers: googleHeaders(apiKey),
           validateStatus: () => true,

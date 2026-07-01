@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
+import { getActiveUserFileByUrlForUser } from '../../database/user_files';
 import { base64WithoutDataUrl, mimeFromBase64DataUrl } from '../../shared/fileUtils';
 import {
   DEFAULT_GOOGLE_GEMINI_SERVER,
@@ -196,8 +197,11 @@ async function googleOmniVideoPart(input: unknown): Promise<OmniInputPart | null
 function inferOmniVideoTask(
   imageCount: number,
   hasVideo: boolean,
+  hasPreviousInteraction: boolean,
   explicitTask: string
 ): string | undefined {
+  // Conversational edit: previous_interaction_id + prompt only — no video_config.task.
+  if (hasPreviousInteraction && !hasVideo) return undefined;
   if (explicitTask) return explicitTask;
   if (hasVideo) return 'edit';
   if (imageCount > 1) return 'reference_to_video';
@@ -205,7 +209,57 @@ function inferOmniVideoTask(
   return 'text_to_video';
 }
 
-export async function buildGoogleOmniRequestPayload(model: string, payload: unknown): Promise<Record<string, unknown>> {
+function isGoogleInteractionId(value: string): boolean {
+  return /^v1_/i.test(value);
+}
+
+function looksLikeMediaFilePath(value: string): boolean {
+  return /^https?:\/\//i.test(value) || value.includes('/');
+}
+
+function previousInteractionIdFromGeneratedInfo(generatedInfo: unknown): string {
+  if (!generatedInfo || typeof generatedInfo !== 'object' || Array.isArray(generatedInfo)) return '';
+  const info = generatedInfo as Record<string, unknown>;
+  return trimString(info.previous_interaction_id) || trimString(info.previousInteractionId);
+}
+
+export async function resolveOmniPreviousInteractionId(
+  userId: string,
+  rawValue: string
+): Promise<string> {
+  const trimmed = trimString(rawValue);
+  if (!trimmed) return '';
+
+  if (isGoogleInteractionId(trimmed)) return trimmed;
+
+  if (!looksLikeMediaFilePath(trimmed)) return trimmed;
+
+  const file = await getActiveUserFileByUrlForUser(userId, trimmed);
+  if (!file) {
+    throw new AppError('Selected video file was not found', {
+      statusCode: 400,
+      code: 'google_omni_previous_interaction_file_not_found',
+      expose: true,
+    });
+  }
+
+  const interactionId = previousInteractionIdFromGeneratedInfo(file.generated_info);
+  if (!interactionId) {
+    throw new AppError('Selected video is missing a previous interaction id', {
+      statusCode: 400,
+      code: 'google_omni_previous_interaction_missing',
+      expose: true,
+    });
+  }
+
+  return interactionId;
+}
+
+export async function buildGoogleOmniRequestPayload(
+  model: string,
+  payload: unknown,
+  options?: { userId?: string }
+): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   if (originalPayload.input !== undefined) {
     const request = { ...originalPayload };
@@ -267,15 +321,34 @@ export async function buildGoogleOmniRequestPayload(model: string, payload: unkn
     trimString(originalPayload.task) ||
     trimString(originalPayload.video_task) ||
     trimString(originalPayload.videoTask);
-  const inferredTask = inferOmniVideoTask(imageSources.length, hasVideo, explicitTask);
-  if (inferredTask) videoConfig.task = inferredTask;
+
+  const rawPreviousInteractionId =
+    trimString(originalPayload.previous_interaction_id) || trimString(originalPayload.previousInteractionId);
+  const userId = trimString(options?.userId);
+  const previousInteractionId =
+    rawPreviousInteractionId && userId
+      ? await resolveOmniPreviousInteractionId(userId, rawPreviousInteractionId)
+      : rawPreviousInteractionId;
+  const hasPreviousInteraction = Boolean(previousInteractionId);
+
+  const inferredTask = inferOmniVideoTask(
+    imageSources.length,
+    hasVideo,
+    hasPreviousInteraction,
+    explicitTask
+  );
+  if (previousInteractionId) {
+    delete videoConfig.task;
+  } else if (inferredTask) {
+    videoConfig.task = inferredTask;
+  }
   if (Object.keys(videoConfig).length > 0) {
     generationConfig.video_config = videoConfig;
     delete generationConfig.videoConfig;
+  } else {
+    delete generationConfig.video_config;
+    delete generationConfig.videoConfig;
   }
-
-  const previousInteractionId =
-    trimString(originalPayload.previous_interaction_id) || trimString(originalPayload.previousInteractionId);
 
   const request: Record<string, unknown> = {
     model,

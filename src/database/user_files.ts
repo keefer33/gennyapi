@@ -198,6 +198,43 @@ export async function getActiveUserFileForUpdate(
   return (data as Pick<UserFileRow, 'file_path' | 'file_name'> | null) ?? null;
 }
 
+export async function getActiveUserFileByUrlForUser(
+  userId: string,
+  url: string
+): Promise<UserFileRow | null> {
+  const uid = userId.trim();
+  const fileUrl = url.trim();
+  if (!uid || !fileUrl) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+  const buildQuery = () =>
+    supabaseServerClient
+      .from('user_files')
+      .select(FILE_SELECT)
+      .eq('user_id', uid)
+      .eq('status', 'active');
+
+  const { data: byPath, error: pathError } = await buildQuery().eq('file_path', fileUrl).maybeSingle();
+  if (pathError) {
+    throw new AppError(pathError.message, {
+      statusCode: 500,
+      code: 'user_file_by_path_fetch_failed',
+    });
+  }
+  if (byPath) return byPath as UserFileRow;
+
+  const { data: byThumbnail, error: thumbError } = await buildQuery()
+    .eq('thumbnail_url', fileUrl)
+    .maybeSingle();
+  if (thumbError) {
+    throw new AppError(thumbError.message, {
+      statusCode: 500,
+      code: 'user_file_by_thumbnail_fetch_failed',
+    });
+  }
+  return (byThumbnail as UserFileRow | null) ?? null;
+}
+
 export async function updateUserFileName(fileId: string, userId: string, fileName: string): Promise<UserFileRow> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
@@ -220,7 +257,7 @@ export async function updateUserFileName(fileId: string, userId: string, fileNam
 
 export async function listUserFilesData(params: ListUserFilesParams): Promise<ListUserFilesResult> {
   const { supabaseServerClient } = await getServerClient();
-  const { userId, page, limit, tagIds, uploadType, fileTypeFilter } = params;
+  const { userId, page, limit, tagIds, uploadType, fileTypeFilter, genModelId } = params;
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -260,6 +297,7 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
 
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
+  if (genModelId) query = query.eq('gen_model_id', genModelId);
 
   const fileTypePrefixes = [
     fileTypeFilter.includes('images') ? 'image' : null,

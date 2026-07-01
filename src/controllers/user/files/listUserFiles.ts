@@ -4,7 +4,7 @@ import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { listUserFilesData } from '../../../database/user_files';
 
 /**
- * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all|images_videos|images_audio|videos_audio
+ * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all|images_videos|images_audio|videos_audio&gen_model_id=uuid
  */
 export async function listUserFiles(req: Request, res: Response): Promise<void> {
   try {
@@ -24,6 +24,10 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
         : null;
 
     const fileTypeFilter = typeof req.query.fileTypeFilter === 'string' ? req.query.fileTypeFilter.trim() : 'all';
+    const genModelId =
+      typeof req.query.gen_model_id === 'string' && req.query.gen_model_id.trim()
+        ? req.query.gen_model_id.trim()
+        : null;
 
     const result = await listUserFilesData({
       userId,
@@ -32,6 +36,7 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
       tagIds,
       uploadType,
       fileTypeFilter,
+      genModelId,
     });
 
     sendOk(res, result);
