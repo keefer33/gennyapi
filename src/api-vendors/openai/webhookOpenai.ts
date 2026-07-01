@@ -187,7 +187,6 @@ export async function webhookOpenai(context: WebhookVendorContext<OpenaiApiSchem
     ...normalizeOpenaiRequestPayload(run.payload),
     model: vendorModelName
   };
-  const duration = durationForRun(run);
   let lastResponse: unknown = {};
 
   try {
@@ -220,7 +219,7 @@ export async function webhookOpenai(context: WebhookVendorContext<OpenaiApiSchem
       if (savedFile) files.push(savedFile);
     }
 
-    await completeWebhookRun({ run, response: lastResponse, files, duration });
+    await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     console.error('[webhookOpenai] caught error while processing', { run_id: run.id, message });
@@ -228,7 +227,7 @@ export async function webhookOpenai(context: WebhookVendorContext<OpenaiApiSchem
       run,
       response: lastResponse,
       message: message || 'Generation failed, please try again.',
-      duration,
+      duration: durationForRun(run),
     });
     throw error;
   }
