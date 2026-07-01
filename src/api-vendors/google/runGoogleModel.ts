@@ -2,17 +2,22 @@ import axios from 'axios';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
 import { base64WithoutDataUrl, mimeFromBase64DataUrl } from '../../shared/fileUtils';
+import {
+  DEFAULT_GOOGLE_GEMINI_SERVER,
+  googleInteractionsEndpoint,
+  isOmniModel,
+  trimString,
+  type GoogleApiSchema,
+} from './googleApiShared';
 
-const DEFAULT_GOOGLE_GEMINI_SERVER = 'https://generativelanguage.googleapis.com/v1beta';
+type OmniInputPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mime_type: string }
+  | { type: 'video'; data: string; mime_type: string }
+  | { type: 'document'; uri: string };
 
-type GoogleApiSchema = {
-  server?: string;
-  api_path?: string;
-  vendor_model_name?: string;
-};
-
-function isVeoModel(modelName: string): boolean {
-  return modelName.toLowerCase().includes('veo');
+function isVideoGenerationType(generationType: string | null | undefined): boolean {
+  return generationType === 'video';
 }
 
 function googleApiKey(genModel: GenModelRow): string {
@@ -41,10 +46,6 @@ function googleEndpoint(apiSchema: GoogleApiSchema, fallbackMethod: string): str
     });
   }
   return `${server}/models/${encodeURIComponent(vendorModelName)}:${fallbackMethod}`;
-}
-
-function trimString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
 }
 
 function normalizeGoogleVideoParameters(parameters: Record<string, unknown>): Record<string, unknown> {
@@ -119,7 +120,7 @@ async function googleVideoInput(input: unknown): Promise<unknown> {
 
   if (input && typeof input === 'object' && !Array.isArray(input)) {
     const item = input as Record<string, unknown>;
-    if (item.inlineData || item.inline_data || item.bytesBase64Encoded || item.gcsUri) return item;
+    if (item.inlineData || item.inline_data || item.bytesBase64Encoded || item.gcsUri || item.uri) return item;
     const source = googleImageSource(item);
     return source ? googleVideoInput(source) : item;
   }
@@ -135,7 +136,6 @@ async function googleVideoInput(input: unknown): Promise<unknown> {
       },
     };
   }
-  
 
   if (/^https?:\/\//i.test(source)) {
     const response = await axios.get(source, {
@@ -159,6 +159,135 @@ async function googleVideoInput(input: unknown): Promise<unknown> {
   }
 
   return input;
+}
+
+async function googleOmniImagePart(input: unknown): Promise<OmniInputPart | null> {
+  const resolved = await googleVideoImage(input);
+  if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) return null;
+  const item = resolved as Record<string, unknown>;
+  const data = trimString(item.bytesBase64Encoded) || trimString(item.data);
+  const mimeType = trimString(item.mimeType) || trimString(item.mime_type) || 'image/png';
+  if (!data) return null;
+  return { type: 'image', data: base64WithoutDataUrl(data), mime_type: mimeType };
+}
+
+async function googleOmniVideoPart(input: unknown): Promise<OmniInputPart | null> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const item = input as Record<string, unknown>;
+    const uri = trimString(item.uri) || trimString(item.gcsUri);
+    if (uri) return { type: 'document', uri };
+  }
+
+  const resolved = await googleVideoInput(input);
+  if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) return null;
+  const item = resolved as Record<string, unknown>;
+  const inline = (item.inlineData ?? item.inline_data) as Record<string, unknown> | undefined;
+  if (inline) {
+    const data = trimString(inline.data);
+    const mimeType = trimString(inline.mimeType) || trimString(inline.mime_type) || 'video/mp4';
+    if (data) return { type: 'video', data: base64WithoutDataUrl(data), mime_type: mimeType };
+  }
+  const data = trimString(item.bytesBase64Encoded) || trimString(item.data);
+  const mimeType = trimString(item.mimeType) || trimString(item.mime_type) || 'video/mp4';
+  if (data) return { type: 'video', data: base64WithoutDataUrl(data), mime_type: mimeType };
+  return null;
+}
+
+function inferOmniVideoTask(
+  imageCount: number,
+  hasVideo: boolean,
+  explicitTask: string
+): string | undefined {
+  if (explicitTask) return explicitTask;
+  if (hasVideo) return 'edit';
+  if (imageCount > 1) return 'reference_to_video';
+  if (imageCount === 1) return 'image_to_video';
+  return 'text_to_video';
+}
+
+async function googleOmniRequestPayload(model: string, payload: unknown): Promise<Record<string, unknown>> {
+  const originalPayload = (payload ?? {}) as Record<string, unknown>;
+  if (originalPayload.input !== undefined) {
+    const request = { ...originalPayload };
+    if (!request.model) request.model = model;
+    return request;
+  }
+
+  const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
+  const inputParts: OmniInputPart[] = [];
+  const imageSources = [
+    ...(originalPayload.image ? [originalPayload.image] : []),
+    ...(Array.isArray(originalPayload.images) ? originalPayload.images : []),
+  ];
+
+  for (const image of imageSources) {
+    const part = await googleOmniImagePart(image);
+    if (part) inputParts.push(part);
+  }
+
+  const hasVideo = Boolean(originalPayload.video) || (Array.isArray(originalPayload.videos) && originalPayload.videos.length > 0);
+  if (originalPayload.video) {
+    const part = await googleOmniVideoPart(originalPayload.video);
+    if (part) inputParts.push(part);
+  } else if (Array.isArray(originalPayload.videos) && originalPayload.videos.length > 0) {
+    const part = await googleOmniVideoPart(originalPayload.videos[0]);
+    if (part) inputParts.push(part);
+  }
+
+  if (prompt) inputParts.push({ type: 'text', text: prompt });
+
+  const input =
+    inputParts.length === 1 && inputParts[0].type === 'text' ? inputParts[0].text : inputParts;
+
+  const responseFormat: Record<string, unknown> = { type: 'video', delivery: 'uri' };
+  const aspectRatio = trimString(originalPayload.aspect_ratio) || trimString(originalPayload.aspectRatio);
+  if (aspectRatio) responseFormat.aspect_ratio = aspectRatio;
+  if (originalPayload.response_format && typeof originalPayload.response_format === 'object') {
+    Object.assign(responseFormat, originalPayload.response_format);
+  } else if (originalPayload.responseFormat && typeof originalPayload.responseFormat === 'object') {
+    Object.assign(responseFormat, originalPayload.responseFormat);
+  }
+
+  const generationConfig: Record<string, unknown> =
+    originalPayload.generation_config && typeof originalPayload.generation_config === 'object'
+      ? { ...(originalPayload.generation_config as Record<string, unknown>) }
+      : originalPayload.generationConfig && typeof originalPayload.generationConfig === 'object'
+        ? { ...(originalPayload.generationConfig as Record<string, unknown>) }
+        : {};
+
+  const videoConfig: Record<string, unknown> =
+    generationConfig.video_config && typeof generationConfig.video_config === 'object'
+      ? { ...(generationConfig.video_config as Record<string, unknown>) }
+      : generationConfig.videoConfig && typeof generationConfig.videoConfig === 'object'
+        ? { ...(generationConfig.videoConfig as Record<string, unknown>) }
+        : {};
+
+  const explicitTask =
+    trimString(videoConfig.task) ||
+    trimString(originalPayload.task) ||
+    trimString(originalPayload.video_task) ||
+    trimString(originalPayload.videoTask);
+  const inferredTask = inferOmniVideoTask(imageSources.length, hasVideo, explicitTask);
+  if (inferredTask) videoConfig.task = inferredTask;
+  if (Object.keys(videoConfig).length > 0) {
+    generationConfig.video_config = videoConfig;
+    delete generationConfig.videoConfig;
+  }
+
+  const previousInteractionId =
+    trimString(originalPayload.previous_interaction_id) || trimString(originalPayload.previousInteractionId);
+
+  const request: Record<string, unknown> = {
+    model,
+    input,
+    response_format: responseFormat,
+    background: originalPayload.background ?? false,
+    store: originalPayload.store ?? true,
+    stream: originalPayload.stream ?? false,
+  };
+  if (Object.keys(generationConfig).length > 0) request.generation_config = generationConfig;
+  if (previousInteractionId) request.previous_interaction_id = previousInteractionId;
+  return request;
 }
 
 async function googleVideoRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
@@ -235,27 +364,21 @@ function deferredGoogleImageResponse(model: string) {
   };
 }
 
-export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
-  const apiSchema = (genModel.gen_models_apis_id?.api_schema as GoogleApiSchema | null) ?? {};
-  const vendorModelName = apiSchema.vendor_model_name?.trim() || '';
-
-  if (!isVeoModel(vendorModelName)) {
-    return deferredGoogleImageResponse(vendorModelName);
-  }
-
-  const response = await axios.post(
-    googleEndpoint(apiSchema, 'predictLongRunning'),
-    await googleVideoRequestPayload(payload),
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': googleApiKey(genModel),
-      },
-      validateStatus: () => true,
-    }
-  );
+async function postGoogleRequest(
+  genModel: GenModelRow,
+  endpoint: string,
+  requestPayload: Record<string, unknown>
+) {
+  const response = await axios.post(endpoint, requestPayload, {
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': googleApiKey(genModel),
+    },
+    validateStatus: () => true,
+  });
 
   if (response.status < 200 || response.status >= 300) {
+    console.error(response.status, response.data);
     console.error('Failed to run playground google', response.data);
     throw new AppError('Failed to run playground google', {
       statusCode: response.status || 502,
@@ -265,7 +388,47 @@ export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
     });
   }
 
-  const operationName = typeof response.data?.name === 'string' ? response.data.name.trim() : '';
+  return response;
+}
+
+async function runGoogleOmniModel(
+  genModel: GenModelRow,
+  apiSchema: GoogleApiSchema,
+  vendorModelName: string,
+  payload: unknown
+) {
+  const response = await postGoogleRequest(
+    genModel,
+    googleInteractionsEndpoint(apiSchema),
+    await googleOmniRequestPayload(vendorModelName, payload)
+  );
+
+  const interactionId = trimString(response.data?.id);
+  if (!interactionId) {
+    throw new AppError('Google Omni response missing interaction id', {
+      statusCode: 502,
+      code: 'google_omni_response_missing_interaction_id',
+      details: response.data,
+      expose: true,
+    });
+  }
+
+  const status = trimString(response.data?.status).toLowerCase() || 'pending';
+  return {
+    ...(response.data as Record<string, unknown>),
+    id: interactionId,
+    status: status === 'completed' ? 'completed' : 'pending',
+  };
+}
+
+async function runGoogleVeoModel(genModel: GenModelRow, apiSchema: GoogleApiSchema, payload: unknown) {
+  const response = await postGoogleRequest(
+    genModel,
+    googleEndpoint(apiSchema, 'predictLongRunning'),
+    await googleVideoRequestPayload(payload)
+  );
+
+  const operationName = trimString(response.data?.name);
   if (!operationName) {
     throw new AppError('Google video response missing operation name', {
       statusCode: 502,
@@ -280,4 +443,19 @@ export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
     id: operationName,
     status: 'pending',
   };
+}
+
+export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
+  const apiSchema = (genModel.gen_models_apis_id?.api_schema as GoogleApiSchema | null) ?? {};
+  const vendorModelName = apiSchema.vendor_model_name?.trim() || '';
+
+  if (!isVideoGenerationType(genModel.generation_type)) {
+    return deferredGoogleImageResponse(vendorModelName);
+  }
+
+  if (isOmniModel(vendorModelName, apiSchema)) {
+    return runGoogleOmniModel(genModel, apiSchema, vendorModelName, payload);
+  }
+
+  return runGoogleVeoModel(genModel, apiSchema, payload);
 }

@@ -14,27 +14,27 @@ import {
   tickWebhookRun,
 } from '../../shared/webhooksUtils';
 
-const DEFAULT_GOOGLE_GEMINI_SERVER = 'https://generativelanguage.googleapis.com/v1beta';
-const GOOGLE_IMAGE_SYSTEM_INSTRUCTION =
-  'You are an image generation model. Always return an image response for the user request. Do not return text-only output.';
-
-type GoogleApiSchema = {
-  server?: unknown;
-  api_path?: unknown;
-  polling_path?: unknown;
-  vendor_model_name?: unknown;
-  request_type?: unknown;
-  polling_method?: unknown;
-};
+import {
+  googleOmniPollingEndpoint,
+  googleServer,
+  isGoogleVideoModel,
+  isOmniModel,
+  trimString,
+  type GoogleApiSchema,
+} from './googleApiShared';
 
 type GoogleImage = {
   base64: string;
   mimeType: string;
 };
 
-function isVeoModel(modelName: string): boolean {
-  return modelName.toLowerCase().includes('veo');
-}
+type GoogleVideoOutput = {
+  urls: string[];
+  base64Videos: GoogleImage[];
+};
+
+const GOOGLE_IMAGE_SYSTEM_INSTRUCTION =
+  'You are an image generation model. Always return an image response for the user request. Do not return text-only output.';
 
 function isGeminiImageRequest(apiSchema: GoogleApiSchema, vendorModelName: string): boolean {
   const requestType = typeof apiSchema.request_type === 'string' ? apiSchema.request_type.trim().toLowerCase() : '';
@@ -44,10 +44,7 @@ function isGeminiImageRequest(apiSchema: GoogleApiSchema, vendorModelName: strin
 }
 
 function googleEndpoint(apiSchema: GoogleApiSchema, vendorModelName: string, fallbackMethod: string): string {
-  const server =
-    typeof apiSchema.server === 'string' && apiSchema.server.trim()
-      ? apiSchema.server.trim()
-      : DEFAULT_GOOGLE_GEMINI_SERVER;
+  const server = googleServer(apiSchema);
   const apiPath = typeof apiSchema.api_path === 'string' ? apiSchema.api_path.trim() : '';
   if (apiPath) return `${server}${apiPath}`;
   return `${server}/models/${encodeURIComponent(vendorModelName)}:${fallbackMethod}`;
@@ -61,8 +58,64 @@ function googleHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-function trimString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+function collectOmniVideoOutput(responseData: unknown): GoogleVideoOutput {
+  const urls: string[] = [];
+  const base64Videos: GoogleImage[] = [];
+  const visitContent = (content: unknown) => {
+    if (!Array.isArray(content)) return;
+    for (const item of content) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as Record<string, unknown>;
+      if (entry.type !== 'video') continue;
+      const uri = trimString(entry.uri);
+      const data = trimString(entry.data);
+      const mimeType = trimString(entry.mime_type) || trimString(entry.mimeType) || 'video/mp4';
+      if (uri) urls.push(uri);
+      else if (data) base64Videos.push({ base64: base64WithoutDataUrl(data), mimeType });
+    }
+  };
+
+  if (responseData && typeof responseData === 'object') {
+    const root = responseData as Record<string, unknown>;
+    const outputVideo = root.output_video ?? root.outputVideo;
+    if (outputVideo && typeof outputVideo === 'object') {
+      const video = outputVideo as Record<string, unknown>;
+      const uri = trimString(video.uri);
+      const data = trimString(video.data);
+      const mimeType = trimString(video.mime_type) || trimString(video.mimeType) || 'video/mp4';
+      if (uri) urls.push(uri);
+      else if (data) base64Videos.push({ base64: base64WithoutDataUrl(data), mimeType });
+    }
+    if (Array.isArray(root.steps)) {
+      for (const step of root.steps) {
+        if (!step || typeof step !== 'object') continue;
+        const stepRecord = step as Record<string, unknown>;
+        if (stepRecord.type !== 'model_output') continue;
+        visitContent(stepRecord.content);
+      }
+    }
+  }
+
+  return {
+    urls: [...new Set(urls)],
+    base64Videos,
+  };
+}
+
+function googleFileIdFromUri(uri: string): string {
+  return uri.match(/files\/([^/:?]+)/)?.[1] ?? '';
+}
+
+async function googleFileState(apiSchema: GoogleApiSchema, apiKey: string, fileId: string): Promise<string> {
+  if (!fileId) return '';
+  const response = await axios.get(`${googleServer(apiSchema)}/files/${encodeURIComponent(fileId)}`, {
+    headers: googleHeaders(apiKey),
+    validateStatus: () => true,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`google file status request failed with status ${response.status}`);
+  }
+  return trimString((response.data as Record<string, unknown>)?.state);
 }
 
 async function urlToInlinePart(url: string): Promise<Record<string, unknown>> {
@@ -290,10 +343,7 @@ function googlePollingRequest(
   vendorModelName: string,
   taskId: string
 ): { method: 'get' | 'post'; endpoint: string; body?: Record<string, unknown> } {
-  const server =
-    typeof apiSchema.server === 'string' && apiSchema.server.trim()
-      ? apiSchema.server.trim()
-      : DEFAULT_GOOGLE_GEMINI_SERVER;
+  const server = googleServer(apiSchema);
   const pollingPath = typeof apiSchema.polling_path === 'string' ? apiSchema.polling_path.trim() : '';
   const pollingMethod =
     typeof apiSchema.polling_method === 'string' ? apiSchema.polling_method.trim().toLowerCase() : '';
@@ -462,8 +512,129 @@ async function handleGoogleVideo(context: WebhookVendorContext<GoogleApiSchema>)
   }
 }
 
+async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
+  const { run, runId, rowStatus, apiSchema, apiKey } = context;
+  const taskId = trimString(run.task_id);
+  let lastResponse: unknown = {};
+
+  if (!taskId) {
+    throw new Error('google omni task_id missing');
+  }
+
+  try {
+    const endpoint = googleOmniPollingEndpoint(apiSchema, taskId);
+    console.log('[webhookGoogle] omni poll', {
+      endpoint,
+      run_id: run.id,
+      task_id: taskId,
+      db_status: rowStatus,
+    });
+    const response = await axios.get(endpoint, {
+      headers: googleHeaders(apiKey),
+      validateStatus: () => true,
+    });
+
+    lastResponse = response.data ?? {};
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`google omni polling failed with status ${response.status}`);
+    }
+
+    if ((lastResponse as Record<string, unknown>).error) {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse),
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const status = trimString((lastResponse as Record<string, unknown>).status).toLowerCase();
+    if (status === 'failed' || status === 'error' || status === 'cancelled') {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse) || 'Google Omni generation failed',
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    if (status !== 'completed') {
+      await tickWebhookRun({ runId, duration: durationForRun(run), delayMs: 5000 });
+      return;
+    }
+
+    const { urls, base64Videos } = collectOmniVideoOutput(lastResponse);
+    const readyUrls: string[] = [];
+    for (const url of urls) {
+      const fileId = googleFileIdFromUri(url);
+      if (!fileId) {
+        readyUrls.push(url);
+        continue;
+      }
+      const fileState = await googleFileState(apiSchema, apiKey, fileId);
+      if (fileState === 'FAILED') {
+        throw new Error('google omni video file processing failed');
+      }
+      if (fileState !== 'ACTIVE') {
+        await tickWebhookRun({ runId, duration: durationForRun(run), delayMs: 5000 });
+        return;
+      }
+      readyUrls.push(url);
+    }
+
+    if (readyUrls.length === 0 && base64Videos.length === 0) {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: 'google omni interaction completed but no video output was returned',
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const files: unknown[] = [];
+    for (let index = 0; index < base64Videos.length; index++) {
+      const video = base64Videos[index];
+      const ext = getFileExtensionFromMimeType(video.mimeType);
+      const savedFile = await saveFileFromBuffer(
+        Buffer.from(video.base64, 'base64'),
+        `google-${runId}-${index + 1}.${ext}`,
+        video.mimeType,
+        run,
+        lastResponse
+      );
+      if (savedFile) files.push(savedFile);
+    }
+
+    for (let index = 0; index < readyUrls.length; index++) {
+      const savedFile = await saveGoogleUrlFile(
+        readyUrls[index],
+        apiKey,
+        `${runId}-${base64Videos.length + index + 1}`,
+        run,
+        lastResponse
+      );
+      if (savedFile) files.push(savedFile);
+    }
+
+    await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.error('[webhookGoogle] omni error', { run_id: run.id, message });
+    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
+    throw error;
+  }
+}
+
 export async function webhookGoogle(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
-  if (isVeoModel(context.vendorModelName)) {
+  const apiSchema = context.apiSchema;
+  if (isOmniModel(context.vendorModelName, apiSchema)) {
+    await handleGoogleOmni(context);
+    return;
+  }
+  if (isGoogleVideoModel(context.vendorModelName, context.genModel.generation_type, apiSchema)) {
     await handleGoogleVideo(context);
     return;
   }

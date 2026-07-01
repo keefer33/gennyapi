@@ -209,6 +209,8 @@ export type UserStoryboardSceneRow = {
   created_at?: string | null;
   title?: string | null;
   scene?: unknown | null;
+  type?: 'scene' | 'base' | string | null;
+  sort?: number | null;
 };
 
 /** Matches `public.user_tags` */

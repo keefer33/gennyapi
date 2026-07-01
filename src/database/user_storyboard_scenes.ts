@@ -3,9 +3,33 @@ import { getServerClient } from './supabaseClient';
 import type { UserStoryboardSceneRow } from './types';
 import { getUserStoryboardForUser } from './user_storyboards';
 
-const USER_STORYBOARD_SCENES_INSERT_KEYS = ['storyboard_id', 'title', 'scene'] as const;
+const USER_STORYBOARD_SCENES_INSERT_KEYS = ['storyboard_id', 'title', 'scene', 'type', 'sort'] as const;
 
-const USER_STORYBOARD_SCENES_UPDATE_KEYS = ['title', 'scene'] as const;
+const USER_STORYBOARD_SCENES_UPDATE_KEYS = ['title', 'scene', 'type', 'sort'] as const;
+
+export const BASE_SCENE_TYPE = 'base';
+export const REGULAR_SCENE_TYPE = 'scene';
+export const BASE_SCENE_TITLE = 'Base';
+
+export function createBaseStoryboardScenePayload(): Record<string, unknown> {
+  return { background: { layers: [] } };
+}
+
+export async function ensureBaseStoryboardScene(
+  userId: string,
+  storyboardId: string
+): Promise<UserStoryboardSceneRow | null> {
+  const scenes = await listUserStoryboardScenesForStoryboard(userId, storyboardId);
+  const existing = scenes.find((row) => row.type === BASE_SCENE_TYPE);
+  if (existing) return existing;
+
+  return createUserStoryboardSceneRow({
+    storyboard_id: storyboardId,
+    title: BASE_SCENE_TITLE,
+    type: BASE_SCENE_TYPE,
+    scene: createBaseStoryboardScenePayload(),
+  });
+}
 
 async function requireStoryboardForUser(userId: string, storyboardId: string): Promise<void> {
   const storyboard = await getUserStoryboardForUser(userId, storyboardId);
@@ -56,6 +80,7 @@ export async function listUserStoryboardScenesForStoryboard(
     .from('user_storyboard_scenes')
     .select('*')
     .eq('storyboard_id', storyboardId.trim())
+    .order('sort', { ascending: true })
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -65,7 +90,19 @@ export async function listUserStoryboardScenesForStoryboard(
     });
   }
 
-  return (data as UserStoryboardSceneRow[]) ?? [];
+  const scenes = (data as UserStoryboardSceneRow[]) ?? [];
+  if (!scenes.some((row) => row.type === BASE_SCENE_TYPE)) {
+    const base = await createUserStoryboardSceneRow({
+      storyboard_id: storyboardId.trim(),
+      title: BASE_SCENE_TITLE,
+      type: BASE_SCENE_TYPE,
+      sort: 0,
+      scene: createBaseStoryboardScenePayload(),
+    });
+    return [base, ...scenes];
+  }
+
+  return scenes;
 }
 
 export async function getUserStoryboardSceneForUser(
