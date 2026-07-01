@@ -370,7 +370,14 @@ function googlePollingRequest(
   return { method: 'get', endpoint: `${server}/${taskId}` };
 }
 
-async function saveGoogleUrlFile(url: string, apiKey: string, runId: string, run: unknown, responseData: unknown) {
+async function saveGoogleUrlFile(
+  url: string,
+  apiKey: string,
+  runId: string,
+  run: unknown,
+  responseData: unknown,
+  generatedInfoExtras?: Record<string, unknown>
+) {
   if (url.startsWith('gs://')) {
     throw new Error('google returned a gs:// URI; configure Gemini API file URI output or a downloadable HTTPS URL');
   }
@@ -386,7 +393,14 @@ async function saveGoogleUrlFile(url: string, apiKey: string, runId: string, run
 
   const mimeType = response.headers['content-type']?.split(';')[0]?.trim() || 'video/mp4';
   const ext = getFileExtensionFromMimeType(mimeType);
-  return saveFileFromBuffer(Buffer.from(response.data), `google-${runId}.${ext}`, mimeType, run, responseData);
+  return saveFileFromBuffer(
+    Buffer.from(response.data),
+    `google-${runId}.${ext}`,
+    mimeType,
+    run,
+    responseData,
+    generatedInfoExtras
+  );
 }
 
 async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
@@ -635,6 +649,8 @@ async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>):
       return;
     }
 
+    const omniGeneratedInfo = { previous_interaction_id: taskId };
+
     const files: unknown[] = [];
     for (let index = 0; index < base64Videos.length; index++) {
       const video = base64Videos[index];
@@ -644,7 +660,8 @@ async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>):
         `google-${runId}-${index + 1}.${ext}`,
         video.mimeType,
         run,
-        lastResponse
+        lastResponse,
+        omniGeneratedInfo
       );
       if (savedFile) files.push(savedFile);
     }
@@ -655,7 +672,8 @@ async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>):
         apiKey,
         `${runId}-${base64Videos.length + index + 1}`,
         run,
-        lastResponse
+        lastResponse,
+        omniGeneratedInfo
       );
       if (savedFile) files.push(savedFile);
     }

@@ -561,7 +561,8 @@ const generateThumbnail = async (
 
 export const saveFileFromUrl = async (
   url: string,
-  pollingFileData: any
+  pollingFileData: any,
+  generatedInfoExtras?: Record<string, unknown>
 ): Promise<{ file_id: string | null; file_url: string }> => {
   try {
     const runId =
@@ -614,9 +615,8 @@ export const saveFileFromUrl = async (
 
     const generatedInfo = {
       payload: pollingFileData.payload,
+      ...generatedInfoExtras,
     };
-
-    // Generate thumbnail if file is an image or video
     let thumbnailUrl: string | undefined;
     if (isImageUrl(url) || isVideoUrl(url)) {
       const thumbnailBuffer = await generateThumbnail(nodeBuffer, url);
@@ -677,7 +677,8 @@ export const saveFileFromBuffer = async (
   filename: string,
   mimeType: string,
   pollingFileData: any,
-  pollingFileResponse: any
+  pollingFileResponse: any,
+  generatedInfoExtras?: Record<string, unknown>
 ): Promise<{ file_id: string | null; file_url: string }> => {
   try {
     const runId =
@@ -702,6 +703,7 @@ export const saveFileFromBuffer = async (
 
     const generatedInfo = {
       payload: pollingFileData.payload,
+      ...generatedInfoExtras,
     };
 
     const fakeUrlForType = `https://temp/${filename.toLowerCase()}`;
