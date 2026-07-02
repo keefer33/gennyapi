@@ -209,6 +209,24 @@ function inferOmniVideoTask(
   return 'text_to_video';
 }
 
+function applyOmniVideoDuration(
+  videoConfig: Record<string, unknown>,
+  originalPayload: Record<string, unknown>
+): void {
+  if (videoConfig.duration !== undefined && videoConfig.duration !== null && videoConfig.duration !== '') {
+    return;
+  }
+
+  const raw =
+    originalPayload.duration ?? originalPayload.duration_seconds ?? originalPayload.durationSeconds;
+  if (raw === undefined || raw === null || raw === '') return;
+
+  const parsed = typeof raw === 'number' ? raw : Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    videoConfig.duration = parsed;
+  }
+}
+
 function isGoogleInteractionId(value: string): boolean {
   return /^v1_/i.test(value);
 }
@@ -315,6 +333,8 @@ export async function buildGoogleOmniRequestPayload(
       : generationConfig.videoConfig && typeof generationConfig.videoConfig === 'object'
         ? { ...(generationConfig.videoConfig as Record<string, unknown>) }
         : {};
+
+  applyOmniVideoDuration(videoConfig, originalPayload);
 
   const explicitTask =
     trimString(videoConfig.task) ||
