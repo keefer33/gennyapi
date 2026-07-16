@@ -16,9 +16,9 @@ import { getAuthUserId } from '../../shared/getAuthUserId';
 
 import { buildStoryboardRenderInputProps } from './buildStoryboardRenderInputProps';
 
-import { saveRemotionRenderFile } from './saveRemotionRenderFile';
+import { resolveRemotionServeUrl } from './resolveRemotionServeUrl';
 
-const REMOTION_SERVE_URL = process.env.REMOTION_SERVE_URL ?? 'http://rb.genny.bot/';
+import { saveRemotionRenderFile } from './saveRemotionRenderFile';
 
 const REMOTION_COMPOSITION_ID = process.env.REMOTION_COMPOSITION_ID ?? 'MyComp';
 
@@ -50,10 +50,12 @@ export const render = async (req: Request, res: Response): Promise<void> => {
   const outputPath = join(tempDir, outputFilename);
 
   try {
+    const serveUrl = resolveRemotionServeUrl();
+
     const inputProps = await buildStoryboardRenderInputProps(userId, storyboardId);
 
     const composition = await selectComposition({
-      serveUrl: REMOTION_SERVE_URL,
+      serveUrl,
 
       id: REMOTION_COMPOSITION_ID,
 
@@ -62,6 +64,8 @@ export const render = async (req: Request, res: Response): Promise<void> => {
 
     console.log('[remotion/render] Starting storyboard render', {
       storyboardId,
+
+      serveUrl,
 
       durationInFrames: inputProps.durationInFrames,
 
@@ -73,7 +77,7 @@ export const render = async (req: Request, res: Response): Promise<void> => {
 
       composition,
 
-      serveUrl: REMOTION_SERVE_URL,
+      serveUrl,
 
       outputLocation: outputPath,
 

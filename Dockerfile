@@ -30,14 +30,20 @@ COPY package*.json ./
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source code
+# Copy source code (includes committed remotion-bundle/ for storyboard renders)
 COPY . .
+
+# Fail the image build if the Remotion webpack bundle is missing from the repo
+RUN test -f remotion-bundle/index.html || (echo "Missing remotion-bundle/ in the build context. In genny run npm run remotion:bundle, then in gennyapi run npm run remotion:sync and commit remotion-bundle/." && exit 1)
 
 # Build the application
 RUN npm run build
 
 # Remove dev dependencies after build
 RUN npm prune --production
+
+# Local filesystem path — Remotion serves it on localhost (secure context for WebCodecs)
+ENV REMOTION_SERVE_URL=/app/remotion-bundle
 
 # Expose port
 EXPOSE 3000
