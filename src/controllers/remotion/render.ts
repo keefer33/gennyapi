@@ -51,7 +51,7 @@ export const render = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const serveUrl = resolveRemotionServeUrl();
-console.log('serveUrl', serveUrl);
+
     const inputProps = await buildStoryboardRenderInputProps(userId, storyboardId);
 
     const composition = await selectComposition({
@@ -110,6 +110,7 @@ console.log('serveUrl', serveUrl);
       storyboard_id: storyboardId,
     });
   } catch (error) {
+    console.error('[remotion/render] failed', error);
     sendError(res, error);
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);

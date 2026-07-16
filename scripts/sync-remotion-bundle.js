@@ -1,7 +1,8 @@
 /**
  * Copy genny's Remotion webpack output into gennyapi/remotion-bundle.
- * This directory is committed so Docker deploys from GitHub include it
- * (Remotion serves the path on localhost — required for WebCodecs).
+ * This directory is committed so Docker deploys from GitHub include it.
+ * Source maps (.map) must be included — @remotion/renderer reads bundle.js.map
+ * when serving a local path.
  *
  * Usage (from gennyapi):
  *   1. In genny: npm run remotion:bundle
@@ -14,17 +15,11 @@ const path = require('path');
 const sourceDir = path.resolve(__dirname, '../../genny/remotion-build');
 const destDir = path.resolve(__dirname, '../remotion-bundle');
 
-/** Skip webpack source maps to keep the committed deploy artifact smaller. */
-function shouldCopy(name) {
-  return !name.endsWith('.map');
-}
-
 function copyRecursive(src, dest) {
   const stat = fs.statSync(src);
   if (stat.isDirectory()) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src)) {
-      if (!shouldCopy(entry)) continue;
       copyRecursive(path.join(src, entry), path.join(dest, entry));
     }
     return;
@@ -36,6 +31,14 @@ if (!fs.existsSync(path.join(sourceDir, 'index.html'))) {
   console.error(
     `[remotion:sync] Missing Remotion bundle at ${sourceDir}\n` +
       'Run `npm run remotion:bundle` in the genny repo first.'
+  );
+  process.exit(1);
+}
+
+if (!fs.existsSync(path.join(sourceDir, 'bundle.js.map'))) {
+  console.error(
+    `[remotion:sync] Missing bundle.js.map in ${sourceDir}\n` +
+      'Re-run `npm run remotion:bundle` in genny — Remotion requires the source map.'
   );
   process.exit(1);
 }
