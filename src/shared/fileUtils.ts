@@ -469,7 +469,7 @@ const isSupportedFileType = (mimeType: string): boolean => {
   return supportedTypes.includes(mimeType.toLowerCase());
 };
 
-const generateThumbnail = async (
+export const generateThumbnail = async (
   fileBuffer: Buffer,
   fileUrl: string,
   width: number = 400,

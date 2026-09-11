@@ -213,6 +213,18 @@ export type UserStoryboardSceneRow = {
   sort?: number | null;
 };
 
+/** Matches `public.user_storyboards_renders` */
+export type UserStoryboardRenderStatus = 'processing' | 'completed' | 'error' | string;
+
+export type UserStoryboardRenderRow = {
+  id?: string | null;
+  created_at?: string | null;
+  storyboard_id?: string | null;
+  file_id?: string | null;
+  status?: UserStoryboardRenderStatus | null;
+  metadata?: unknown | null;
+};
+
 /** Matches `public.user_tags` */
 export type UserTagRow = {
   id?: string | null;

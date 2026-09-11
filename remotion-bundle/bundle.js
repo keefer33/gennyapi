@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 7198
+/***/ 2848
 (__unused_webpack_module, __unused_webpack___webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -162,11 +162,13 @@ async function loadGoogleFontFamily(importName, options) {
 ;// ./app/pages/storyboards/layerContentTypes.ts
 /* unused harmony import specifier */ var layerContentTypes_getGoogleFontCatalogEntry;
 /* unused harmony import specifier */ var layerContentTypes_DEFAULT_GOOGLE_FONT_IMPORT_NAME;
+/* unused harmony import specifier */ var defaultLayerBoxStyle;
 /* unused harmony import specifier */ var defaultVideoPlaybackOptions;
 /* unused harmony import specifier */ var normalizeVideoPlaybackOptions;
 /* unused harmony import specifier */ var defaultVideoPlaybackFormValues;
 /* unused harmony import specifier */ var videoPlaybackFormValuesFromOptions;
 /* unused harmony import specifier */ var videoPlaybackOptionsFromForm;
+
 
 
 function layerEndFrameFromLayer(layer) {
@@ -355,11 +357,23 @@ function layerEditFormFromLayer(layer) {
   const animatedDefaults = defaultLayerAnimatedTextContent();
   const isTextLike = content.type === "text" || content.type === "animatedText";
   const transition = content.type === "animatedText" ? content.transition : animatedDefaults.transition;
+  const box = defaultLayerBoxStyle();
   return {
     title: layer.title,
     from: layer.from,
     to: layerEndFrameFromLayer(layer),
     color: layer.color,
+    padding: typeof layer.padding === "number" ? layer.padding : box.padding,
+    border: layer.border === true,
+    borderWidth: typeof layer.borderWidth === "number" ? layer.borderWidth : box.borderWidth,
+    borderColor: typeof layer.borderColor === "string" && layer.borderColor.trim() ? layer.borderColor : box.borderColor,
+    borderRadius: typeof layer.borderRadius === "number" ? layer.borderRadius : box.borderRadius,
+    shadow: layer.shadow === true,
+    shadowOffsetX: typeof layer.shadowOffsetX === "number" ? layer.shadowOffsetX : box.shadowOffsetX,
+    shadowOffsetY: typeof layer.shadowOffsetY === "number" ? layer.shadowOffsetY : box.shadowOffsetY,
+    shadowBlur: typeof layer.shadowBlur === "number" ? layer.shadowBlur : box.shadowBlur,
+    shadowSpread: typeof layer.shadowSpread === "number" ? layer.shadowSpread : box.shadowSpread,
+    shadowColor: typeof layer.shadowColor === "string" && layer.shadowColor.trim() ? layer.shadowColor : box.shadowColor,
     contentType: content.type,
     videoUrl: content.type === "video" ? content.url : "",
     videoTrimBefore: content.type === "video" ? videoPlaybackFormValuesFromOptions(content).trimBefore : videoDefaults.trimBeforeFrames,
@@ -453,17 +467,40 @@ function layerFromEditForm(layer, values) {
     from: timing.from,
     durationInFrames: timing.durationInFrames,
     color: values.color,
+    padding: Math.max(0, Math.round(values.padding)),
+    border: values.border,
+    borderWidth: Math.max(0, Math.round(values.borderWidth)),
+    borderColor: values.borderColor.trim() || defaultLayerBoxStyle().borderColor,
+    borderRadius: Math.max(0, Math.round(values.borderRadius)),
+    shadow: values.shadow,
+    shadowOffsetX: Math.round(values.shadowOffsetX),
+    shadowOffsetY: Math.round(values.shadowOffsetY),
+    shadowBlur: Math.max(0, Math.round(values.shadowBlur)),
+    shadowSpread: Math.round(values.shadowSpread),
+    shadowColor: values.shadowColor.trim() || defaultLayerBoxStyle().shadowColor,
     content: contentFromEditForm(values)
   };
 }
 function emptyLayerEditForm(sceneDurationInFrames = 90) {
   const textDefaults = defaultLayerTextContent();
   const maxFrame = Math.max(0, sceneDurationInFrames - 1);
+  const box = defaultLayerBoxStyle();
   return {
     title: "Layer 1",
     from: 0,
     to: maxFrame,
     color: "transparent",
+    padding: box.padding,
+    border: box.border,
+    borderWidth: box.borderWidth,
+    borderColor: box.borderColor,
+    borderRadius: box.borderRadius,
+    shadow: box.shadow,
+    shadowOffsetX: box.shadowOffsetX,
+    shadowOffsetY: box.shadowOffsetY,
+    shadowBlur: box.shadowBlur,
+    shadowSpread: box.shadowSpread,
+    shadowColor: box.shadowColor,
     contentType: "text",
     videoUrl: "",
     ...videoFormDefaults(),
@@ -1017,6 +1054,47 @@ function emptySceneFormValues(sceneIndex) {
     backgroundVideoPlaybackRate: videoDefaults.playbackRate
   };
 }
+const DEFAULT_LAYER_BORDER_COLOR = "#000000";
+const DEFAULT_LAYER_SHADOW_COLOR = "#00000066";
+function storyboardUtils_defaultLayerBoxStyle() {
+  return {
+    padding: 0,
+    border: false,
+    borderWidth: 1,
+    borderColor: DEFAULT_LAYER_BORDER_COLOR,
+    borderRadius: 0,
+    shadow: false,
+    shadowOffsetX: 0,
+    shadowOffsetY: 4,
+    shadowBlur: 12,
+    shadowSpread: 0,
+    shadowColor: DEFAULT_LAYER_SHADOW_COLOR
+  };
+}
+function normalizeNonNegativeInt(raw, fallback) {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
+  return Math.max(0, Math.round(raw));
+}
+function normalizeInt(raw, fallback) {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
+  return Math.round(raw);
+}
+function normalizeLayerBoxStyle(raw) {
+  const defaults = storyboardUtils_defaultLayerBoxStyle();
+  return {
+    padding: normalizeNonNegativeInt(raw.padding, defaults.padding),
+    border: raw.border === true,
+    borderWidth: normalizeNonNegativeInt(raw.borderWidth, defaults.borderWidth),
+    borderColor: typeof raw.borderColor === "string" && raw.borderColor.trim() ? raw.borderColor.trim() : defaults.borderColor,
+    borderRadius: normalizeNonNegativeInt(raw.borderRadius, defaults.borderRadius),
+    shadow: raw.shadow === true,
+    shadowOffsetX: normalizeInt(raw.shadowOffsetX, defaults.shadowOffsetX),
+    shadowOffsetY: normalizeInt(raw.shadowOffsetY, defaults.shadowOffsetY),
+    shadowBlur: normalizeNonNegativeInt(raw.shadowBlur, defaults.shadowBlur),
+    shadowSpread: normalizeInt(raw.shadowSpread, defaults.shadowSpread),
+    shadowColor: typeof raw.shadowColor === "string" && raw.shadowColor.trim() ? raw.shadowColor.trim() : defaults.shadowColor
+  };
+}
 function defaultLayerTitle(index) {
   return `Layer ${index + 1}`;
 }
@@ -1048,7 +1126,7 @@ function scenePayloadFromForm(values, existingScene, options) {
       value: values.backgroundValue.trim(),
       ...storyboardUtils_defaultVideoPlaybackOptions(),
       ...sceneBackgroundVideoFieldsFromForm(values),
-      layers: existingScene != null ? parseExistingSceneLayers(existingScene) : []
+      layers: (options == null ? void 0 : options.layers) ?? (existingScene != null ? parseExistingSceneLayers(existingScene) : [])
     }
   };
   const existingTransition = existingScene != null ? storyboardUtils_parseTransitionToNext(existingScene) : void 0;
@@ -1151,6 +1229,7 @@ function normalizeLayer(raw, index) {
     width: Math.max(1, Math.round(raw.width)),
     height: Math.max(1, Math.round(raw.height)),
     color: typeof raw.color === "string" ? raw.color : "transparent",
+    ...normalizeLayerBoxStyle(raw),
     content: storyboardUtils_normalizeLayerContent(raw.content)
   };
 }
@@ -1176,7 +1255,22 @@ function createDefaultSceneLayer(existingLayers, sceneDurationInFrames = DEFAULT
     width: 360,
     height: 360,
     color: "transparent",
+    ...storyboardUtils_defaultLayerBoxStyle(),
     content: storyboardUtils_defaultLayerContent("text")
+  };
+}
+function cloneSceneLayer(layer, insertIndex) {
+  var _a;
+  const cloned = structuredClone(layer);
+  const baseTitle = ((_a = layer.title) == null ? void 0 : _a.trim()) || defaultLayerTitle(insertIndex);
+  const { isDragging: _isDragging, ...rest } = cloned;
+  return {
+    ...rest,
+    id: crypto.randomUUID(),
+    title: `${baseTitle} copy`,
+    sort: insertIndex,
+    left: layer.left,
+    top: layer.top
   };
 }
 function sceneFormFromRow(scene) {
@@ -1317,6 +1411,7 @@ function buildStoryboardPlayerScenes(scenes, selectedSceneId, selectedSceneLayer
     const nextSceneDuration = index < regularScenes.length - 1 ? parseSceneDurationInFrames((_a = regularScenes[index + 1]) == null ? void 0 : _a.scene) : sceneDuration;
     const rawTransition = storyboardUtils_parseTransitionToNext(row.scene);
     const playerScene = {
+      id: row.id,
       durationInFrames: sceneDuration,
       background: parseSceneBackground(row.scene),
       layers: sanitizeLayersForSave(isSelected ? selectedSceneLayers : parseSceneLayers(row.scene))
@@ -14943,8 +15038,30 @@ function resolveTransitionTiming(transition) {
   return timing;
 }
 
-;// ./app/pages/storyboards/remotion/SceneBackground.tsx
+;// ./app/pages/storyboards/remotion/StoryboardVideo.tsx
 
+
+
+function StoryboardVideo({
+  src,
+  objectFit = "cover",
+  style,
+  ...playback
+}) {
+  const playbackProps = offthreadVideoPlaybackProps(playback);
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    Video,
+    {
+      src,
+      objectFit,
+      style: { width: "100%", height: "100%", ...style },
+      _experimentalInitiallyDrawCachedFrame: true,
+      ...playbackProps
+    }
+  );
+}
+
+;// ./app/pages/storyboards/remotion/SceneBackground.tsx
 
 
 
@@ -14958,14 +15075,7 @@ function SceneBackground({ type, value, ...videoOptions }) {
   if (!value.trim()) {
     return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { style: { backgroundColor: "#000000" } });
   }
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
-    Video,
-    {
-      src: value,
-      style: { width: "100%", height: "100%", objectFit: "contain" },
-      ...offthreadVideoPlaybackProps(videoOptions)
-    }
-  ) });
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(esm.AbsoluteFill, { children: /* @__PURE__ */ (0,jsx_runtime.jsx)(StoryboardVideo, { src: value, objectFit: "contain", ...videoOptions }) });
 }
 
 ;// ./node_modules/three/build/three.core.js
@@ -87299,6 +87409,7 @@ const CodeBlock = ({ code, language = "tsx", highlight, focus, transition, theme
 
 
 
+
 const fillStyle = {
   width: "100%",
   height: "100%",
@@ -87353,7 +87464,17 @@ function LayerAudioContent({ content }) {
   ] });
 }
 function LayerVideoContent({ content }) {
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(Video, { src: content.url.trim(), style: fillStyle, ...offthreadVideoPlaybackProps(content) });
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    StoryboardVideo,
+    {
+      src: content.url.trim(),
+      objectFit: "cover",
+      trimBeforeFrames: content.trimBeforeFrames,
+      trimAfterFrames: content.trimAfterFrames,
+      volume: content.volume,
+      playbackRate: content.playbackRate
+    }
+  );
 }
 function useLayerFontFamily(fontImportName, fallbackFamily, bold) {
   const [fontFamily, setFontFamily] = (0,react.useState)(fallbackFamily);
@@ -87428,18 +87549,54 @@ function LayerTextContent({ content }) {
 
 
 
+function layerBoxShadow(layer) {
+  if (!layer.shadow) return void 0;
+  return `${layer.shadowOffsetX}px ${layer.shadowOffsetY}px ${Math.max(0, layer.shadowBlur)}px ${layer.shadowSpread}px ${layer.shadowColor}`;
+}
 function SceneLayerItem({ layer }) {
-  const style = (0,react.useMemo)(
+  const outerStyle = (0,react.useMemo)(
     () => ({
-      backgroundColor: layer.color,
       position: "absolute",
       left: layer.left,
       top: layer.top,
       width: layer.width,
       height: layer.height,
-      overflow: "hidden"
+      borderRadius: layer.borderRadius,
+      boxShadow: layerBoxShadow(layer)
     }),
-    [layer.color, layer.height, layer.left, layer.top, layer.width]
+    [
+      layer.borderRadius,
+      layer.height,
+      layer.left,
+      layer.shadow,
+      layer.shadowBlur,
+      layer.shadowColor,
+      layer.shadowOffsetX,
+      layer.shadowOffsetY,
+      layer.shadowSpread,
+      layer.top,
+      layer.width
+    ]
+  );
+  const innerStyle = (0,react.useMemo)(
+    () => ({
+      width: "100%",
+      height: "100%",
+      backgroundColor: layer.color,
+      overflow: "hidden",
+      boxSizing: "border-box",
+      padding: layer.padding,
+      borderRadius: layer.borderRadius,
+      border: layer.border ? `${Math.max(0, layer.borderWidth)}px solid ${layer.borderColor}` : "none"
+    }),
+    [
+      layer.border,
+      layer.borderColor,
+      layer.borderRadius,
+      layer.borderWidth,
+      layer.color,
+      layer.padding
+    ]
   );
   return /* @__PURE__ */ (0,jsx_runtime.jsx)(
     esm.Sequence,
@@ -87447,7 +87604,7 @@ function SceneLayerItem({ layer }) {
       from: layer.from,
       durationInFrames: layer.durationInFrames,
       layout: "none",
-      children: /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(LayerContentRenderer, { content: layer.content }) })
+      children: /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: outerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: innerStyle, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(LayerContentRenderer, { content: layer.content }) }) })
     },
     layer.id
   );
@@ -87737,6 +87894,7 @@ function StoryboardSceneCanvas({
   const onPointerDown = (0,react.useCallback)(
     (e) => {
       if (e.button !== 0) return;
+      if (e.target !== e.currentTarget) return;
       setSelectedLayerId(null);
     },
     [setSelectedLayerId]
@@ -87771,12 +87929,14 @@ const noop = () => void 0;
 function StoryboardMultiSceneCanvas({
   scenes,
   baseLayers = [],
+  baseSceneId = null,
   width,
   height,
   selectedSceneIndex,
   isBaseSceneSelected = false,
   selectedLayerId,
   setSelectedLayerId,
+  onSelectLayer,
   changeLayer,
   onLayersPersist
 }) {
@@ -87786,18 +87946,32 @@ function StoryboardMultiSceneCanvas({
     const nodes = [];
     scenes.forEach((scene, index) => {
       const isActiveScene = !isBaseSceneSelected && selectedSceneIndex === index;
+      const handleSetSelectedLayerId = (layerId) => {
+        if (!layerId) {
+          if (isActiveScene) setSelectedLayerId(null);
+          return;
+        }
+        onSelectLayer(scene.id, layerId);
+      };
       nodes.push(
-        /* @__PURE__ */ (0,jsx_runtime.jsx)(TransitionSeries.Sequence, { durationInFrames: scene.durationInFrames, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          StoryboardSceneCanvas,
+        /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          TransitionSeries.Sequence,
           {
-            background: scene.background,
-            layers: scene.layers,
-            selectedLayerId: isActiveScene ? selectedLayerId : null,
-            setSelectedLayerId: isActiveScene ? setSelectedLayerId : noop,
-            changeLayer: isActiveScene ? changeLayer : noop,
-            onLayersPersist: isActiveScene ? onLayersPersist : noop
-          }
-        ) }, `scene-${index}`)
+            durationInFrames: scene.durationInFrames,
+            children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+              StoryboardSceneCanvas,
+              {
+                background: scene.background,
+                layers: scene.layers,
+                selectedLayerId: isActiveScene ? selectedLayerId : null,
+                setSelectedLayerId: handleSetSelectedLayerId,
+                changeLayer: isActiveScene ? changeLayer : noop,
+                onLayersPersist: isActiveScene ? onLayersPersist : noop
+              }
+            )
+          },
+          `scene-${scene.id}`
+        )
       );
       if (index < scenes.length - 1 && isActiveTransition(scene.transitionToNext)) {
         const transition = scene.transitionToNext;
@@ -87808,7 +87982,7 @@ function StoryboardMultiSceneCanvas({
               presentation: resolveTransitionPresentation(transition, resolveContext),
               timing: resolveTransitionTiming(transition)
             },
-            `transition-${index}`
+            `transition-${scene.id}`
           )
         );
       }
@@ -87818,6 +87992,7 @@ function StoryboardMultiSceneCanvas({
     changeLayer,
     isBaseSceneSelected,
     onLayersPersist,
+    onSelectLayer,
     resolveContext,
     scenes,
     selectedLayerId,
@@ -87828,13 +88003,19 @@ function StoryboardMultiSceneCanvas({
     /* @__PURE__ */ (0,jsx_runtime.jsx)(TransitionSeries, { children }),
     baseLayers.length > 0 ? /* @__PURE__ */ (0,jsx_runtime.jsxs)(esm.AbsoluteFill, { style: { pointerEvents: isBaseSceneSelected ? "auto" : "none" }, children: [
       baseLayers.map((layer) => /* @__PURE__ */ (0,jsx_runtime.jsx)(SceneLayerItem, { layer }, layer.id)),
-      !isRendering && isBaseSceneSelected ? /* @__PURE__ */ (0,jsx_runtime.jsx)(
+      !isRendering && isBaseSceneSelected && baseSceneId ? /* @__PURE__ */ (0,jsx_runtime.jsx)(
         SortedOutlines,
         {
           layers: baseLayers,
           selectedLayerId,
           changeLayer,
-          setSelectedLayerId,
+          setSelectedLayerId: (layerId) => {
+            if (!layerId) {
+              setSelectedLayerId(null);
+              return;
+            }
+            onSelectLayer(baseSceneId, layerId);
+          },
           onLayersPersist
         }
       ) : null
@@ -87853,6 +88034,7 @@ const defaultProps = {
   layers: [],
   selectedLayerId: null,
   setSelectedLayerId: Composition_noop,
+  onSelectLayer: Composition_noop,
   changeLayer: Composition_noop,
   onLayersPersist: Composition_noop
 };
@@ -87863,18 +88045,30 @@ function MyComposition(props) {
       {
         scenes: props.scenes,
         baseLayers: props.baseLayers,
+        baseSceneId: props.baseSceneId,
         width: props.width,
         height: props.height,
         selectedSceneIndex: props.selectedSceneIndex ?? null,
         isBaseSceneSelected: props.isBaseSceneSelected ?? false,
         selectedLayerId: props.selectedLayerId,
         setSelectedLayerId: props.setSelectedLayerId,
+        onSelectLayer: props.onSelectLayer ?? Composition_noop,
         changeLayer: props.changeLayer,
         onLayersPersist: props.onLayersPersist
       }
     );
   }
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(StoryboardSceneCanvas, { ...props });
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    StoryboardSceneCanvas,
+    {
+      background: props.background,
+      layers: props.layers,
+      selectedLayerId: props.selectedLayerId,
+      setSelectedLayerId: props.setSelectedLayerId,
+      changeLayer: props.changeLayer,
+      onLayersPersist: props.onLayersPersist
+    }
+  );
 }
 MyComposition.defaultProps = defaultProps;
 
@@ -149980,7 +150174,7 @@ var NoReactInternals = {
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
 /******/ 	__webpack_require__(6507);
-/******/ 	__webpack_require__(7198);
+/******/ 	__webpack_require__(2848);
 /******/ 	__webpack_require__(3610);
 /******/ 	var __webpack_exports__ = __webpack_require__(3482);
 /******/ 	

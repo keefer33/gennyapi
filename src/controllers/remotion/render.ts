@@ -1,118 +1,105 @@
-import { mkdtemp, readFile, rm } from 'fs/promises';
-
-import { join } from 'path';
-
-import { tmpdir } from 'os';
-
-import { Request, Response } from 'express';
-
-import { renderMedia, selectComposition } from '@remotion/renderer';
-
+import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
-
 import { sendError, sendOk } from '../../app/response';
-
+import { BASE_SCENE_TYPE, listUserStoryboardScenesForStoryboard } from '../../database/user_storyboard_scenes';
+import { createUserStoryboardRender } from '../../database/user_storyboards_renders';
 import { getAuthUserId } from '../../shared/getAuthUserId';
+import { getUserStoryboardForUser } from '../../database/user_storyboards';
+import { runStoryboardRenderJob } from './runStoryboardRenderJob';
 
-import { buildStoryboardRenderInputProps } from './buildStoryboardRenderInputProps';
-
-import { resolveRemotionServeUrl } from './resolveRemotionServeUrl';
-
-import { saveRemotionRenderFile } from './saveRemotionRenderFile';
-
-const REMOTION_COMPOSITION_ID = process.env.REMOTION_COMPOSITION_ID ?? 'MyComp';
-
+/**
+ * POST /remotion/render
+ * Thin wrapper: same async start as POST /storyboards/:id/renders.
+ * Body: { storyboardId }
+ */
 export const render = async (req: Request, res: Response): Promise<void> => {
-  const userId = getAuthUserId(req);
-
-  const storyboardId = String(req.body?.storyboardId ?? '').trim();
-
-  if (!storyboardId) {
-    sendError(
-      res,
-
-      new AppError('storyboardId is required', {
-        statusCode: 400,
-
-        code: 'storyboard_id_required',
-
-        expose: true,
-      })
-    );
-
-    return;
-  }
-
-  const tempDir = await mkdtemp(join(tmpdir(), 'remotion-render-'));
-
-  const outputFilename = `storyboard-${storyboardId}.mp4`;
-
-  const outputPath = join(tempDir, outputFilename);
-
   try {
-    const serveUrl = resolveRemotionServeUrl();
+    const userId = getAuthUserId(req);
+    const storyboardId = String(req.body?.storyboardId ?? '').trim();
 
-    const inputProps = await buildStoryboardRenderInputProps(userId, storyboardId);
+    if (!storyboardId) {
+      sendError(
+        res,
+        new AppError('storyboardId is required', {
+          statusCode: 400,
+          code: 'storyboard_id_required',
+          expose: true,
+        })
+      );
+      return;
+    }
 
-    const composition = await selectComposition({
-      serveUrl,
+    const storyboard = await getUserStoryboardForUser(userId, storyboardId);
+    if (!storyboard) {
+      sendError(
+        res,
+        new AppError('Storyboard not found', {
+          statusCode: 404,
+          code: 'storyboard_not_found',
+          expose: true,
+        })
+      );
+      return;
+    }
 
-      id: REMOTION_COMPOSITION_ID,
+    const scenes = await listUserStoryboardScenesForStoryboard(userId, storyboardId);
+    const regular = scenes.filter((row) => row.type !== BASE_SCENE_TYPE);
+    if (regular.length === 0) {
+      sendError(
+        res,
+        new AppError('Add at least one scene before rendering', {
+          statusCode: 400,
+          code: 'storyboard_render_no_scenes',
+          expose: true,
+        })
+      );
+      return;
+    }
 
-      inputProps,
-    });
-
-    console.log('[remotion/render] Starting storyboard render', {
-      storyboardId,
-
-      serveUrl,
-
-      durationInFrames: inputProps.durationInFrames,
-
-      sceneCount: inputProps.scenes.length,
-    });
-
-    await renderMedia({
-      codec: 'h264',
-
-      composition,
-
-      serveUrl,
-
-      outputLocation: outputPath,
-
-      chromiumOptions: {
-        enableMultiProcessOnLinux: true,
+    const renderRow = await createUserStoryboardRender({
+      storyboard_id: storyboardId,
+      status: 'processing',
+      metadata: {
+        user_id: userId,
+        storyboard_id: storyboardId,
+        sceneCount: regular.length,
       },
-
-      inputProps,
     });
 
-    const fileBuffer = await readFile(outputPath);
+    const renderId = renderRow.id?.trim();
+    if (!renderId) {
+      sendError(
+        res,
+        new AppError('Failed to create storyboard render', {
+          statusCode: 500,
+          code: 'storyboard_render_create_invalid',
+        })
+      );
+      return;
+    }
 
-    const fileRow = await saveRemotionRenderFile(
-      userId,
-
-      fileBuffer,
-
-      outputFilename,
-
-      composition.id
+    sendOk(
+      res,
+      {
+        render_id: renderId,
+        status: 'processing',
+        storyboard_id: storyboardId,
+      },
+      202
     );
 
-    sendOk(res, {
-      file_id: fileRow.id,
-
-      file_url: fileRow.file_path,
-
-      file_name: fileRow.file_name,
-
-      storyboard_id: storyboardId,
-    });
+    void runStoryboardRenderJob(userId, renderId)
+      .then(() => {
+        console.log('[remotion/render] background job finished', { render_id: renderId });
+      })
+      .catch((err) => {
+        console.error('[remotion/render] background job failed', {
+          render_id: renderId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
   } catch (error) {
     console.error('[remotion/render] failed', error);
     sendError(res, error);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
 };

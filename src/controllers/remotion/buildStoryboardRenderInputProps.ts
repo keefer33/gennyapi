@@ -8,6 +8,8 @@ const DEFAULT_STORYBOARD_HEIGHT = 1080;
 const DEFAULT_STORYBOARD_FPS = 24;
 const DEFAULT_SCENE_DURATION_FRAMES = 90;
 const DEFAULT_TRANSITION_DURATION_FRAMES = 15;
+const DEFAULT_LAYER_BORDER_COLOR = '#000000';
+const DEFAULT_LAYER_SHADOW_COLOR = '#00000066';
 
 type SceneBackgroundType = 'video' | 'image' | 'color';
 
@@ -176,6 +178,17 @@ type RenderLayer = {
   width: number;
   height: number;
   color: string;
+  padding: number;
+  border: boolean;
+  borderWidth: number;
+  borderColor: string;
+  borderRadius: number;
+  shadow: boolean;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowBlur: number;
+  shadowSpread: number;
+  shadowColor: string;
   content?: unknown;
 };
 
@@ -200,6 +213,7 @@ export type StoryboardRenderInputProps = {
   durationInFrames: number;
   scenes: StoryboardRenderScene[];
   baseLayers?: RenderLayer[];
+  baseSceneId?: string | null;
 };
 
 const BASE_SCENE_TYPE = 'base';
@@ -459,8 +473,54 @@ function isValidLayer(value: unknown): value is RenderLayer & { isDragging?: boo
   );
 }
 
+function normalizeNonNegativeInt(raw: unknown, fallback: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(0, Math.round(raw));
+}
+
+function normalizeInt(raw: unknown, fallback: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.round(raw);
+}
+
+function sanitizeLayerBoxStyle(raw: Record<string, unknown>): Pick<
+  RenderLayer,
+  | 'padding'
+  | 'border'
+  | 'borderWidth'
+  | 'borderColor'
+  | 'borderRadius'
+  | 'shadow'
+  | 'shadowOffsetX'
+  | 'shadowOffsetY'
+  | 'shadowBlur'
+  | 'shadowSpread'
+  | 'shadowColor'
+> {
+  return {
+    padding: normalizeNonNegativeInt(raw.padding, 0),
+    border: raw.border === true,
+    borderWidth: normalizeNonNegativeInt(raw.borderWidth, 1),
+    borderColor:
+      typeof raw.borderColor === 'string' && raw.borderColor.trim()
+        ? raw.borderColor.trim()
+        : DEFAULT_LAYER_BORDER_COLOR,
+    borderRadius: normalizeNonNegativeInt(raw.borderRadius, 0),
+    shadow: raw.shadow === true,
+    shadowOffsetX: normalizeInt(raw.shadowOffsetX, 0),
+    shadowOffsetY: normalizeInt(raw.shadowOffsetY, 4),
+    shadowBlur: normalizeNonNegativeInt(raw.shadowBlur, 12),
+    shadowSpread: normalizeInt(raw.shadowSpread, 0),
+    shadowColor:
+      typeof raw.shadowColor === 'string' && raw.shadowColor.trim()
+        ? raw.shadowColor.trim()
+        : DEFAULT_LAYER_SHADOW_COLOR,
+  };
+}
+
 function sanitizeLayerForRender(layer: RenderLayer & { isDragging?: boolean }): RenderLayer {
   const content = layer.content;
+  const boxStyle = sanitizeLayerBoxStyle(layer as unknown as Record<string, unknown>);
   return {
     id: layer.id,
     ...(typeof layer.sort === 'number' ? { sort: Math.round(layer.sort) } : {}),
@@ -471,6 +531,7 @@ function sanitizeLayerForRender(layer: RenderLayer & { isDragging?: boolean }): 
     width: Math.max(1, Math.round(layer.width)),
     height: Math.max(1, Math.round(layer.height)),
     color: layer.color,
+    ...boxStyle,
     ...(content !== undefined ? { content } : {}),
   };
 }
@@ -579,5 +640,6 @@ export async function buildStoryboardRenderInputProps(
     durationInFrames,
     scenes,
     baseLayers,
+    baseSceneId: baseRow?.id ?? null,
   };
 }
