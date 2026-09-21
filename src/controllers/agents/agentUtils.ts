@@ -4,8 +4,7 @@ import { sendError } from '../../app/response';
 import { z } from 'zod/v3';
 import { handleGetAgentModelByName } from '../../database/agent_models';
 import getAgentCustomTools from './agentCustomTools';
-import { Composio } from '@composio/core';
-import { VercelProvider } from '@composio/vercel';
+import { importComposioCore, importComposioVercel } from '../../shared/composioSdk';
 import { AgentModelRow, GenModelRow } from '../../database/types';
 import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
 import { resolvePlaygroundRunCost } from '../playground/playgroundRunCost';
@@ -150,20 +149,23 @@ export async function loadComposioTools(
   if (toolkits.length === 0) {
     return {};
   }
+  const mode = sessionId ? 'use' : 'create';
   try {
+    const [{ Composio }, { VercelProvider }] = await Promise.all([
+      importComposioCore(),
+      importComposioVercel(),
+    ]);
     const composio = new Composio({
       apiKey: process.env.COMPOSIO_API_KEY,
       provider: new VercelProvider(),
     });
     let session: { sessionId?: string; tools: () => Promise<unknown> };
     if (sessionId) {
-      session = await composio.use(sessionId);
+      session = await composio.use(sessionId, { customToolkits: toolkits });
     } else {
       session = await composio.create(userId, {
-        experimental: {
-          customToolkits: toolkits,
-        },
         manageConnections: true,
+        experimental: { customToolkits: toolkits },
       });
       if (chatId && session.sessionId) {
         await handleUpdateChat(userId, chatId, {
@@ -178,7 +180,12 @@ export async function loadComposioTools(
     const composioTools = await session.tools();
     return (composioTools ?? {}) as Record<string, unknown>;
   } catch (composioErr) {
-    console.error('[runChat] Composio session/tools error:', composioErr);
+    console.error('[runChat] Composio session/tools error:', {
+      sessionId: sessionId ?? null,
+      mode,
+      message: composioErr instanceof Error ? composioErr.message : String(composioErr),
+      error: composioErr,
+    });
     return {};
   }
 }

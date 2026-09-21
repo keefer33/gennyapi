@@ -145,7 +145,25 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
     const path = lower.split('?')[0];
     const ext = path.includes('.') ? path.slice(path.lastIndexOf('.')) : '';
     return (
-      ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.mp4', '.webm', '.mov', '.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.opus'].includes(ext) ||
+      [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.gif',
+        '.webp',
+        '.bmp',
+        '.svg',
+        '.mp4',
+        '.webm',
+        '.mov',
+        '.mp3',
+        '.wav',
+        '.ogg',
+        '.m4a',
+        '.flac',
+        '.aac',
+        '.opus',
+      ].includes(ext) ||
       path.includes('/storage/') ||
       path.includes('/object/')
     );
@@ -175,10 +193,10 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
 }
 
 const ALLOWED_MODELS = new Set([
-  'anthropic/claude-opus-4.7',
-  'google/gemini-3.1-flash-lite',
-  'xai/grok-4.3',
-  'openai/gpt-5.5',
+  'anthropic/claude-opus-4.8',
+  'google/gemini-3.8-flash',
+  'xai/grok-4.6',
+  'openai/gpt-5.6-luna',
 ]);
 
 /** xAI models that can return 412 when given image content via the gateway; we send text-only for these when reference media is present. */

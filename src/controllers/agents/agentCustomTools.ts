@@ -1,5 +1,5 @@
-import { experimental_createTool, experimental_createToolkit } from '@composio/core';
 import { z } from 'zod/v3';
+import { importComposioCore } from '../../shared/composioSdk';
 import {
   jsonSchemaInputToZodObject,
   createGenerationRequest,
@@ -60,6 +60,7 @@ import {
 } from './agentCharacterToolResults';
 
 export default async function getAgentCustomTools(_authToken: string, userId: string) {
+  const { experimental_createTool, experimental_createToolkit } = await importComposioCore();
   const models = await getGenModelsList();
   const toolPromptMeta = [];
   const modelNames: string[] = [];
@@ -550,6 +551,7 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
   const gennyBotAigenTools = experimental_createToolkit('GENNY_BOT', {
     name: 'Genny Bot Ai Gen Tools',
     description: 'Genny Bot tools for image and video generation.',
+    preload: true,
     tools: [
       ...dynamicTools,
       experimental_createTool('CALCULATE_MODEL_COST', {
@@ -606,12 +608,14 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
   const gennyBotVoiceTools = experimental_createToolkit('GENNY_BOT_VOICES', {
     name: 'Genny Bot Voice Tools',
     description: 'Voice design, cloning, publishing, and speech synthesis.',
+    preload: true,
     tools: voiceTools,
   });
 
   const gennyBotCharacterTools = experimental_createToolkit('GENNY_BOT_CHARACTERS', {
     name: 'Genny Bot Character Tools',
     description: 'Character design, looks, scenes, and videos.',
+    preload: true,
     tools: characterTools,
   });
 

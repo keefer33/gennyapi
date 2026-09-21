@@ -1,12 +1,8 @@
 import { createGateway, generateText } from 'ai';
 import { AppError } from '../app/error';
-import {
-  VOICE_DESIGN_ACCENTS,
-  VOICE_DESIGN_AGES,
-  VOICE_DESIGN_GENDERS,
-} from './voiceDesignOptions';
+import { VOICE_DESIGN_ACCENTS, VOICE_DESIGN_AGES, VOICE_DESIGN_GENDERS } from './voiceDesignOptions';
 
-export const VOICE_DESIGN_ASSIST_MODEL = 'anthropic/claude-opus-4.7';
+export const VOICE_DESIGN_ASSIST_MODEL = 'anthropic/claude-opus-4.8';
 
 /** Inworld design API limits (see designVoice route). */
 export const VOICE_DESIGN_PROMPT_MIN = 30;
@@ -106,7 +102,7 @@ function normalizeGender(value: string): string | null {
 
 function normalizeAge(value: string): string | null {
   const raw = value.trim().toLowerCase().replace(/\s+/g, '_');
-  const direct = (VOICE_DESIGN_AGES as readonly string[]).find((a) => a === raw);
+  const direct = (VOICE_DESIGN_AGES as readonly string[]).find(a => a === raw);
   if (direct) return direct;
   const aliases: Record<string, (typeof VOICE_DESIGN_AGES)[number]> = {
     young_adult: 'young_adult',
@@ -125,13 +121,10 @@ function normalizeAge(value: string): string | null {
 function normalizeAccent(value: string): string | null {
   const t = value.trim();
   if (!t) return null;
-  const exact = (VOICE_DESIGN_ACCENTS as readonly string[]).find(
-    (a) => a.toLowerCase() === t.toLowerCase()
-  );
+  const exact = (VOICE_DESIGN_ACCENTS as readonly string[]).find(a => a.toLowerCase() === t.toLowerCase());
   if (exact) return exact;
   const partial = (VOICE_DESIGN_ACCENTS as readonly string[]).find(
-    (a) =>
-      a.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(a.toLowerCase())
+    a => a.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(a.toLowerCase())
   );
   return partial ?? t;
 }
@@ -181,12 +174,7 @@ function buildUserMessage(input: VoiceDesignAssistInput): string {
     previewText ? `Current preview script:\n${previewText}` : 'Current preview script: (empty)',
   ].join('\n\n');
 
-  const mode =
-    !designPrompt && !previewText
-      ? 'generate'
-      : designPrompt && previewText
-        ? 'enhance'
-        : 'enhance_partial';
+  const mode = !designPrompt && !previewText ? 'generate' : designPrompt && previewText ? 'enhance' : 'enhance_partial';
 
   return `Mode: ${mode}
 ${textBlock}
@@ -207,16 +195,14 @@ function mergeMetadata(
   const inputName = trimField(input.defaultName);
 
   const gender = inputGender
-    ? normalizeGender(inputGender) ?? inputGender
-    : normalizeGender(parsed.gender ?? '') ?? 'neutral';
+    ? (normalizeGender(inputGender) ?? inputGender)
+    : (normalizeGender(parsed.gender ?? '') ?? 'neutral');
 
-  const age = inputAge
-    ? normalizeAge(inputAge) ?? inputAge
-    : normalizeAge(parsed.age ?? '') ?? 'young_adult';
+  const age = inputAge ? (normalizeAge(inputAge) ?? inputAge) : (normalizeAge(parsed.age ?? '') ?? 'young_adult');
 
   const accent = inputAccent
-    ? normalizeAccent(inputAccent) ?? inputAccent
-    : normalizeAccent(parsed.accent ?? '') ?? 'American';
+    ? (normalizeAccent(inputAccent) ?? inputAccent)
+    : (normalizeAccent(parsed.accent ?? '') ?? 'American');
 
   const aiName = trimField(parsed.defaultName).slice(0, MAX_DEFAULT_NAME_LENGTH);
   const defaultName = inputName || aiName || 'Custom voice';
@@ -224,9 +210,7 @@ function mergeMetadata(
   return { gender, age, accent, defaultName };
 }
 
-export async function assistVoiceDesign(
-  input: VoiceDesignAssistInput
-): Promise<VoiceDesignAssistResult> {
+export async function assistVoiceDesign(input: VoiceDesignAssistInput): Promise<VoiceDesignAssistResult> {
   const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
     throw new AppError('AI gateway is not configured', {

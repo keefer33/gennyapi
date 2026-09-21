@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { Composio } from '@composio/core';
+import { importComposioCore } from '../../shared/composioSdk';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { badRequest, sendError, sendOk } from '../../app/response';
 import { requireComposioApiKey, toComposioAppError } from './toolsResponse';
@@ -20,6 +20,7 @@ export async function createConnectLink(req: Request, res: Response): Promise<vo
       throw badRequest('toolkit_slug is required');
     }
 
+    const { Composio } = await importComposioCore();
     const composio = new Composio({
       apiKey: apiKey,
     });
