@@ -138,7 +138,7 @@ export async function pollCharacterLookRunFiles(
         run_id: id,
         character_id: cid,
         file_count: files.length,
-        file_ids: files.map((file) => file.id),
+        file_ids: files.map(file => file.id),
       });
     }
     if (files.length >= 1) {

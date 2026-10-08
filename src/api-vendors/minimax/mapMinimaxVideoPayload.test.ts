@@ -118,6 +118,23 @@ test('passes through an existing content array', () => {
   assert.deepEqual(body.content, content);
 });
 
+test('omits extra.prompt_expansion_mode for MiniMax-H3', () => {
+  const body = mapMinimaxVideoPayload(
+    {
+      prompt: 'quality lighthouse',
+      duration: 4,
+      resolution: '2K',
+      aspect_ratio: '16:9',
+      prompt_expansion_mode: 'quality',
+    },
+    'MiniMax-H3'
+  );
+  assert.equal(body.model, 'MiniMax-H3');
+  assert.equal(body.extra, undefined);
+  assert.equal(body.resolution, '2K');
+  assert.equal(body.duration, 4);
+});
+
 test('parses MiniMax OpenAI-style errors', () => {
   assert.equal(
     minimaxErrorMessage(

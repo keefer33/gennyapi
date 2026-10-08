@@ -226,7 +226,7 @@ export function mapMinimaxVideoPayload(payload: unknown, vendorModelName: string
     duration,
     ratio,
   };
-  if (expansionMode) {
+  if (expansionMode && model === 'MiniMax-H3-Max') {
     body.extra = { prompt_expansion_mode: expansionMode };
   }
   return body;

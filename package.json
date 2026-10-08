@@ -13,7 +13,7 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "type-check": "tsc --noEmit",
-    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts",
+    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts src/api-vendors/google/googleImageVideoPart.test.ts",
     "remotion:sync": "node scripts/sync-remotion-bundle.js"
   },
   "keywords": [

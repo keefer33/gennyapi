@@ -24,6 +24,7 @@ import {
   trimString,
   type GoogleApiSchema,
 } from './googleApiShared';
+import { videoInputToGeminiPart, videoInputsFromPayload } from './googleImageVideoPart';
 import { buildGoogleOmniRequestPayload } from './runGoogleModel';
 import { updateUserGenModelRun } from '../../database/user_gen_model_runs';
 
@@ -190,7 +191,7 @@ function googleImageSystemInstruction(existing: unknown): Record<string, unknown
   return out;
 }
 
-async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
+export async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record<string, unknown>> {
   const originalPayload = (payload ?? {}) as Record<string, unknown>;
   const tools = googleSearchTools(originalPayload);
   if (Array.isArray(originalPayload.contents)) {
@@ -220,6 +221,11 @@ async function googleGeminiImageRequestPayload(payload: unknown): Promise<Record
 
   for (const image of images) {
     const part = await imageInputToGeminiPart(image);
+    if (part) parts.push(part);
+  }
+
+  for (const video of videoInputsFromPayload(originalPayload)) {
+    const part = videoInputToGeminiPart(video);
     if (part) parts.push(part);
   }
 
