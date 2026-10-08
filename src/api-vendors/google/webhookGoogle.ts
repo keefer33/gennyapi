@@ -24,7 +24,14 @@ import {
   trimString,
   type GoogleApiSchema,
 } from './googleApiShared';
-import { videoInputToGeminiPart, videoInputsFromPayload } from './googleImageVideoPart';
+import {
+  collectInteractionOutputImages,
+  googleYouTubeImageInteractionRequest,
+  interactionResponseRecord,
+  isGoogleInteractionTaskId,
+  videoInputToGeminiPart,
+  videoInputsFromPayload,
+} from './googleImageVideoPart';
 import { buildGoogleOmniRequestPayload } from './runGoogleModel';
 import { updateUserGenModelRun } from '../../database/user_gen_model_runs';
 
@@ -409,9 +416,123 @@ async function saveGoogleUrlFile(
   );
 }
 
+async function saveGoogleBase64Images(
+  images: GoogleImage[],
+  run: WebhookVendorContext<GoogleApiSchema>['run'],
+  runId: string,
+  lastResponse: unknown
+): Promise<void> {
+  const files: unknown[] = [];
+  for (let index = 0; index < images.length; index++) {
+    const image = images[index];
+    const ext = getFileExtensionFromMimeType(image.mimeType);
+    const savedFile = await saveFileFromBuffer(
+      Buffer.from(image.base64, 'base64'),
+      `google-${runId}-${index + 1}.${ext}`,
+      image.mimeType,
+      run,
+      lastResponse
+    );
+    if (savedFile) files.push(savedFile);
+  }
+  await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
+}
+
+function googleImageInteractionsEndpoint(apiSchema: GoogleApiSchema): string {
+  return `${googleServer(apiSchema)}/interactions`;
+}
+
+async function handleGoogleYouTubeImage(
+  context: WebhookVendorContext<GoogleApiSchema>,
+  requestPayload: Record<string, unknown>
+): Promise<void> {
+  const { apiSchema, apiKey, vendorModelName } = context;
+  let { run, runId, rowStatus } = context;
+  const taskId = trimString(run.task_id);
+  let lastResponse: unknown = {};
+
+  try {
+    const polling = isGoogleInteractionTaskId(taskId);
+    const endpoint = polling
+      ? `${googleImageInteractionsEndpoint(apiSchema)}/${encodeURIComponent(taskId)}`
+      : googleImageInteractionsEndpoint(apiSchema);
+    console.log('[webhookGoogle] youtube image interaction', {
+      endpoint,
+      run_id: run.id,
+      model: vendorModelName,
+      db_status: rowStatus,
+      polling,
+    });
+
+    const response = polling
+      ? await axios.get(endpoint, { headers: googleHeaders(apiKey), validateStatus: () => true })
+      : await axios.post(endpoint, requestPayload, { headers: googleHeaders(apiKey), validateStatus: () => true });
+
+    lastResponse = response.data ?? {};
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`google youtube image interaction failed with status ${response.status}`);
+    }
+
+    const interaction = interactionResponseRecord(lastResponse) ?? {};
+    if (interaction.error) {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse),
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const images = collectInteractionOutputImages(lastResponse);
+    if (images.length > 0) {
+      await saveGoogleBase64Images(images, run, runId, lastResponse);
+      return;
+    }
+
+    const status = trimString(interaction.status).toLowerCase();
+    if (status === 'failed' || status === 'error' || status === 'cancelled') {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse) || 'Google image interaction failed',
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    if (status === 'completed') {
+      throw new Error(googleErrorMessage(lastResponse) || 'google image interaction completed but no image was returned');
+    }
+
+    const interactionId = trimString(interaction.id);
+    if (!interactionId) {
+      throw new Error('google youtube image interaction response missing interaction id');
+    }
+
+    await updateUserGenModelRun({
+      id: runId,
+      task_id: interactionId,
+      response: lastResponse,
+    });
+    await tickWebhookRun({ runId, duration: durationForRun(run), delayMs: 5000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.error('[webhookGoogle] youtube image error', { run_id: run.id, message });
+    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
+    throw error;
+  }
+}
+
 async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
   const { run, runId, rowStatus, apiSchema, apiKey, vendorModelName } = context;
   const isGeminiImage = isGeminiImageRequest(apiSchema, vendorModelName);
+  const youtubeRequest = isGeminiImage ? googleYouTubeImageInteractionRequest(vendorModelName, run.payload) : null;
+  if (youtubeRequest) {
+    await handleGoogleYouTubeImage(context, youtubeRequest);
+    return;
+  }
+
   const endpoint = googleEndpoint(apiSchema, vendorModelName, isGeminiImage ? 'generateContent' : 'predict');
   const requestPayload = isGeminiImage
     ? await googleGeminiImageRequestPayload(run.payload)
@@ -438,20 +559,7 @@ async function handleGoogleImage(context: WebhookVendorContext<GoogleApiSchema>)
     }
 
     if (images.length > 0) {
-      const files: unknown[] = [];
-      for (let index = 0; index < images.length; index++) {
-        const image = images[index];
-        const ext = getFileExtensionFromMimeType(image.mimeType);
-        const savedFile = await saveFileFromBuffer(
-          Buffer.from(image.base64, 'base64'),
-          `google-${runId}-${index + 1}.${ext}`,
-          image.mimeType,
-          run,
-          lastResponse
-        );
-        if (savedFile) files.push(savedFile);
-      }
-      await completeWebhookRun({ run, response: lastResponse, files, duration: durationForRun(run) });
+      await saveGoogleBase64Images(images, run, runId, lastResponse);
       return;
     }
 
