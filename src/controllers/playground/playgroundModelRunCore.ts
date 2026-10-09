@@ -18,6 +18,7 @@ import { runKlingModel } from '../../api-vendors/kling/runKlingModel';
 import { runSkyreelsModel } from '../../api-vendors/skyreels/runSkyreelsModel';
 import { runLtxModel } from '../../api-vendors/ltx/runLtxModel';
 import { runMinimaxModel } from '../../api-vendors/minimax/runMinimaxModel';
+import { runHiggsfieldModel } from '../../api-vendors/higgsfield/runHiggsfieldModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -112,6 +113,9 @@ export async function executePlaygroundModelRun(
           break;
         case 'minimax':
           response = await runMinimaxModel(genModel, payload);
+          break;
+        case 'higgsfield':
+          response = await runHiggsfieldModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {

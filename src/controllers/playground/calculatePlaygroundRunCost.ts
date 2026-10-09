@@ -21,6 +21,7 @@ export async function calculatePlaygroundRunCost(
     case 'skyreels':
     case 'ltx':
     case 'minimax':
+    case 'higgsfield':
       return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
     case 'wavespeed':
       return getWavespeedCost(

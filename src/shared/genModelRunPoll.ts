@@ -10,6 +10,7 @@ import { webhookKling } from '../api-vendors/kling/webhookKling';
 import { webhookSkyreels } from '../api-vendors/skyreels/webhookSkyreels';
 import { webhookLtx } from '../api-vendors/ltx/webhookLtx';
 import { webhookMinimax } from '../api-vendors/minimax/webhookMinimax';
+import { webhookHiggsfield } from '../api-vendors/higgsfield/webhookHiggsfield';
 import { getUserGenModelRunByIdForUser } from '../database/user_gen_model_runs';
 import { getUserFilesByRunIdForCharacter } from '../database/user_files';
 import type { GenModelRow, UserFileRow, UserGenModelRuns } from '../database/types';
@@ -94,6 +95,9 @@ export async function advanceGenModelRunPoll(runRow: UserGenModelRuns): Promise<
       break;
     case 'minimax':
       await webhookMinimax(vendorContext);
+      break;
+    case 'higgsfield':
+      await webhookHiggsfield(vendorContext);
       break;
     default:
       break;
