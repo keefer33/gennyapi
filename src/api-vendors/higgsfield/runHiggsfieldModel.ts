@@ -36,7 +36,9 @@ export async function runHiggsfieldModel(genModel: GenModelRow, payload: unknown
 
   const endpoint = `${server.replace(/\/+$/, '')}${higgsfieldPath(apiPath)}`;
   const requestPayload =
-    payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...(payload as Record<string, unknown>) } : {};
+    payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? { ...(payload as Record<string, unknown>) }
+      : {};
 
   const response = await axios.post(endpoint, requestPayload, {
     headers: {

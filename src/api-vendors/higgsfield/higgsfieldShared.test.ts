@@ -61,11 +61,7 @@ test('errors on completed output with no media, nsfw, and canceled', () => {
 
 test('uses status_url and falls back to the request status path', () => {
   assert.equal(
-    higgsfieldStatusEndpoint(
-      'https://api.higgsfield.ai/requests/abc/status',
-      'https://api.higgsfield.ai',
-      'ignored'
-    ),
+    higgsfieldStatusEndpoint('https://api.higgsfield.ai/requests/abc/status', 'https://api.higgsfield.ai', 'ignored'),
     'https://api.higgsfield.ai/requests/abc/status'
   );
   assert.equal(

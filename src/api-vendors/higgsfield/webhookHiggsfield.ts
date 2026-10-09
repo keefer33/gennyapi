@@ -76,9 +76,7 @@ export async function webhookHiggsfield(context: WebhookVendorContext<Higgsfield
       response: data,
       message: higgsfieldErrorMessage(
         data,
-        response.status === 404
-          ? 'Higgsfield request not found.'
-          : `Higgsfield poll failed (HTTP ${response.status})`
+        response.status === 404 ? 'Higgsfield request not found.' : `Higgsfield poll failed (HTTP ${response.status})`
       ),
       duration,
       metaError: `higgsfield_poll_http_${response.status}`,
