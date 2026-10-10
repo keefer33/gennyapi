@@ -19,6 +19,7 @@ import { runSkyreelsModel } from '../../api-vendors/skyreels/runSkyreelsModel';
 import { runLtxModel } from '../../api-vendors/ltx/runLtxModel';
 import { runMinimaxModel } from '../../api-vendors/minimax/runMinimaxModel';
 import { runHiggsfieldModel } from '../../api-vendors/higgsfield/runHiggsfieldModel';
+import { runHeygenModel } from '../../api-vendors/heygen/runHeygenModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -116,6 +117,9 @@ export async function executePlaygroundModelRun(
           break;
         case 'higgsfield':
           response = await runHiggsfieldModel(genModel, payload);
+          break;
+        case 'heygen':
+          response = await runHeygenModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {

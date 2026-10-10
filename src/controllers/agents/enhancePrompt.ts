@@ -193,10 +193,10 @@ function extractReferenceMediaUrls(formValues: Record<string, unknown>): string[
 }
 
 const ALLOWED_MODELS = new Set([
-  'anthropic/claude-opus-4.8',
+  'anthropic/claude-haiku-5.5',
   'google/gemini-3.8-flash',
-  'xai/grok-4.6',
-  'openai/gpt-5.6-luna',
+  'xai/grok-4.7',
+  'openai/gpt-6.1-sol-fast',
 ]);
 
 /** xAI models that can return 412 when given image content via the gateway; we send text-only for these when reference media is present. */
