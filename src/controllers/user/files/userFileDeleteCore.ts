@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { AppError } from '../../../app/error';
 import { ziplineStorageKeyFromPublicUrl } from '../../zipline/ziplineUtils';
-import { deleteUserFile } from '../../../database/user_files';
 import { UserFileRow } from '../../../database/types';
 import { getZiplineBaseUrl } from '../../../controllers/zipline/ziplineUtils';
 import { getZiplineTokenForUser } from '../../../controllers/zipline/ziplineUtils';
@@ -30,27 +29,40 @@ async function deleteZiplineObjectByKey(
 }
 
 /**
+ * Storage keys used for Zipline delete — always from public URLs, never `file_name`
+ * (display label may differ from the storage object name).
+ */
+export function ziplineStorageKeysForUserFileRow(
+  row: Pick<UserFileRow, 'file_path' | 'thumbnail_url'>,
+  ziplineBaseUrl: string
+): { mainKey: string | null; thumbKey: string | null } {
+  const mainKey = ziplineStorageKeyFromPublicUrl(row.file_path, ziplineBaseUrl);
+  const thumbKey = ziplineStorageKeyFromPublicUrl(row.thumbnail_url, ziplineBaseUrl);
+  return {
+    mainKey,
+    thumbKey: thumbKey && thumbKey !== mainKey ? thumbKey : null,
+  };
+}
+
+/**
  * Removes main file + thumbnail from Zipline only (DB row already deleted).
- * Uses `file_name` when set, otherwise the storage key from `file_path` / `thumbnail_url`.
+ * Keys come only from `file_path` / `thumbnail_url` public URLs.
  */
 export async function deleteZiplineStorageForUserFileRow(userId: string, row: UserFileRow): Promise<void> {
   const baseUrl = getZiplineBaseUrl();
   const token = await getZiplineTokenForUser(userId);
 
-  const mainStorageKey = ziplineStorageKeyFromPublicUrl(row.file_path, baseUrl);
-  const thumbStorageKey = ziplineStorageKeyFromPublicUrl(row.thumbnail_url, baseUrl);
-  const idOrName = typeof row.file_name === 'string' ? row.file_name.trim() : '';
+  const { mainKey, thumbKey } = ziplineStorageKeysForUserFileRow(row, baseUrl);
 
-  const mainKey = idOrName || mainStorageKey;
   if (mainKey) {
     await deleteZiplineObjectByKey(token, baseUrl, mainKey, 'user_file_storage_delete_failed');
   }
 
-  if (thumbStorageKey && thumbStorageKey !== mainKey) {
+  if (thumbKey) {
     await deleteZiplineObjectByKey(
       token,
       baseUrl,
-      thumbStorageKey,
+      thumbKey,
       'user_file_thumbnail_storage_delete_failed'
     );
   }

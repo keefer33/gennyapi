@@ -3,8 +3,10 @@ import { AppError, isAppError } from '../../app/error';
 import { sendError } from '../../app/response';
 import { z } from 'zod/v3';
 import { handleGetAgentModelByName } from '../../database/agent_models';
+import type { CustomToolkit } from '@composio/core';
 import getAgentCustomTools from './agentCustomTools';
-import { importComposioCore, importComposioVercel } from '../../shared/composioSdk';
+import { importComposioVercel } from '../../shared/composioSdk';
+import { getOrCreateUserComposioSession } from '../../shared/composioUserSession';
 import { AgentModelRow, GenModelRow } from '../../database/types';
 import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
 import { resolvePlaygroundRunCost } from '../playground/playgroundRunCost';
@@ -20,7 +22,6 @@ import {
   GenerationUserFile,
   GenerationModelInfo,
 } from './types';
-import { handleUpdateChat } from '../../database/user_models_chats';
 
 export function createSSEWriter(res: Response): SSEWriter {
   return (data: Record<string, unknown>) => {
@@ -138,51 +139,26 @@ type AgentCustomToolkit = Awaited<ReturnType<typeof getAgentCustomTools>>['genny
 
 export async function loadComposioTools(
   userId: string,
-  customToolkits: AgentCustomToolkit | AgentCustomToolkit[],
-  sessionId?: string,
-  chatId?: string | null
+  customToolkits: AgentCustomToolkit | AgentCustomToolkit[]
 ): Promise<Record<string, unknown>> {
   if (!process.env.COMPOSIO_API_KEY) {
     return {};
   }
-  const toolkits = Array.isArray(customToolkits) ? customToolkits : [customToolkits];
+  const toolkits = (Array.isArray(customToolkits) ? customToolkits : [customToolkits]).flat();
   if (toolkits.length === 0) {
     return {};
   }
-  const mode = sessionId ? 'use' : 'create';
   try {
-    const [{ Composio }, { VercelProvider }] = await Promise.all([
-      importComposioCore(),
-      importComposioVercel(),
-    ]);
-    const composio = new Composio({
-      apiKey: process.env.COMPOSIO_API_KEY,
+    const { VercelProvider } = await importComposioVercel();
+    const session = await getOrCreateUserComposioSession(userId, {
       provider: new VercelProvider(),
+      customToolkits: toolkits as CustomToolkit[],
     });
-    let session: { sessionId?: string; tools: () => Promise<unknown> };
-    if (sessionId) {
-      session = await composio.use(sessionId, { customToolkits: toolkits });
-    } else {
-      session = await composio.create(userId, {
-        manageConnections: true,
-        experimental: { customToolkits: toolkits },
-      });
-      if (chatId && session.sessionId) {
-        await handleUpdateChat(userId, chatId, {
-          metadata: {
-            composio: {
-              sessionId: session.sessionId,
-            },
-          },
-        });
-      }
-    }
     const composioTools = await session.tools();
     return (composioTools ?? {}) as Record<string, unknown>;
   } catch (composioErr) {
     console.error('[runChat] Composio session/tools error:', {
-      sessionId: sessionId ?? null,
-      mode,
+      userId,
       message: composioErr instanceof Error ? composioErr.message : String(composioErr),
       error: composioErr,
     });
@@ -550,12 +526,11 @@ export function buildGenerationCompletedMarkdown({
   for (const [index, file] of userFiles.entries()) {
     const fileName = file.file_name?.trim() || `Generated file ${index + 1}`;
     const fileUrl = file.file_path?.trim() || file.thumbnail_url?.trim() || null;
-    const thumbnailUrl = file.thumbnail_url?.trim() || file.file_path?.trim() || null;
 
-    lines.push('', `#### ${index + 1}. ${markdownLink(fileName, fileUrl)}`);
+    lines.push('', `#### ${index + 1}. ${markdownCell(fileName)}`);
 
-    if (thumbnailUrl) {
-      lines.push('', `[![${markdownCell(fileName)}](${thumbnailUrl})](${fileUrl ?? thumbnailUrl})`);
+    if (fileUrl) {
+      lines.push('', `![${markdownCell(fileName)}](${fileUrl})`);
     }
 
     lines.push(
@@ -674,7 +649,8 @@ export function buildGennyBotSystemPrompt(sections: GennyBotSystemPromptSections
     'Composio context:',
     '- Composio is a tool-routing layer that lets the model discover and execute external tools.',
     '- This session includes custom toolkits LOCAL_GENNY_BOT (playground image/video generation), LOCAL_GENNY_BOT_VOICES (voice design, clone, speech), and LOCAL_GENNY_BOT_CHARACTERS (character design, looks, scenes, videos).',
-    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>, LOCAL_GENNY_BOT_CHARACTERS_<TOOL_SLUG>).",
+    '- When a toolkit has more than 100 tools, the extras are on LOCAL_GENNY_BOT_2, LOCAL_GENNY_BOT_3, and so on. CALCULATE_MODEL_COST, GET_GENERATION_STATUS, and DESCRIBE_REMOTE_FILE stay on LOCAL_GENNY_BOT.',
+    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_2_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>, LOCAL_GENNY_BOT_CHARACTERS_<TOOL_SLUG>).",
     '- When calling tools, use the runtime-prefixed tool names.',
     '- When the user asks for a list of available tools (or "available genny tools"), DO NOT display the LOCAL_ prefixes. Instead, list tools using their friendly name and description. You may include the plain toolSlug if helpful.',
     '',

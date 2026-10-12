@@ -1,4 +1,5 @@
-export const COMPOSIO_BASE = 'https://backend.composio.dev/api/v3';
+/** Current Composio REST API (v3.1). */
+export const COMPOSIO_BASE = 'https://backend.composio.dev/api/v3.1';
 
 export type GetToolkitsQuery = {
     category?: string;

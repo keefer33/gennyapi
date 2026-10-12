@@ -33,15 +33,17 @@ function parseDeletedUserFileRow(body: unknown): UserFileRow | null {
   if (!userId) return null;
 
   const filePath = typeof row.file_path === 'string' ? row.file_path.trim() : '';
+  const thumbnailUrl = typeof row.thumbnail_url === 'string' ? row.thumbnail_url.trim() : '';
+  if (!filePath && !thumbnailUrl) return null;
+
   const fileName = typeof row.file_name === 'string' ? row.file_name.trim() : '';
-  if (!filePath && !fileName) return null;
 
   return {
     id: typeof row.id === 'string' ? row.id : null,
     user_id: userId,
     file_name: fileName || null,
     file_path: filePath || null,
-    thumbnail_url: typeof row.thumbnail_url === 'string' ? row.thumbnail_url : null,
+    thumbnail_url: thumbnailUrl || null,
     file_type: typeof row.file_type === 'string' ? row.file_type : null,
     file_size: typeof row.file_size === 'number' ? row.file_size : null,
     status: typeof row.status === 'string' ? row.status : null,

@@ -3,21 +3,22 @@ import { AppError } from '../app/error';
 import { badRequest } from '../app/response';
 import { getMimeType } from './fileUtils';
 
-export const VISION_DESCRIBE_DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6';
+export const VISION_DESCRIBE_DEFAULT_MODEL = 'google/gemini-3.8-flash';
 
 const MAX_FILE_URL_LENGTH = 2000;
 
 const DEFAULT_USER_INSTRUCTION =
-  'Describe this file in detail for someone who cannot see it. Include subject matter, any visible text, colors, composition, style, and other notable details. If you cannot access or interpret the file, say so briefly.';
+  'Describe this file in detail. For images/video: subject matter, visible text, colors, composition, style, and notable details. For audio: content type (speech, music, SFX), what is said or sung if intelligible, language, speakers, tempo/energy, mood, and duration cues. If you cannot access or interpret the file, say so briefly.';
 
 /** Use with {@link describeFileFromUrl} when the agent needs copy-ready notes for file-conditioned generations (i2i, i2v, etc.). */
 export const DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION =
-  'Analyze this reference file for use with image-to-image, image-to-video, video-to-video, or any generation model that takes image/video/file URL inputs. ' +
-  'Produce concrete notes the agent can fold into the user-facing prompt and into tool parameters: subject and scene, important objects, people or characters, pose or action, camera angle and framing, lighting and color palette, background, style or medium (e.g. photo, illustration, cinematic), mood, motion cues for video, and any readable text or logos. ' +
+  'Analyze this reference file for use with image-to-image, image-to-video, video-to-video, audio-conditioned video, or any generation model that takes image/video/audio/file URL inputs. ' +
+  'For visual media: subject and scene, important objects, people or characters, pose or action, camera angle and framing, lighting and color palette, background, style or medium, mood, motion cues, and any readable text or logos. ' +
+  'For audio: speech vs music vs SFX, transcript or lyrics gist if clear, language, speaker traits, tempo/BPM feel, energy, mood, and how it should drive timing or motion in a video. ' +
   'Be specific; avoid vague phrases. If something is unclear, say so briefly.';
 
 const DEFAULT_SYSTEM_PROMPT =
-  'You are a precise vision assistant. Respond with plain prose only; no preamble like "Here is a description" or similar.';
+  'You are a precise multimodal assistant for images, video, and audio. Respond with plain prose only; no preamble like "Here is a description" or similar.';
 
 function isHttpUrl(s: string): boolean {
   try {

@@ -5,7 +5,7 @@ import { getActiveUserFileForUpdate, updateUserFileName } from '../../../databas
 
 /**
  * PATCH /user/files/:fileId
- * Body: { file_name: string } — display name; extension appended if missing (matches client behavior)
+ * Body: { file_name: string } — display-only label; does not rename Zipline / file_path.
  */
 export async function updateUserFile(req: Request, res: Response): Promise<void> {
   try {
@@ -27,10 +27,7 @@ export async function updateUserFile(req: Request, res: Response): Promise<void>
       throw notFound('File not found');
     }
 
-    const fileExtension = currentFile.file_name.split('.').pop() || '';
-    const newFileNameWithExtension = newFileName.includes('.') ? newFileName : `${newFileName}.${fileExtension}`;
-
-    const updatedFile = await updateUserFileName(fileId, userId, newFileNameWithExtension);
+    const updatedFile = await updateUserFileName(fileId, userId, newFileName.trim());
 
     sendOk(res, updatedFile);
   } catch (error) {

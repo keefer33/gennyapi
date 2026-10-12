@@ -196,16 +196,11 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       gennyBotCharacterTools,
       systemPrompt: gennyBotSystemPrompt,
     } = await getAgentCustomTools((req as any).user.authToken, userId);
-    const composioSessionId =
-      chatMetadata && typeof chatMetadata === 'object' && !Array.isArray(chatMetadata)
-        ? (chatMetadata as { composio?: { sessionId?: string } }).composio?.sessionId
-        : undefined;
-    const allTools = await loadComposioTools(
-      userId,
-      [gennyBotAigenTools, gennyBotVoiceTools, gennyBotCharacterTools],
-      composioSessionId,
-      chat_id
-    );
+    const allTools = await loadComposioTools(userId, [
+      gennyBotAigenTools,
+      gennyBotVoiceTools,
+      gennyBotCharacterTools,
+    ]);
     const hasTools = Object.keys(allTools).length > 0;
 
     const normalizedAttachments = normalizeAttachments(attachments);

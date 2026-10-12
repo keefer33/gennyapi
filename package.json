@@ -13,7 +13,7 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "type-check": "tsc --noEmit",
-    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts src/api-vendors/google/googleImageVideoPart.test.ts src/api-vendors/higgsfield/higgsfieldShared.test.ts src/api-vendors/heygen/heygenShared.test.ts",
+    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts src/api-vendors/google/googleImageVideoPart.test.ts src/api-vendors/higgsfield/higgsfieldShared.test.ts src/api-vendors/heygen/heygenShared.test.ts src/controllers/user/files/userFileDeleteCore.test.ts",
     "remotion:sync": "node scripts/sync-remotion-bundle.js"
   },
   "keywords": [
@@ -28,8 +28,8 @@
     "node": ">=22.22.3"
   },
   "dependencies": {
-    "@composio/core": "^0.18.1",
-    "@composio/vercel": "^0.12.0",
+    "@composio/core": "^0.22.0",
+    "@composio/vercel": "^0.12.1",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@remotion/renderer": "^4.0.489",
     "@supabase/supabase-js": "^2.95.0",

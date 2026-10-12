@@ -59,6 +59,32 @@ import {
   updateCharacterVideoToolResult,
 } from './agentCharacterToolResults';
 
+/** Composio rejects a custom toolkit whose tools array is longer than this. */
+const COMPOSIO_MAX_TOOLS_PER_TOOLKIT = 100;
+
+function createComposioToolkits<T>(
+  createToolkit: (
+    slug: string,
+    config: { name: string; description: string; preload: boolean; tools: T[] }
+  ) => unknown,
+  toolkit: { slug: string; name: string; description: string; tools: T[] }
+) {
+  const toolkits = [];
+  for (let index = 0; index < toolkit.tools.length; index += COMPOSIO_MAX_TOOLS_PER_TOOLKIT) {
+    const chunkIndex = toolkits.length;
+    const tools = toolkit.tools.slice(index, index + COMPOSIO_MAX_TOOLS_PER_TOOLKIT);
+    toolkits.push(
+      createToolkit(chunkIndex === 0 ? toolkit.slug : `${toolkit.slug}_${chunkIndex + 1}`, {
+        name: chunkIndex === 0 ? toolkit.name : `${toolkit.name} ${chunkIndex + 1}`,
+        description: toolkit.description,
+        preload: true,
+        tools,
+      })
+    );
+  }
+  return toolkits;
+}
+
 export default async function getAgentCustomTools(_authToken: string, userId: string) {
   const { experimental_createTool, experimental_createToolkit } = await importComposioCore();
   const models = await getGenModelsList();
@@ -548,12 +574,7 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     }),
   ];
 
-  const gennyBotAigenTools = experimental_createToolkit('GENNY_BOT', {
-    name: 'Genny Bot Ai Gen Tools',
-    description: 'Genny Bot tools for image and video generation.',
-    preload: true,
-    tools: [
-      ...dynamicTools,
+  const playgroundTools = [
       experimental_createTool('CALCULATE_MODEL_COST', {
         name: 'Calculate Model Cost',
         description:
@@ -582,12 +603,12 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
       experimental_createTool('DESCRIBE_REMOTE_FILE', {
         name: 'Describe reference file for generation',
         description:
-          'Vision analysis of a file at a public http(s) URL. Use before running image-to-image, image-to-video, video-to-video, or any generation tool whose schema accepts reference images, videos, or other file URL fields. Call this when the user supplies a link or attachment and you need accurate, concrete details to write the generation prompt and fill file-related tool inputs. The returned text is prompt-building material, not necessarily wording to read verbatim to the user.',
+          'Multimodal analysis (image, video, or audio) of a file at a public http(s) URL. Use before running image-to-image, image-to-video, video-to-video, audio-driven video, or any generation tool whose schema accepts reference images, videos, audio, or other file URL fields. Call this when the user supplies a link or attachment and you need accurate, concrete details to write the generation prompt and fill file-related tool inputs. The returned text is prompt-building material, not necessarily wording to read verbatim to the user.',
         inputParams: z.object({
           file_url: z
             .string()
             .describe(
-              'Public http(s) URL of the reference image, video, or other input file (e.g. from the user message, attachments, or storage).'
+              'Public http(s) URL of the reference image, video, audio, or other input file (e.g. from the user message, attachments, or storage).'
             ),
         }),
         execute: async ({ file_url }: { file_url: string }): Promise<Record<string, unknown>> => {
@@ -602,20 +623,27 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
           }
         },
       }),
-    ],
+      ...dynamicTools,
+  ];
+
+  const gennyBotAigenTools = createComposioToolkits(experimental_createToolkit, {
+    slug: 'GENNY_BOT',
+    name: 'Genny Bot Ai Gen Tools',
+    description: 'Genny Bot tools for image and video generation.',
+    tools: playgroundTools,
   });
 
-  const gennyBotVoiceTools = experimental_createToolkit('GENNY_BOT_VOICES', {
+  const gennyBotVoiceTools = createComposioToolkits(experimental_createToolkit, {
+    slug: 'GENNY_BOT_VOICES',
     name: 'Genny Bot Voice Tools',
     description: 'Voice design, cloning, publishing, and speech synthesis.',
-    preload: true,
     tools: voiceTools,
   });
 
-  const gennyBotCharacterTools = experimental_createToolkit('GENNY_BOT_CHARACTERS', {
+  const gennyBotCharacterTools = createComposioToolkits(experimental_createToolkit, {
+    slug: 'GENNY_BOT_CHARACTERS',
     name: 'Genny Bot Character Tools',
     description: 'Character design, looks, scenes, and videos.',
-    preload: true,
     tools: characterTools,
   });
 

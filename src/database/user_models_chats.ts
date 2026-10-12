@@ -24,9 +24,6 @@ export type ChatGenerationMetadata = {
 
 export type ChatMetadata = {
   generations?: ChatGenerationMetadata[];
-  composio?: {
-    sessionId?: string;
-  };
   [key: string]: unknown;
 };
 
