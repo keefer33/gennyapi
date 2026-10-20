@@ -573,7 +573,7 @@ export async function listCharacterLooksToolResult(
       looks: summarized,
       markdown,
       display_instruction:
-        'When sharing look previews with the user, your reply MUST include the markdown field exactly as provided. Never invent or guess aifile.link URLs — only use preview_url values from this tool result.',
+        'When sharing look previews with the user, your reply MUST include the markdown field exactly as provided. Never invent or guess file.genny.bot URLs — only use preview_url values from this tool result.',
       notes:
         'preview_url is for display only. Use front_image_url (single front-facing shot) as images[0] for GENERATE_CHARACTER_LOOK. ' +
         CHARACTER_LOOK_GENERATION_AGENT_GUIDANCE,

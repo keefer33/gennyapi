@@ -4,10 +4,7 @@ import { AppError } from '../../app/error';
 import { badRequest, sendError } from '../../app/response';
 import { getAgentModelsData } from '../../database/agent_models';
 import type { AgentModelRow } from '../../database/types';
-import {
-  DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION,
-  describeFileFromUrl,
-} from '../../shared/describeFileVision';
+import { DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION, describeFileFromUrl } from '../../shared/describeFileVision';
 
 const MEDIA_URL_KEYS = new Set([
   'file_path',
@@ -37,7 +34,7 @@ const MEDIA_URL_KEYS = new Set([
   'reference_audio',
   'reference_audios',
 ]);
-const VISION_MEDIA_ORIGIN = 'https://aifile.link/';
+const VISION_MEDIA_ORIGIN = 'https://file.genny.bot/';
 /** Max reference files to describe per enhance request. */
 const MAX_DESCRIBE_FILES = 5;
 
@@ -62,9 +59,7 @@ const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac
 function leafFieldKey(key: string): string {
   const withoutIndex = key.replace(/\[\d+\]$/, '').trim();
   if (!withoutIndex) return 'file';
-  const leaf = withoutIndex.includes('.')
-    ? withoutIndex.slice(withoutIndex.lastIndexOf('.') + 1)
-    : withoutIndex;
+  const leaf = withoutIndex.includes('.') ? withoutIndex.slice(withoutIndex.lastIndexOf('.') + 1) : withoutIndex;
   return leaf.trim() || 'file';
 }
 
@@ -79,12 +74,7 @@ function tagPrefixFromFieldKey(fieldKey: string): string {
 
 function mediaKindFromUrlAndKey(url: string, key: string): ReferenceMediaKind {
   const keyBase = leafFieldKey(key).toLowerCase();
-  if (
-    keyBase.includes('image') ||
-    keyBase === 'images' ||
-    keyBase === 'src' ||
-    keyBase === 'thumbnail_url'
-  ) {
+  if (keyBase.includes('image') || keyBase === 'images' || keyBase === 'src' || keyBase === 'thumbnail_url') {
     return 'image';
   }
   if (keyBase.includes('video') || keyBase === 'videos') return 'video';
@@ -122,7 +112,7 @@ async function loadAllowedGatewayModelIds(): Promise<Set<string>> {
 }
 
 /**
- * Extract reference media from form values (aifile.link only) and assign placeholders
+ * Extract reference media from form values (file.genny.bot only) and assign placeholders
  * from the payload field name, e.g. `reference_images` → `<REFERENCE_IMAGES_1>`,
  * `reference_audio` → `<REFERENCE_AUDIO_1>` (1-based per field, discovery order).
  */
@@ -181,10 +171,7 @@ function extractReferenceMedia(formValues: Record<string, unknown>): ReferenceMe
   return refs;
 }
 
-async function describeReferenceFiles(
-  refs: ReferenceMediaRef[],
-  requestId: string
-): Promise<DescribedReference[]> {
+async function describeReferenceFiles(refs: ReferenceMediaRef[], requestId: string): Promise<DescribedReference[]> {
   const capped = refs.slice(0, MAX_DESCRIBE_FILES);
   if (capped.length === 0) return [];
 
@@ -220,8 +207,7 @@ function buildUserMessageWithDescriptions(message: string, descriptions: Describ
   if (descriptions.length === 0) return message;
   const tagList = descriptions.map(d => d.tag).join(', ');
   const blocks = descriptions.map(
-    d =>
-      `### ${d.tag}\nField: ${d.fieldKey}\nURL: ${d.url}\nKind: ${d.kind}\nDescription:\n${d.text}`
+    d => `### ${d.tag}\nField: ${d.fieldKey}\nURL: ${d.url}\nKind: ${d.kind}\nDescription:\n${d.text}`
   );
   return (
     `${message}\n\n` +
@@ -343,9 +329,7 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
         (streamErr as { cause?: { statusCode?: number } })?.cause?.statusCode;
       if (!res.writableEnded) {
         if (statusCode === 412) {
-          res.write(
-            'This model rejected the request (Precondition Failed). Try another model for prompt enhancement.'
-          );
+          res.write('This model rejected the request (Precondition Failed). Try another model for prompt enhancement.');
         }
       }
       if (!res.writableEnded) res.end();
@@ -384,9 +368,7 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
       }
     } else if (!res.writableEnded) {
       if (statusCode === 412) {
-        res.write(
-          'This model rejected the request (Precondition Failed). Try another model for prompt enhancement.'
-        );
+        res.write('This model rejected the request (Precondition Failed). Try another model for prompt enhancement.');
       }
       res.end();
     }

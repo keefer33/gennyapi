@@ -704,7 +704,7 @@ export function buildGennyBotSystemPrompt(sections: GennyBotSystemPromptSections
     'Character workflows (LOCAL_GENNY_BOT_CHARACTERS_* tools):',
     '- Create from text: ASSIST_CHARACTER_DESIGN (optional) → pick look_model → CREATE_CHARACTER_FROM_TEXT. Create from photo: CREATE_CHARACTER_FROM_IMAGE with reference_image_url + look_model.',
     '- When create tools return markdown, your reply MUST be exactly that markdown (includes character_id and base_look_id for later turns).',
-    '- Base look / additional looks: LIST_CHARACTER_LOOKS polls generation_status until completed. When it returns markdown, your reply MUST include that markdown exactly (real preview_url links + look_id lines). Never invent aifile.link URLs.',
+    '- Base look / additional looks: LIST_CHARACTER_LOOKS polls generation_status until completed. When it returns markdown, your reply MUST include that markdown exactly (real preview_url links + look_id lines). Never invent file.genny.bot URLs.',
     '- GENERATE_CHARACTER_LOOK: pass images[0] = front_image_url (single front-facing full-body shot, NOT preview_url or multi-view sheets). Optional images[1+] for logos/assets. Prompt describes ONLY the outfit/appearance change for one front view — never say "4-view", "turnaround", or ask for front/back/left/right (Genny adds those views automatically). Do not put image URLs in payload_json.',
     '- Failed looks: RETRY_CHARACTER_LOOK with look_id. UPDATE_CHARACTER_LOOK / DELETE_CHARACTER_LOOK to rename or remove.',
     '- Scenes: GENERATE_CHARACTER_SCENE with look_model + prompt + images. Poll LIST_CHARACTER_SCENES or GET_GENERATION_STATUS with generation_id.',

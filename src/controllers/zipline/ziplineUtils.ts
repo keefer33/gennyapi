@@ -25,7 +25,7 @@ export function getZiplineBaseUrl(): string {
 
 /**
  * Zipline DELETE `/api/user/files/:idOrName` expects the path segment from the public URL
- * (e.g. `https://aifile.link/tlgHWK.jpg` → `tlgHWK.jpg`). Only URLs whose origin matches
+ * (e.g. `https://file.genny.bot/tlgHWK.jpg` → `tlgHWK.jpg`). Only URLs whose origin matches
  * {@link getZiplineBaseUrl} are accepted.
  */
 /** Compare hosts for Zipline public URLs (treat `www.` and `http`/`https` as equivalent to configured base). */
