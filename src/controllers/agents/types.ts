@@ -41,6 +41,7 @@ export type GennyBotSystemPromptSections = {
   playgroundTools: GennyToolPromptMeta[];
   voiceTools: GennyToolPromptMeta[];
   characterTools: GennyToolPromptMeta[];
+  projectTools: GennyToolPromptMeta[];
   lookModelCatalog: string;
   videoModelCatalog: string;
 };

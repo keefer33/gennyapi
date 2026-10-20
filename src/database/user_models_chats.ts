@@ -1,7 +1,10 @@
 import { getServerClient } from "./supabaseClient";
 import { AppError } from '../app/error';
+import type { ChatScope } from './types';
 
 export const USER_MODELS_CHATS_TABLE = "user_models_chats";
+
+const CHAT_SELECT = "id, created_at, updated_at, user_id, chat_name, metadata, scope";
 
 export type ChatGenerationMetadata = {
   generation_id: string;
@@ -74,12 +77,20 @@ export async function checkChatOwnership(
   }
 }
 
-export const handleCreateChat = async (userId: string, chat_name?: string) => {
+export const handleCreateChat = async (
+  userId: string,
+  chat_name?: string,
+  scope: ChatScope = 'agent'
+) => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_MODELS_CHATS_TABLE)
-    .insert({ user_id: userId, chat_name: chat_name?.trim() || null })
-    .select("id, created_at, updated_at, user_id, chat_name, metadata")
+    .insert({
+      user_id: userId,
+      chat_name: chat_name?.trim() || null,
+      scope,
+    })
+    .select(CHAT_SELECT)
     .single();
   if (error) throw new AppError(error.message, {
     statusCode: 500,
@@ -92,8 +103,9 @@ export const handleListChats = async (userId: string) => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_MODELS_CHATS_TABLE)
-    .select("id, created_at, updated_at, user_id, chat_name, metadata")
+    .select(CHAT_SELECT)
     .eq("user_id", userId)
+    .eq("scope", "agent")
     .order("updated_at", { ascending: false });
   if (error) throw new AppError(error.message, {
     statusCode: 500,
@@ -106,7 +118,7 @@ export const handleGetChat = async (userId: string, chat_id: string) => {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
     .from(USER_MODELS_CHATS_TABLE)
-    .select("id, created_at, updated_at, user_id, chat_name, metadata")
+    .select(CHAT_SELECT)
     .eq("id", chat_id)
     .eq("user_id", userId)
     .single();
@@ -144,7 +156,7 @@ export const handleUpdateChat = async (
     .update(updates)
     .eq("id", chat_id)
     .eq("user_id", userId)
-    .select("id, created_at, updated_at, user_id, chat_name, metadata")
+    .select(CHAT_SELECT)
     .single();
   if (error) throw new AppError(error.message, {
     statusCode: 500,
@@ -157,7 +169,22 @@ export const handleUpdateChat = async (
   return { data };
 };
 
+/** Delete a chat from Agents UI. Project-scoped chats are blocked (409). */
 export const handleDeleteChat = async (userId: string, chat_id: string) => {
+  const existing = await handleGetChat(userId, chat_id);
+  const scope = (existing.data as { scope?: string } | null)?.scope;
+  if (scope === 'project') {
+    throw new AppError('Project chats cannot be deleted from Agents', {
+      statusCode: 409,
+      code: 'chat_delete_forbidden',
+      expose: true,
+    });
+  }
+  return forceDeleteChatForUser(userId, chat_id);
+};
+
+/** Internal delete used when a project is removed (bypasses Agents scope guard). */
+export const forceDeleteChatForUser = async (userId: string, chat_id: string) => {
   const { supabaseServerClient } = await getServerClient();
   const { error } = await supabaseServerClient
     .from(USER_MODELS_CHATS_TABLE)

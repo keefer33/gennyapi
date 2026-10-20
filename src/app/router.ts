@@ -14,6 +14,8 @@ import charactersRoutes from '../controllers/characters/charactersRoutes';
 import voicesRoutes from '../controllers/voices/voicesRoutes';
 import remotionRoutes from '../controllers/remotion/remotionRoutes';
 import storyboardsRoutes from '../controllers/storyboards/storyboardsRoutes';
+import projectsRoutes from '../controllers/projects/projectsRoutes';
+import waitlistRoutes from '../controllers/waitlist/waitlistRoutes';
 import { sendOk } from './response';
 
 export function createAppRouter() {
@@ -34,6 +36,8 @@ export function createAppRouter() {
   router.use('/voices', voicesRoutes);
   router.use('/remotion', remotionRoutes);
   router.use('/storyboards', storyboardsRoutes);
+  router.use('/projects', projectsRoutes);
+  router.use('/waitlist', waitlistRoutes);
 
   router.get('/health', (_req: Request, res: Response) => {
     sendOk(res, {

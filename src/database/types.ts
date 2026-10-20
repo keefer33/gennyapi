@@ -81,7 +81,7 @@ export type UserFileEmbed = {
 
 export type GenModelEmbed = NonNullable<UserGenModelRunListRow['gen_model_id']>;
 
-/** Matches `public.user_files` */
+/** Matches `public.user_files` (selects may embed `gen_model_id` as a `GenModelRow`). */
 export type UserFileRow = {
   id?: string | null;
   user_id?: string | null;
@@ -94,7 +94,7 @@ export type UserFileRow = {
   status?: string | null;
   upload_type?: string | null;
   thumbnail_url?: string | null;
-  gen_model_id?: string | null;
+  gen_model_id?: GenModelRow | string | null;
   gen_model_run_id?: string | null;
   character_id?: string | null;
   voice_id?: string | null;
@@ -202,6 +202,18 @@ export type UserStoryboardRow = {
   settings?: unknown | null;
 };
 
+/** Matches `public.user_projects` */
+export type UserProjectRow = {
+  id?: string | null;
+  user_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  project_name?: string | null;
+  project_brief?: string | null;
+  metadata?: unknown | null;
+  chat_id?: string | null;
+};
+
 /** Matches `public.user_storyboard_scenes` */
 export type UserStoryboardSceneRow = {
   id?: string | null;
@@ -285,6 +297,8 @@ export type UserProfileRow = {
 /** `user_models_chats` / `user_models_chats_messages` */
 export type SortOrder = 'asc' | 'desc';
 
+export type ChatScope = 'agent' | 'project';
+
 export interface ChatRow {
   id?: string | null;
   created_at?: string | null;
@@ -292,6 +306,7 @@ export interface ChatRow {
   user_id?: string | null;
   chat_name?: string | null;
   metadata?: unknown | null;
+  scope?: ChatScope | null;
 }
 
 export interface ChatMessageContentPart {
@@ -405,6 +420,13 @@ export type AgentModelApiRow = {
   schema?: Object | null | any;
   meta?: Object | null | any;
   vendor_key?: VendorApisRow | null;
+};
+
+/** Matches `public.waitlist` */
+export type WaitlistRow = {
+  id: string;
+  created_at: string;
+  email: string;
 };
 
 export type ListUserFilesParams = {

@@ -58,6 +58,10 @@ import {
   updateCharacterToolResult,
   updateCharacterVideoToolResult,
 } from './agentCharacterToolResults';
+import {
+  getProjectToolResult,
+  updateProjectBriefToolResult,
+} from './agentProjectToolResults';
 
 /** Composio rejects a custom toolkit whose tools array is longer than this. */
 const COMPOSIO_MAX_TOOLS_PER_TOOLKIT = 100;
@@ -647,6 +651,38 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     tools: characterTools,
   });
 
+  const projectTools = [
+    experimental_createTool('GET_PROJECT', {
+      name: 'Get project',
+      description:
+        'Load a project by project_id (name, project_brief, metadata, chat_id, timestamps). Use before updating the Project Brief.',
+      inputParams: z.object({
+        project_id: z.string().describe('user_projects.id for the active project'),
+      }),
+      execute: async input => getProjectToolResult(userId, input.project_id ?? ''),
+    }),
+    experimental_createTool('UPDATE_PROJECT_BRIEF', {
+      name: 'Update project brief',
+      description:
+        'Overwrite the living Project Brief (project_brief) for a project. Include intent, constraints, asset inventory (generations, characters, voices, scripts), and next steps.',
+      inputParams: z.object({
+        project_id: z.string().describe('user_projects.id for the active project'),
+        project_brief: z
+          .string()
+          .describe('Full Project Brief markdown/text to persist as the source of truth'),
+      }),
+      execute: async input =>
+        updateProjectBriefToolResult(userId, input.project_id ?? '', input.project_brief ?? ''),
+    }),
+  ];
+
+  const gennyBotProjectTools = createComposioToolkits(experimental_createToolkit, {
+    slug: 'GENNY_BOT_PROJECTS',
+    name: 'Genny Bot Project Tools',
+    description: 'Load projects and maintain the Project Brief.',
+    tools: projectTools,
+  });
+
   const voiceToolMeta = [
     {
       slug: 'LIST_USER_VOICES',
@@ -780,6 +816,19 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     },
   ];
 
+  const projectToolMeta = [
+    {
+      slug: 'GET_PROJECT',
+      name: 'Get project',
+      description: 'Load project_name, project_brief, metadata, and ids by project_id.',
+    },
+    {
+      slug: 'UPDATE_PROJECT_BRIEF',
+      name: 'Update project brief',
+      description: 'Persist the living Project Brief text for a project.',
+    },
+  ];
+
   const systemPrompt = buildGennyBotSystemPrompt({
     playgroundTools: [
       ...toolPromptMeta,
@@ -802,9 +851,16 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
     ],
     voiceTools: voiceToolMeta,
     characterTools: characterToolMeta,
+    projectTools: projectToolMeta,
     lookModelCatalog: CHARACTER_LOOK_MODEL_CATALOG,
     videoModelCatalog: CHARACTER_VIDEO_MODEL_CATALOG,
   });
 
-  return { gennyBotAigenTools, gennyBotVoiceTools, gennyBotCharacterTools, systemPrompt };
+  return {
+    gennyBotAigenTools,
+    gennyBotVoiceTools,
+    gennyBotCharacterTools,
+    gennyBotProjectTools,
+    systemPrompt,
+  };
 }

@@ -25,6 +25,7 @@ import {
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
+import { getUserProjectByChatIdForUser } from '../../database/user_projects';
 
 const GENNY_STATUS_TOOL_SLUG = 'LOCAL_GENNY_BOT_GET_GENERATION_STATUS';
 const GENNY_COST_TOOL_SLUG = 'LOCAL_GENNY_BOT_CALCULATE_MODEL_COST';
@@ -194,12 +195,14 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       gennyBotAigenTools,
       gennyBotVoiceTools,
       gennyBotCharacterTools,
+      gennyBotProjectTools,
       systemPrompt: gennyBotSystemPrompt,
     } = await getAgentCustomTools((req as any).user.authToken, userId);
     const allTools = await loadComposioTools(userId, [
       gennyBotAigenTools,
       gennyBotVoiceTools,
       gennyBotCharacterTools,
+      gennyBotProjectTools,
     ]);
     const hasTools = Object.keys(allTools).length > 0;
 
@@ -213,7 +216,23 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
       typeof settings?.systemPrompt === 'string' && settings.systemPrompt.trim()
         ? settings.systemPrompt.trim()
         : 'You are a helpful assistant.';
-    const systemPrompt = `${baseSystemPrompt}\n\n${gennyBotSystemPrompt}`;
+
+    let projectContextPrompt = '';
+    if (chat_id) {
+      const project = await getUserProjectByChatIdForUser(userId, chat_id);
+      if (project?.id) {
+        projectContextPrompt = [
+          '',
+          'Active project context:',
+          `- project_id: ${project.id}`,
+          `- project_name: ${String(project.project_name ?? '').trim() || '(untitled)'}`,
+          '- project_brief is the living source of truth for this project. Use LOCAL_GENNY_BOT_PROJECTS_GET_PROJECT and LOCAL_GENNY_BOT_PROJECTS_UPDATE_PROJECT_BRIEF with this project_id.',
+          '- Prefer keeping the brief current after generations, characters, voices, scripts, or other material changes.',
+        ].join('\n');
+      }
+    }
+
+    const systemPrompt = `${baseSystemPrompt}\n\n${gennyBotSystemPrompt}${projectContextPrompt}`;
 
     const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
     const model = gateway(modelId as string);

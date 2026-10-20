@@ -17,7 +17,7 @@ export async function getUserFilesByRunId(runId: string): Promise<UserFileRow[]>
       code: 'user_gen_model_run_files_fetch_failed',
     });
   }
-  return files ?? [];
+  return (files as unknown as UserFileRow[]) ?? [];
 }
 
 export async function getUserFilesByRunIdForCharacter(
@@ -42,7 +42,7 @@ export async function getUserFilesByRunIdForCharacter(
       code: 'character_look_run_files_fetch_failed',
     });
   }
-  return files ?? [];
+  return (files as unknown as UserFileRow[]) ?? [];
 }
 
 /** All rows for a run (any status) — for teardown before deleting the run. */
@@ -221,7 +221,7 @@ export async function getActiveUserFileByUrlForUser(
       code: 'user_file_by_path_fetch_failed',
     });
   }
-  if (byPath) return byPath as UserFileRow;
+  if (byPath) return byPath as unknown as UserFileRow;
 
   const { data: byThumbnail, error: thumbError } = await buildQuery()
     .eq('thumbnail_url', fileUrl)
@@ -232,7 +232,7 @@ export async function getActiveUserFileByUrlForUser(
       code: 'user_file_by_thumbnail_fetch_failed',
     });
   }
-  return (byThumbnail as UserFileRow | null) ?? null;
+  return (byThumbnail as unknown as UserFileRow | null) ?? null;
 }
 
 export async function updateUserFileName(fileId: string, userId: string, fileName: string): Promise<UserFileRow> {
