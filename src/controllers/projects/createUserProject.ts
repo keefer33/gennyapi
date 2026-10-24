@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { forceDeleteChatForUser, handleCreateChat } from '../../database/user_models_chats';
+import { ensureProjectTag } from '../../database/projectFileTags';
 import { createUserProjectRow } from '../../database/user_projects';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import { optionalJson, requiredProjectBrief, requiredProjectName } from './helpers';
@@ -28,13 +29,14 @@ export async function createUserProject(req: Request, res: Response): Promise<vo
     }
 
     try {
-      const project = await createUserProjectRow({
+      const created = await createUserProjectRow({
         user_id: userId,
         project_name: projectName,
         project_brief: projectBrief,
         metadata: optionalJson(body.metadata) ?? {},
         chat_id: chatId,
       });
+      const { project } = await ensureProjectTag(userId, created);
       sendOk(res, { project }, 201);
     } catch (projectError) {
       await forceDeleteChatForUser(userId, chatId).catch(() => undefined);

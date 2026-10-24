@@ -1,3 +1,4 @@
+import { calculateRecraftRunCost } from '../../api-vendors/recraft/recraftShared';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
@@ -24,6 +25,17 @@ export async function calculatePlaygroundRunCost(
     case 'higgsfield':
     case 'heygen':
       return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+    case 'recraft': {
+      const defaultModel =
+        typeof genModel.gen_models_apis_id?.api_schema?.vendor_model_name === 'string'
+          ? genModel.gen_models_apis_id.api_schema.vendor_model_name
+          : '';
+      return calculateRecraftRunCost(
+        payload,
+        genModel.gen_models_apis_id?.model_pricing ?? {},
+        defaultModel
+      );
+    }
     case 'wavespeed':
       return getWavespeedCost(
         genModel.gen_models_apis_id?.api_schema?.vendor_model_name as string,

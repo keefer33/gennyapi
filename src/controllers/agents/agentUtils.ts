@@ -10,7 +10,15 @@ import { getOrCreateUserComposioSession } from '../../shared/composioUserSession
 import { AgentModelRow, GenModelRow } from '../../database/types';
 import { executePlaygroundModelRun } from '../playground/playgroundModelRunCore';
 import { resolvePlaygroundRunCost } from '../playground/playgroundRunCost';
-import { getUserGenModelRunByIdForUser } from '../../database/user_gen_model_runs';
+import {
+  deleteUserGenModelRunForUser,
+  getUserGenModelRunByIdForUser,
+} from '../../database/user_gen_model_runs';
+import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
+import { deleteUserFileForUser, getUserFilesByRunId } from '../../database/user_files';
+import { getUserProjectForUser } from '../../database/user_projects';
+import { ensureProjectTag, listGenerationIdsForProjectTag } from '../../database/projectFileTags';
+import type { UserGenModelRunListRow } from '../../database/types';
 import {
   SSEWriter,
   RunAgentBody,
@@ -634,57 +642,172 @@ export async function getGenerationStatusToolResult(
   };
 }
 
+function slimGenerationFiles(files: GenerationUserFile[]): Array<Record<string, unknown>> {
+  return files.map(file => ({
+    id: file.id ?? null,
+    file_name: file.file_name ?? null,
+    file_path: file.file_path ?? null,
+    thumbnail_url: file.thumbnail_url ?? null,
+    file_type: file.file_type ?? null,
+  }));
+}
+
+function generationModelLabel(row: UserGenModelRunListRow): string {
+  const model = row.gen_model_id;
+  if (model && typeof model === 'object') {
+    return String(model.model_name ?? model.model_id ?? '').trim();
+  }
+  return typeof model === 'string' ? model.trim() : '';
+}
+
+function slimGenerationRow(row: UserGenModelRunListRow): Record<string, unknown> {
+  const files = Array.isArray(row.user_files) ? row.user_files : [];
+  return {
+    generation_id: row.id ?? null,
+    status: row.status ?? null,
+    cost: row.cost ?? null,
+    model_name: generationModelLabel(row) || null,
+    generation_files: slimGenerationFiles(files),
+  };
+}
+
+export async function listGenerationsToolResult(
+  userId: string,
+  input: { project_id?: string; page?: number; limit?: number }
+): Promise<Record<string, unknown>> {
+  const page = Math.max(1, Number(input.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(input.limit) || 20));
+  const projectId = typeof input.project_id === 'string' ? input.project_id.trim() : '';
+
+  try {
+    let generationIds: string[] | undefined;
+    if (projectId) {
+      const project = await getUserProjectForUser(userId, projectId);
+      if (!project?.id) {
+        return { success: false, message: 'Project not found' };
+      }
+      const { tag } = await ensureProjectTag(userId, project);
+      const tagId = typeof tag.id === 'string' ? tag.id.trim() : '';
+      generationIds = tagId ? await listGenerationIdsForProjectTag(userId, tagId) : [];
+      if (generationIds.length === 0) {
+        return { success: true, generations: [], total: 0, page, limit };
+      }
+    }
+
+    const { rows, total } = await listUserGenModelRunsForUser(userId, {
+      page,
+      limit,
+      generation_ids: generationIds,
+    });
+    return {
+      success: true,
+      generations: rows.map(slimGenerationRow),
+      total,
+      page,
+      limit,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to list generations';
+    return { success: false, message };
+  }
+}
+
+export async function deleteGenerationToolResult(
+  userId: string,
+  generation_id: string
+): Promise<Record<string, unknown>> {
+  const runId = typeof generation_id === 'string' ? generation_id.trim() : '';
+  if (!runId) {
+    return { success: false, message: 'generation_id is required' };
+  }
+
+  try {
+    const run = await getUserGenModelRunByIdForUser(userId, runId);
+    if (!run) {
+      return { success: false, message: 'Generation not found', generation_id: runId };
+    }
+
+    const files = await getUserFilesByRunId(runId);
+    for (const file of files) {
+      const fileId = typeof file.id === 'string' ? file.id.trim() : '';
+      if (!fileId) continue;
+      await deleteUserFileForUser(userId, fileId);
+    }
+
+    const deleted = await deleteUserGenModelRunForUser(userId, runId);
+    if (!deleted) {
+      return { success: false, message: 'Generation not found', generation_id: runId };
+    }
+    return { success: true, generation_id: runId };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to delete generation';
+    return { success: false, message, generation_id: runId };
+  }
+}
+
+/** How project assets are tracked — keep in sync with projectFileTags.ts */
+export const PROJECT_ASSETS_INVENTORY_RULES = [
+  '- Project assets are user_files tagged with the project name. The server tags files automatically after generate/upload. There is no save-assets tool. Do not invent ids or patch metadata yourself.',
+  '- metadata.project_tag_id is the tag used for this project. LIST_USER_FILES with project_id lists tagged files. LIST_GENERATIONS with project_id lists playground runs whose files carry that tag.',
+  '- After generate or UPLOAD_FILE, files are tagged automatically — do not ask the user to tag them.',
+  '- Reuse tagged file urls as tool inputs (DESCRIBE_REMOTE_FILE, reference images, clone audio, etc.). GET_GENERATION_STATUS → generation_files[] has id, file_path, thumbnail_url, file_name, file_type. Never invent file.genny.bot links.',
+  '- Voices are not tagged as files. After creating a voice, recap it in the Project Brief by voice_id. Load audio with GET_VOICE or SYNTHESIZE_VOICE_SPEECH (audio_url).',
+  '- If the user wants a character, generate images with playground tools. Invent your own project layout (looks, scenes, grouping) without a built-in character flow.',
+  '- After creating or deleting assets, call GET_PROJECT then UPDATE_PROJECT_BRIEF so the brief recaps tagged files and voice_ids.',
+].join('\n');
+
 export function buildGennyBotSystemPrompt(sections: GennyBotSystemPromptSections): string {
   const formatToolList = (tools: GennyToolPromptMeta[]): string =>
     tools.map((tool, index) => `${index + 1}. ${tool.name} - ${tool.description} (toolSlug: ${tool.slug})`).join('\n');
 
   const playgroundToolList = formatToolList(sections.playgroundTools);
   const voiceToolList = formatToolList(sections.voiceTools);
-  const characterToolList = formatToolList(sections.characterTools);
   const projectToolList = formatToolList(sections.projectTools);
+  const fileToolList = formatToolList(sections.fileTools);
 
   return [
     'You are a generation-focused assistant.',
-    'Your primary task is helping the user create image/video generations, manage voices (design, clone, speech), manage characters (design, looks, scenes, videos), and maintain the Project Brief for the active project.',
+    'Your primary task is helping the user create image/video generations, manage voices (design, clone, speech), manage files, and maintain the Project Brief for the active project.',
     '',
     'Composio context:',
     '- Composio is a tool-routing layer that lets the model discover and execute external tools.',
-    '- This session includes custom toolkits LOCAL_GENNY_BOT (playground image/video generation), LOCAL_GENNY_BOT_VOICES (voice design, clone, speech), LOCAL_GENNY_BOT_CHARACTERS (character design, looks, scenes, videos), and LOCAL_GENNY_BOT_PROJECTS (project brief).',
-    '- When a toolkit has more than 100 tools, the extras are on LOCAL_GENNY_BOT_2, LOCAL_GENNY_BOT_3, and so on. CALCULATE_MODEL_COST, GET_GENERATION_STATUS, and DESCRIBE_REMOTE_FILE stay on LOCAL_GENNY_BOT.',
-    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_2_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>, LOCAL_GENNY_BOT_CHARACTERS_<TOOL_SLUG>, LOCAL_GENNY_BOT_PROJECTS_<TOOL_SLUG>).",
+    '- This session includes custom toolkits LOCAL_GENNY_BOT (playground image/video generation), LOCAL_GENNY_BOT_VOICES (voice design, clone, speech), LOCAL_GENNY_BOT_PROJECTS (project brief), and LOCAL_GENNY_BOT_FILES (user files).',
+    '- When a toolkit has more than 100 tools, the extras are on LOCAL_GENNY_BOT_2, LOCAL_GENNY_BOT_3, and so on. CALCULATE_MODEL_COST, GET_GENERATION_STATUS, LIST_GENERATIONS, DELETE_GENERATION, and DESCRIBE_REMOTE_FILE stay on LOCAL_GENNY_BOT.',
+    "- Composio adds the prefix 'LOCAL_' to toolkit names and prefixes tool slugs at runtime (e.g. LOCAL_GENNY_BOT_<TOOL_SLUG>, LOCAL_GENNY_BOT_2_<TOOL_SLUG>, LOCAL_GENNY_BOT_VOICES_<TOOL_SLUG>, LOCAL_GENNY_BOT_PROJECTS_<TOOL_SLUG>, LOCAL_GENNY_BOT_FILES_<TOOL_SLUG>).",
     '- When calling tools, use the runtime-prefixed tool names.',
     '- When the user asks for a list of available tools (or "available genny tools"), DO NOT display the LOCAL_ prefixes. Instead, list tools using their friendly name and description. You may include the plain toolSlug if helpful.',
     '',
     'Tooling priority:',
-    '- Always prefer LOCAL_GENNY_BOT / LOCAL_GENNY_BOT_VOICES / LOCAL_GENNY_BOT_CHARACTERS / LOCAL_GENNY_BOT_PROJECTS tools over other Composio tools when the task is generation-, voice-, character-, or project-related.',
+    '- Always prefer LOCAL_GENNY_BOT / LOCAL_GENNY_BOT_VOICES / LOCAL_GENNY_BOT_PROJECTS / LOCAL_GENNY_BOT_FILES tools over other Composio tools when the task is generation-, voice-, project-, or file-related.',
     '- Use other tools only when LOCAL_GENNY_BOT tools cannot satisfy the request.',
     '- The user may also have other connected Composio tools (from the Genny Bot Tools page). Use them when needed for non-generation tasks or when explicitly requested by the user.',
     '',
-    'CRITICAL — character vs playground models:',
-    '- For character creation, looks, scenes, and videos: ONLY use LOCAL_GENNY_BOT_CHARACTERS_* tools.',
-    '- NEVER use playground image/video models (LOCAL_GENNY_BOT_<model>) for characters.',
-    `- Configured character look models: ${sections.lookModelCatalog}. Pass these keys as look_model on character tools.`,
-    `- Configured character video models: ${sections.videoModelCatalog}. Pass these keys as video_model on GENERATE_CHARACTER_VIDEO.`,
-    '- When the user asks what models they can use for characters, answer ONLY from the character look/video model lists above — not from playground generation models.',
-    '',
-    'Playground generation tools (LOCAL_GENNY_BOT — general image/video, NOT for characters):',
+    'Playground generation tools (LOCAL_GENNY_BOT — image/video, including character images):',
     playgroundToolList,
     '',
     'Voice tools (LOCAL_GENNY_BOT_VOICES):',
     voiceToolList,
     '',
-    'Character tools (LOCAL_GENNY_BOT_CHARACTERS):',
-    characterToolList,
-    '',
     'Project tools (LOCAL_GENNY_BOT_PROJECTS):',
     projectToolList,
     '',
+    'File tools (LOCAL_GENNY_BOT_FILES):',
+    fileToolList,
+    '',
     'Project Brief workflows (LOCAL_GENNY_BOT_PROJECTS_* tools):',
-    '- The Project Brief (project_brief) is the living source of truth for the project: intent, constraints, assets (generations, characters, voices, scripts), and next steps.',
-    '- On "Build Project Brief": call GET_PROJECT, analyze the current brief/intent, then UPDATE_PROJECT_BRIEF with a structured living brief (goals, constraints, asset inventory, next steps). Reply to the user summarizing what you wrote.',
-    '- After meaningful work (new generations, characters, voices, scripts, or user-directed changes): refresh the brief via GET_PROJECT then UPDATE_PROJECT_BRIEF so future turns stay oriented.',
+    '- The Project Brief (project_brief) is the narrative outline: intent, constraints, next steps, and a human-readable recap of tagged files and voices.',
+    PROJECT_ASSETS_INVENTORY_RULES,
+    '- On "Build Project Brief": call GET_PROJECT, analyze the current brief/intent and tagged files (LIST_USER_FILES with project_id), then UPDATE_PROJECT_BRIEF with a structured living brief (goals, constraints, asset recap using real file urls and voice_ids, next steps). Reply to the user summarizing what you wrote.',
     '- When the user asks to view or update the brief: GET_PROJECT and/or UPDATE_PROJECT_BRIEF.',
     '- Always pass the project_id from the active project context when calling project tools.',
+    '',
+    'File and generation library workflows:',
+    '- Prefer the active project_id on LIST_GENERATIONS, LIST_USER_FILES, and GET_PROJECT.',
+    '- Upload a remote file with UPLOAD_FILE (public http(s) file_url). Optional file_name and tags (names). The server stores a user_file and tags it with the project name.',
+    '- Rename with UPDATE_FILE (file_id + file_name). This only changes the display name, not file_path.',
+    '- Tags: LIST_USER_TAGS then ADD_FILE_TAGS / REMOVE_FILE_TAGS using tag names (do not invent tag ids). ADD_FILE_TAGS creates a tag if needed. The project tag is applied automatically — do not ask the user to add it.',
+    '- Generations have no title. To “update a generation”, GET_GENERATION_STATUS or LIST_GENERATIONS then UPDATE_FILE / ADD_FILE_TAGS on generation_files ids.',
+    '- DELETE_GENERATION deletes the run and its output files. DELETE_FILE deletes one user_file.',
     '',
     'Status-check requirement:',
     '- Use LOCAL_GENNY_BOT_GET_GENERATION_STATUS to check whether a generation has completed.',
@@ -698,20 +821,13 @@ export function buildGennyBotSystemPrompt(sections: GennyBotSystemPromptSections
     '- Clone from community library: SEARCH_VOICE_LIBRARY → user picks voice → CLONE_VOICE_FROM_LIBRARY with library_voice_id + preview_url from search results.',
     '- Speech: LIST_USER_VOICES or GET_VOICE → ASSIST_SPEECH_SCRIPT (optional) → SYNTHESIZE_VOICE_SPEECH. Share audio_url from the result.',
     '- Voice preview audio can be shared in markdown links like [Preview: Name](preview_url). When listing DESIGN_VOICE previews, always include voice_id lines from the tool markdown.',
+    '- After keeping a voice, recap it in the Project Brief by voice_id so later turns can group speech with the brief.',
     '- designPrompt 30–250 chars; previewText 50–200 chars; speech text max 2000 chars.',
     '- Genny voice_id is user_voices.id — required for UPDATE_VOICE and DELETE_VOICE. library_voice_id is ElevenLabs community id before cloning.',
     '',
-    'Character workflows (LOCAL_GENNY_BOT_CHARACTERS_* tools):',
-    '- Create from text: ASSIST_CHARACTER_DESIGN (optional) → pick look_model → CREATE_CHARACTER_FROM_TEXT. Create from photo: CREATE_CHARACTER_FROM_IMAGE with reference_image_url + look_model.',
-    '- When create tools return markdown, your reply MUST be exactly that markdown (includes character_id and base_look_id for later turns).',
-    '- Base look / additional looks: LIST_CHARACTER_LOOKS polls generation_status until completed. When it returns markdown, your reply MUST include that markdown exactly (real preview_url links + look_id lines). Never invent file.genny.bot URLs.',
-    '- GENERATE_CHARACTER_LOOK: pass images[0] = front_image_url (single front-facing full-body shot, NOT preview_url or multi-view sheets). Optional images[1+] for logos/assets. Prompt describes ONLY the outfit/appearance change for one front view — never say "4-view", "turnaround", or ask for front/back/left/right (Genny adds those views automatically). Do not put image URLs in payload_json.',
-    '- Failed looks: RETRY_CHARACTER_LOOK with look_id. UPDATE_CHARACTER_LOOK / DELETE_CHARACTER_LOOK to rename or remove.',
-    '- Scenes: GENERATE_CHARACTER_SCENE with look_model + prompt + images. Poll LIST_CHARACTER_SCENES or GET_GENERATION_STATUS with generation_id.',
-    '- Videos: attach voice via UPDATE_CHARACTER voice_id or use audio URL directly. GENERATE_CHARACTER_VIDEO with video_model + base_look_image + audio. Poll LIST_CHARACTER_VIDEOS or GET_GENERATION_STATUS.',
-    '- Voice + character: LIST_USER_VOICES / SYNTHESIZE_VOICE_SPEECH for audio_url used in GENERATE_CHARACTER_VIDEO.',
-    '- character_id, look_id, scene_id, video_id, and generation_id MUST appear in your message text (via tool markdown) so multi-turn rename/delete/poll works.',
-    '- description 120–4000 chars for character creation.',
+    'Character requests:',
+    '- There is no built-in character toolkit in this session. If the user asks to create a character, generate images with playground models and organize the results in this project however you decide (folders of looks, scenes, notes in the brief).',
+    '- Pair character images with voices you create via LOCAL_GENNY_BOT_VOICES, and recap voice_id in the brief.',
     '',
     'Meta-tools note:',
     '- Composio already injects and documents meta-tools at runtime (search, schemas, execute, connection management, workbench).',

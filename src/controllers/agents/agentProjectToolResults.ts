@@ -3,13 +3,21 @@ import {
   updateUserProjectRow,
 } from '../../database/user_projects';
 import type { UserProjectRow } from '../../database/types';
+import { ensureProjectTag } from '../../database/projectFileTags';
 
-function projectPayload(project: UserProjectRow) {
+function projectPayload(project: UserProjectRow, tag?: { id?: string | null; tag_name?: string | null }) {
+  const metadata =
+    project.metadata && typeof project.metadata === 'object' && !Array.isArray(project.metadata)
+      ? (project.metadata as Record<string, unknown>)
+      : {};
   return {
     project_id: project.id,
     project_name: project.project_name ?? null,
     project_brief: project.project_brief ?? null,
-    metadata: project.metadata ?? {},
+    metadata,
+    project_tag: tag?.id
+      ? { id: tag.id, tag_name: tag.tag_name ?? null }
+      : null,
     chat_id: project.chat_id ?? null,
     created_at: project.created_at ?? null,
     updated_at: project.updated_at ?? null,
@@ -23,14 +31,15 @@ export async function getProjectToolResult(userId: string, projectId: string) {
   }
 
   try {
-    const project = await getUserProjectForUser(userId, id);
-    if (!project) {
+    const existing = await getUserProjectForUser(userId, id);
+    if (!existing) {
       return { success: false, message: 'Project not found' };
     }
+    const { project, tag } = await ensureProjectTag(userId, existing);
     return {
       success: true,
       message: 'Project loaded.',
-      project: projectPayload(project),
+      project: projectPayload(project, tag),
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to load project';
@@ -58,11 +67,12 @@ export async function updateProjectBriefToolResult(
       return { success: false, message: 'Project not found' };
     }
 
-    const project = await updateUserProjectRow(userId, id, { project_brief: brief });
+    const updated = await updateUserProjectRow(userId, id, { project_brief: brief });
+    const { project, tag } = await ensureProjectTag(userId, updated);
     return {
       success: true,
       message: 'Project brief updated.',
-      project: projectPayload(project),
+      project: projectPayload(project, tag),
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to update project brief';

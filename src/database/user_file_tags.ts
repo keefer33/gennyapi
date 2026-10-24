@@ -9,19 +9,23 @@ const FILE_TAG_SELECT = `
   user_tags(*)
 `;
 
-export async function createUserFileTagLink(fileId: string, tagId: string): Promise<void> {
+const UNIQUE_VIOLATION = '23505';
+
+/** Returns true when a new link was inserted, false when the file already had the tag. */
+export async function createUserFileTagLink(fileId: string, tagId: string): Promise<boolean> {
   const { supabaseServerClient } = await getServerClient();
   const { error } = await supabaseServerClient.from('user_file_tags').insert({
     file_id: fileId,
     tag_id: tagId,
   });
 
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'user_file_tag_link_create_failed',
-    });
-  }
+  if (!error) return true;
+  if (error.code === UNIQUE_VIOLATION) return false;
+
+  throw new AppError(error.message, {
+    statusCode: 500,
+    code: 'user_file_tag_link_create_failed',
+  });
 }
 
 export async function deleteUserFileTagLink(fileId: string, tagId: string): Promise<void> {

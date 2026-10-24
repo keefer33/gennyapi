@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
 import { badRequest, sendError, sendOk } from '../../app/response';
 import { handleUpdateChat } from '../../database/user_models_chats';
-import { updateUserProjectRow } from '../../database/user_projects';
+import { ensureProjectTag, projectTagIdFromMetadata } from '../../database/projectFileTags';
 import type { UserProjectRow } from '../../database/types';
+import { updateUserProjectRow } from '../../database/user_projects';
 import { getAuthUserId } from '../../shared/getAuthUserId';
 import {
   optionalJson,
@@ -30,9 +31,20 @@ export async function updateUserProject(req: Request, res: Response): Promise<vo
     const patch: Partial<UserProjectRow> = {};
     if (body.project_name !== undefined) patch.project_name = requiredProjectName(body.project_name);
     if (body.project_brief !== undefined) patch.project_brief = requiredProjectBrief(body.project_brief);
-    if (body.metadata !== undefined) patch.metadata = optionalJson(body.metadata);
+    if (body.metadata !== undefined) {
+      const incoming = optionalJson(body.metadata);
+      const existingTagId = projectTagIdFromMetadata(existing.metadata);
+      if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+        patch.metadata = {
+          ...(incoming as Record<string, unknown>),
+          ...(existingTagId ? { project_tag_id: existingTagId } : {}),
+        };
+      } else {
+        patch.metadata = incoming;
+      }
+    }
 
-    const project = await updateUserProjectRow(userId, projectId, patch);
+    let project = await updateUserProjectRow(userId, projectId, patch);
 
     if (patch.project_name !== undefined) {
       const chatId = String(project.chat_id ?? existing.chat_id ?? '').trim();
@@ -41,6 +53,8 @@ export async function updateUserProject(req: Request, res: Response): Promise<vo
           () => undefined
         );
       }
+      const ensured = await ensureProjectTag(userId, project).catch(() => null);
+      if (ensured?.project) project = ensured.project;
     }
 
     sendOk(res, { project });

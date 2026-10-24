@@ -10,6 +10,10 @@ const USER_PROJECTS_INSERT_KEYS = [
   'chat_id',
 ] as const;
 
+export function displayProjectName(project: Pick<UserProjectRow, 'project_name'> | null | undefined): string {
+  return String(project?.project_name ?? '').trim() || 'Untitled project';
+}
+
 const USER_PROJECTS_UPDATE_KEYS = ['project_name', 'project_brief', 'metadata'] as const;
 
 export async function createUserProjectRow(row: Partial<UserProjectRow>): Promise<UserProjectRow> {

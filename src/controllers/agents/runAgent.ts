@@ -19,13 +19,18 @@ import {
   createSSEWriter,
   sendRunAgentError,
   getSelectedModelRow,
-  normalizeAttachments,
   coerceAgentToolResult,
+  normalizeAttachments,
 } from './agentUtils';
 import { updateUserUsageBalance } from '../../database/user_profiles';
 import { insertUserUsageLog } from '../../database/user_usage_log';
 import { USAGE_LOG_TYPE_AI_MODEL_USAGE } from '../../database/const';
 import { getUserProjectByChatIdForUser } from '../../database/user_projects';
+import {
+  collectProjectFileTagTargets,
+  tagProjectFilesFromTargets,
+  tagUserFilesForProject,
+} from '../../database/projectFileTags';
 
 const GENNY_STATUS_TOOL_SLUG = 'LOCAL_GENNY_BOT_GET_GENERATION_STATUS';
 const GENNY_COST_TOOL_SLUG = 'LOCAL_GENNY_BOT_CALCULATE_MODEL_COST';
@@ -163,7 +168,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getAuthUserId(req);
     const input = parseRunAgentInput((req.body || {}) as RunAgentBody);
-    const { chat_id, model_name, settings, prompt, attachments } = input;
+    const { chat_id, model_name, settings, prompt } = input;
     const modelRow = await getSelectedModelRow(model_name);
     const modelId = modelRow.api_id?.schema?.model as string;
     const apiType: ApiType | null = (modelRow.api_id?.api_type as ApiType | null) ?? null;
@@ -194,23 +199,20 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     const {
       gennyBotAigenTools,
       gennyBotVoiceTools,
-      gennyBotCharacterTools,
       gennyBotProjectTools,
+      gennyBotFileTools,
       systemPrompt: gennyBotSystemPrompt,
     } = await getAgentCustomTools((req as any).user.authToken, userId);
     const allTools = await loadComposioTools(userId, [
       gennyBotAigenTools,
       gennyBotVoiceTools,
-      gennyBotCharacterTools,
       gennyBotProjectTools,
+      gennyBotFileTools,
     ]);
     const hasTools = Object.keys(allTools).length > 0;
 
-    const normalizedAttachments = normalizeAttachments(attachments);
-    const attachmentLines = normalizedAttachments.map(a => `- ${String(a.type ?? 'file')} - ${a.url}`);
-    const attachmentText = attachmentLines.length > 0 ? `\n\nAttached files:\n${attachmentLines.join('\n')}` : '';
     const messages: ChatMessage[] = [...sessionMessages];
-    messages.push({ role: 'user', content: [{ type: 'text', text: `${prompt}${attachmentText}` }] });
+    messages.push({ role: 'user', content: [{ type: 'text', text: prompt }] });
 
     const baseSystemPrompt =
       typeof settings?.systemPrompt === 'string' && settings.systemPrompt.trim()
@@ -218,18 +220,41 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
         : 'You are a helpful assistant.';
 
     let projectContextPrompt = '';
-    if (chat_id) {
-      const project = await getUserProjectByChatIdForUser(userId, chat_id);
-      if (project?.id) {
-        projectContextPrompt = [
-          '',
-          'Active project context:',
-          `- project_id: ${project.id}`,
-          `- project_name: ${String(project.project_name ?? '').trim() || '(untitled)'}`,
-          '- project_brief is the living source of truth for this project. Use LOCAL_GENNY_BOT_PROJECTS_GET_PROJECT and LOCAL_GENNY_BOT_PROJECTS_UPDATE_PROJECT_BRIEF with this project_id.',
-          '- Prefer keeping the brief current after generations, characters, voices, scripts, or other material changes.',
-        ].join('\n');
+    let activeProject = chat_id ? await getUserProjectByChatIdForUser(userId, chat_id) : null;
+    const tagProjectFiles = async (fileIds: string[], generationIds: string[] = []) => {
+      if (!activeProject?.id) return;
+      if (fileIds.length === 0 && generationIds.length === 0) return;
+      try {
+        const result = await tagProjectFilesFromTargets(userId, activeProject, {
+          fileIds,
+          generationIds,
+        });
+        activeProject = result.project;
+      } catch (tagErr) {
+        console.error('[runChat] Error tagging project files:', tagErr);
       }
+    };
+    if (activeProject?.id) {
+      const attachmentIds = normalizeAttachments(input.attachments)
+        .map(file => (typeof file.id === 'string' ? file.id.trim() : ''))
+        .filter(Boolean);
+      if (attachmentIds.length > 0) {
+        try {
+          const tagged = await tagUserFilesForProject(userId, activeProject, attachmentIds);
+          activeProject = tagged.project;
+        } catch (tagErr) {
+          console.error('[runChat] Error tagging project attachments:', tagErr);
+        }
+      }
+      projectContextPrompt = [
+        '',
+        'Active project context:',
+        `- project_id: ${activeProject.id}`,
+        `- project_name: ${String(activeProject.project_name ?? '').trim() || '(untitled)'}`,
+        '- project_brief is the narrative outline (intent, constraints, next steps, voice recap).',
+        '- Project assets are user_files tagged with this project name. LIST_USER_FILES / LIST_GENERATIONS with this project_id lists them. Files are tagged automatically after generate/upload.',
+        '- Use LOCAL_GENNY_BOT_PROJECTS_GET_PROJECT and LOCAL_GENNY_BOT_PROJECTS_UPDATE_PROJECT_BRIEF with this project_id.',
+      ].join('\n');
     }
 
     const systemPrompt = `${baseSystemPrompt}\n\n${gennyBotSystemPrompt}${projectContextPrompt}`;
@@ -355,6 +380,11 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
                 });
                 if (saveResult?.file_url) {
                   urlToSend = saveResult.file_url;
+                  const generatedFileId =
+                    typeof saveResult.file_id === 'string' ? saveResult.file_id.trim() : '';
+                  if (generatedFileId) {
+                    await tagProjectFiles([generatedFileId]);
+                  }
                 }
               } catch (e) {
                 console.warn('[runChat] Failed to save generated file, sending data URL:', e);
@@ -407,6 +437,21 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
               generationMetadataById,
               metadataEntriesFromToolResult(localGennyToolCalls, normalizedOutput)
             );
+            if (activeProject?.id && !tr.isError) {
+              const slugs = [
+                ...(tr.toolName ? [tr.toolName] : []),
+                ...localGennyToolCalls.map(call => call.tool_slug),
+              ];
+              const fileIds: string[] = [];
+              const generationIds: string[] = [];
+              for (const slug of slugs) {
+                const targets = collectProjectFileTagTargets(slug, normalizedOutput);
+                if (!targets) continue;
+                fileIds.push(...targets.fileIds);
+                generationIds.push(...targets.generationIds);
+              }
+              await tagProjectFiles(fileIds, generationIds);
+            }
             if (writeSSE) {
               writeSSE({
                 type: 'stream_status',
@@ -463,7 +508,7 @@ export const runAgent = async (req: Request, res: Response): Promise<void> => {
     if (chat_id) {
       const userMsg = {
         role: 'user' as const,
-        content: [{ type: 'text' as const, text: prompt.trim() }, ...normalizedAttachments],
+        content: [{ type: 'text' as const, text: prompt.trim() }],
       };
       const assistantMsg = {
         role: 'assistant' as const,

@@ -3,6 +3,11 @@ export type SSEWriter = (data: Record<string, unknown>) => void;
 export type RunAgentAttachmentInput = {
   type?: string;
   url: string;
+  id?: string;
+  name?: string;
+  file_name?: string;
+  thumbnail_url?: string | null;
+  file_type?: string;
 };
 
 export type RunAgentBody = {
@@ -40,10 +45,8 @@ export type GennyToolPromptMeta = {
 export type GennyBotSystemPromptSections = {
   playgroundTools: GennyToolPromptMeta[];
   voiceTools: GennyToolPromptMeta[];
-  characterTools: GennyToolPromptMeta[];
   projectTools: GennyToolPromptMeta[];
-  lookModelCatalog: string;
-  videoModelCatalog: string;
+  fileTools: GennyToolPromptMeta[];
 };
 
 /** User file row shape embedded in generation status / markdown builder. */

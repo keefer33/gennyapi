@@ -329,3 +329,56 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
     hasPrevPage: page > 1,
   };
 }
+
+export async function getUserFileByIdFullForUser(
+  fileId: string,
+  userId: string
+): Promise<UserFileRow | null> {
+  const id = fileId.trim();
+  const uid = userId.trim();
+  if (!id || !uid) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .select(FILE_SELECT)
+    .eq('id', id)
+    .eq('user_id', uid)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_file_fetch_failed',
+    });
+  }
+
+  return (data as unknown as UserFileRow | null) ?? null;
+}
+
+export async function getUserFilesByIdsForUser(
+  userId: string,
+  fileIds: string[]
+): Promise<UserFileRow[]> {
+  const uid = userId.trim();
+  const ids = [...new Set(fileIds.map(id => id.trim()).filter(Boolean))];
+  if (!uid || ids.length === 0) return [];
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .select(FILE_SELECT)
+    .eq('user_id', uid)
+    .eq('status', 'active')
+    .in('id', ids);
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_files_by_ids_fetch_failed',
+    });
+  }
+
+  return (data as unknown as UserFileRow[]) ?? [];
+}

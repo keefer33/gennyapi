@@ -57,6 +57,32 @@ export async function getUserTagByIdForUser(tagId: string, userId: string): Prom
   return (data as UserTagRow | null) ?? null;
 }
 
+export async function getUserTagByNameForUser(
+  userId: string,
+  tagName: string
+): Promise<UserTagRow | null> {
+  const uid = userId.trim();
+  const name = tagName.trim();
+  if (!uid || !name) return null;
+
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_tags')
+    .select('*')
+    .eq('user_id', uid)
+    .eq('tag_name', name)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_tag_by_name_lookup_failed',
+    });
+  }
+
+  return (data as UserTagRow | null) ?? null;
+}
+
 export async function updateUserTagName(tagId: string, userId: string, tagName: string): Promise<UserTagRow | null> {
   const { supabaseServerClient } = await getServerClient();
   const { data, error } = await supabaseServerClient
