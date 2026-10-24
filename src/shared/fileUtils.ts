@@ -224,6 +224,52 @@ export const getFileExtensionFromMimeType = (mimeType: string): string => {
   return normalized ? extensionsByMimeType[normalized] || 'bin' : 'bin';
 };
 
+export function extensionFromContentType(contentType: unknown): string | null {
+  if (typeof contentType !== 'string') return null;
+  const ext = getFileExtensionFromMimeType(contentType);
+  return ext && ext !== 'bin' ? ext : null;
+}
+
+/** Detect raster/svg type from magic bytes when the URL has no extension. */
+export function sniffImageExtension(buffer: Buffer): string | null {
+  if (buffer.length >= 12) {
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'png';
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpg';
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'gif';
+    if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  }
+  const head = buffer.subarray(0, Math.min(buffer.length, 256)).toString('utf8').trimStart().toLowerCase();
+  if (head.startsWith('<svg') || (head.startsWith('<?xml') && head.includes('<svg'))) return 'svg';
+  return null;
+}
+
+function basenameFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const last = parsed.pathname.split('/').filter(Boolean).pop();
+    if (last) return decodeURIComponent(last);
+  } catch {
+    /* fall through */
+  }
+  const last = url.split('/').pop()?.split('?')[0]?.split('#')[0];
+  return last && last.trim() ? last.trim() : 'file';
+}
+
+/** Prefer a URL extension, then Content-Type, then magic bytes, so Zipline gets a real filename. */
+export function filenameForDownloadedFile(
+  url: string,
+  contentType?: string | null,
+  buffer?: Buffer
+): string {
+  const base = basenameFromUrl(url) || 'file';
+  const urlExt = getFileExtension(url);
+  if (urlExt) return base;
+
+  const ext = extensionFromContentType(contentType) || (buffer ? sniffImageExtension(buffer) : null);
+  if (!ext) return base;
+  return `${base}.${ext}`;
+}
+
 export const base64WithoutDataUrl = (value: string): string => {
   const trimmed = value.trim();
   const commaIndex = trimmed.indexOf(',');
@@ -586,9 +632,6 @@ export const saveFileFromUrl = async (
       throw new Error('Zipline authentication token not found for user');
     }
 
-    // Extract original filename from URL
-    const urlParts = url.split('/');
-    const originalFilename = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       validateStatus: () => true,
@@ -598,10 +641,9 @@ export const saveFileFromUrl = async (
       throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
     }
 
-    const fileBuffer = response.data;
-
-    // Convert to Buffer and verify
-    const nodeBuffer = Buffer.from(fileBuffer);
+    const nodeBuffer = Buffer.from(response.data);
+    const headerType = typeof response.headers['content-type'] === 'string' ? response.headers['content-type'] : null;
+    const originalFilename = filenameForDownloadedFile(url, headerType, nodeBuffer);
 
     const uploadResponse = await uploadFileToZipline(nodeBuffer, originalFilename, authToken);
 
@@ -618,8 +660,10 @@ export const saveFileFromUrl = async (
       ...generatedInfoExtras,
     };
     let thumbnailUrl: string | undefined;
-    if (isImageUrl(url) || isVideoUrl(url)) {
-      const thumbnailBuffer = await generateThumbnail(nodeBuffer, url);
+    const typeUrl = `https://download.local/${originalFilename}`;
+    const mediaUrl = isImageUrl(url) || isVideoUrl(url) ? url : typeUrl;
+    if (isImageUrl(mediaUrl) || isVideoUrl(mediaUrl)) {
+      const thumbnailBuffer = await generateThumbnail(nodeBuffer, mediaUrl);
 
       if (thumbnailBuffer) {
         try {
