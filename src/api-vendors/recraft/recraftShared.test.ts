@@ -50,6 +50,13 @@ test('drops image_format for vector models', () => {
   assert.equal(body.image_format, undefined);
   assert.equal(body.size, '1:1');
   assert.equal(body.n, 1);
+
+  const fromDefault = mapRecraftGenerationPayload(
+    { prompt: 'app icon', image_format: 'webp' },
+    'recraftv4_1_vector'
+  );
+  assert.equal(fromDefault.model, 'recraftv4_1_vector');
+  assert.equal(fromDefault.image_format, undefined);
 });
 
 test('keeps raster image_format', () => {

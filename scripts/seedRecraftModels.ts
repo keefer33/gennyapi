@@ -6,7 +6,8 @@ import {
   RECRAFT_FLASH_MODEL,
   RECRAFT_STYLES_MODEL,
   RECRAFT_STYLES_MODELS,
-  RECRAFT_V41_MODELS,
+  RECRAFT_V41_RASTER_MODELS,
+  RECRAFT_V41_VECTOR_MODELS,
 } from '../src/api-vendors/recraft/recraftShared';
 
 loadEnv({ path: resolve(__dirname, '../.env') });
@@ -135,19 +136,20 @@ const MODELS = [
   {
     model_id: 'recraft-v4-1',
     model_name: 'Recraft V4.1',
-    model_description:
-      'Photorealism, illustration, and strong short prompts. Raster, vector, Pro, and Utility variants.',
+    model_description: 'Photorealism, illustration, and strong short prompts. Raster, Pro, and Utility variants.',
     model_product: 'Recraft V4.1',
-    model_variant: 'text-to-image',
+    model_variant: 'raster',
+    sort_order: 16,
+    sort_order_variant: 1,
     vendor_model_name: 'recraftv4_1',
     function_schema: {
       name: 'RecraftV41',
-      description: 'Generate images with Recraft V4.1.',
+      description: 'Generate raster images with Recraft V4.1.',
       type: 'object',
       required: ['prompt'],
       properties: {
         prompt: promptProperty(),
-        model: modelProperty(RECRAFT_V41_MODELS, 'recraftv4_1'),
+        model: modelProperty(RECRAFT_V41_RASTER_MODELS, 'recraftv4_1'),
         size: sizeProperty(),
         n: nProperty(),
         image_format: imageFormatProperty(),
@@ -158,12 +160,39 @@ const MODELS = [
     },
     model_pricing: multiFieldPricing({
       recraftv4_1: 0.035,
-      recraftv4_1_vector: 0.08,
       recraftv4_1_pro: 0.25,
-      recraftv4_1_pro_vector: 0.4,
       recraftv4_1_utility: 0.02,
-      recraftv4_1_utility_vector: 0.04,
       recraftv4_1_utility_pro: 0.08,
+    }),
+  },
+  {
+    model_id: 'recraft-v4-1-vector',
+    model_name: 'Recraft V4.1 Vector',
+    model_description: 'Production-grade SVG. Pro and Utility vector variants.',
+    model_product: 'Recraft V4.1',
+    model_variant: 'vector',
+    sort_order: 16,
+    sort_order_variant: 2,
+    vendor_model_name: 'recraftv4_1_vector',
+    function_schema: {
+      name: 'RecraftV41Vector',
+      description: 'Generate SVG images with Recraft V4.1 Vector.',
+      type: 'object',
+      required: ['prompt'],
+      properties: {
+        prompt: promptProperty(),
+        model: modelProperty(RECRAFT_V41_VECTOR_MODELS, 'recraftv4_1_vector'),
+        size: sizeProperty(),
+        n: nProperty(),
+        style_reference_urls: styleRefsProperty(false),
+        style_id: styleIdProperty(),
+        random_seed: randomSeedProperty(),
+      },
+    },
+    model_pricing: multiFieldPricing({
+      recraftv4_1_vector: 0.08,
+      recraftv4_1_pro_vector: 0.4,
+      recraftv4_1_utility_vector: 0.04,
       recraftv4_1_utility_pro_vector: 0.16,
     }),
   },
@@ -173,6 +202,8 @@ const MODELS = [
     model_description: 'Fast raster generation, about 1.3s, quality close to V4.1. Styles are not supported.',
     model_product: 'Recraft V4.1 Flash',
     model_variant: 'text-to-image',
+    sort_order: 17,
+    sort_order_variant: 1,
     vendor_model_name: RECRAFT_FLASH_MODEL,
     function_schema: {
       name: 'RecraftV41Flash',
@@ -195,6 +226,8 @@ const MODELS = [
     model_description: 'Match a look from 1 to 10 style reference images or an existing Recraft style ID.',
     model_product: 'Recraft V4 Styles',
     model_variant: 'text-to-image',
+    sort_order: 18,
+    sort_order_variant: 1,
     vendor_model_name: RECRAFT_STYLES_MODEL,
     function_schema: {
       name: 'RecraftV4Styles',
@@ -278,18 +311,7 @@ async function main() {
     console.log('updated vendor_apis recraft');
   }
 
-  const { data: sortRows, error: sortError } = await supabase
-    .from('gen_models')
-    .select('sort_order')
-    .eq('generation_type', 'image')
-    .order('sort_order', { ascending: false, nullsFirst: false })
-    .limit(1);
-  throwIf(sortError, 'sort_order fetch');
-  let nextSort = Number(sortRows?.[0]?.sort_order ?? 0);
-  if (!Number.isFinite(nextSort)) nextSort = 0;
-
   for (const model of MODELS) {
-    nextSort += 1;
     const modelRow = {
       model_id: model.model_id,
       model_name: model.model_name,
@@ -299,8 +321,8 @@ async function main() {
       model_product: model.model_product,
       model_variant: model.model_variant,
       brand_name: brandName,
-      sort_order: nextSort,
-      sort_order_variant: 1,
+      sort_order: model.sort_order,
+      sort_order_variant: model.sort_order_variant,
     };
 
     const { data: existingModel, error: modelFetchError } = await supabase

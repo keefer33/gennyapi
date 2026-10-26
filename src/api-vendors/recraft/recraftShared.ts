@@ -23,16 +23,21 @@ export const RECRAFT_ASPECT_RATIOS = [
   '9:16',
 ] as const;
 
-export const RECRAFT_V41_MODELS = [
+export const RECRAFT_V41_RASTER_MODELS = [
   'recraftv4_1',
-  'recraftv4_1_vector',
   'recraftv4_1_pro',
-  'recraftv4_1_pro_vector',
   'recraftv4_1_utility',
-  'recraftv4_1_utility_vector',
   'recraftv4_1_utility_pro',
+] as const;
+
+export const RECRAFT_V41_VECTOR_MODELS = [
+  'recraftv4_1_vector',
+  'recraftv4_1_pro_vector',
+  'recraftv4_1_utility_vector',
   'recraftv4_1_utility_pro_vector',
 ] as const;
+
+export const RECRAFT_V41_MODELS = [...RECRAFT_V41_RASTER_MODELS, ...RECRAFT_V41_VECTOR_MODELS] as const;
 
 export const RECRAFT_STYLES_MODELS = [
   'recraftv4_styles',

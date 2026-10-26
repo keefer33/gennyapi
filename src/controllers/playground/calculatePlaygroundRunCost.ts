@@ -1,3 +1,4 @@
+import { withAlibabaCostDefaults } from '../../api-vendors/alibaba/alibabaVideoPayload';
 import { calculateRecraftRunCost } from '../../api-vendors/recraft/recraftShared';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { AppError } from '../../app/error';
@@ -15,7 +16,17 @@ export async function calculatePlaygroundRunCost(
     case 'kie':
     case 'openai':
     case 'google':
-    case 'alibaba':
+      return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+    case 'alibaba': {
+      const defaultModel =
+        typeof genModel.gen_models_apis_id?.api_schema?.vendor_model_name === 'string'
+          ? genModel.gen_models_apis_id.api_schema.vendor_model_name.trim()
+          : '';
+      return calculatePricingUtil(
+        withAlibabaCostDefaults(payload, defaultModel),
+        genModel.gen_models_apis_id?.model_pricing ?? {}
+      );
+    }
     case 'eachlabs':
     case 'prunaai':
     case 'kling':
