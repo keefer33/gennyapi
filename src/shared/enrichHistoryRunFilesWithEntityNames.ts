@@ -2,6 +2,9 @@ import { getServerClient } from '../database/supabaseClient';
 import { withoutDraftCacheFiles } from './fileUtils';
 
 type FileWithEntityIds = {
+  file_name?: string | null;
+  file_path?: string | null;
+  file_type?: string | null;
   character_id?: string | null;
   voice_id?: string | null;
   character_name?: string | null;

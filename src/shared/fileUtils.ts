@@ -255,23 +255,32 @@ function basenameFromUrl(url: string): string {
   return last && last.trim() ? last.trim() : 'file';
 }
 
-/** Hidden FLUX draft-cache binaries — keep them on the run, never show them in library/history UI. */
-export function isDraftCacheLibraryFile(file: {
+type DraftCacheFileFields = {
   file_name?: string | null;
   file_path?: string | null;
   file_type?: string | null;
-}): boolean {
-  const name = (file.file_name ?? '').toLowerCase();
-  const path = (file.file_path ?? '').toLowerCase().split('?')[0] ?? '';
+};
+
+function draftCacheFileFields(file: unknown): DraftCacheFileFields {
+  if (!file || typeof file !== 'object') return {};
+  const row = file as Record<string, unknown>;
+  return {
+    file_name: typeof row.file_name === 'string' ? row.file_name : null,
+    file_path: typeof row.file_path === 'string' ? row.file_path : null,
+    file_type: typeof row.file_type === 'string' ? row.file_type : null,
+  };
+}
+
+/** Hidden FLUX draft-cache binaries — keep them on the run, never show them in library/history UI. */
+export function isDraftCacheLibraryFile(file: DraftCacheFileFields | null | undefined): boolean {
+  const { file_name: nameRaw, file_path: pathRaw } = file ?? {};
+  const name = (nameRaw ?? '').toLowerCase();
+  const path = (pathRaw ?? '').toLowerCase().split('?')[0] ?? '';
   return name.endsWith('.bin') || path.endsWith('.bin') || /draft[_-]?cache/i.test(name) || /draft[_-]?cache/i.test(path);
 }
 
-export function withoutDraftCacheFiles<T extends {
-  file_name?: string | null;
-  file_path?: string | null;
-  file_type?: string | null;
-}>(files: T[] | null | undefined): T[] {
-  return (files ?? []).filter(file => !isDraftCacheLibraryFile(file));
+export function withoutDraftCacheFiles<T>(files: T[] | null | undefined): T[] {
+  return (files ?? []).filter(file => !isDraftCacheLibraryFile(draftCacheFileFields(file)));
 }
 
 /** Prefer a URL extension, then Content-Type, then magic bytes, so Zipline gets a real filename. */
