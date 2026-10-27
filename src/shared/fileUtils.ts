@@ -266,8 +266,11 @@ export function filenameForDownloadedFile(
   if (urlExt) return base;
 
   const ext = extensionFromContentType(contentType) || (buffer ? sniffImageExtension(buffer) : null);
-  if (!ext) return base;
-  return `${base}.${ext}`;
+  if (ext) return `${base}.${ext}`;
+  if (/draft[_-]?cache/i.test(url) || /\.bin(?:$|[?#])/i.test(url)) {
+    return base.toLowerCase().endsWith('.bin') ? base : `${base}.bin`;
+  }
+  return base;
 }
 
 export const base64WithoutDataUrl = (value: string): string => {

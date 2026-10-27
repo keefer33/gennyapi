@@ -8,6 +8,7 @@ import {
   processResponse,
   tickWebhookRun,
 } from '../../shared/webhooksUtils';
+import { buildAlibabaImagePayload } from './alibabaImagePayload';
 
 const DEFAULT_ALIBABA_SERVER = 'https://dashscope-intl.aliyuncs.com';
 const DEFAULT_ALIBABA_IMAGE_PATH = '/api/v1/services/aigc/multimodal-generation/generation';
@@ -48,24 +49,6 @@ function headers(apiKey: string): Record<string, string> {
   };
 }
 
-function mediaSource(input: unknown): string {
-  if (typeof input === 'string') return input.trim();
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
-  const item = input as Record<string, unknown>;
-  return trimString(item.url) || trimString(item.file_url) || trimString(item.file_path) || trimString(item.filePath);
-}
-
-function isImageField(key: string, value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return /(image|frame|reference)/i.test(key);
-}
-
-function imagePartsFromField(value: unknown): Record<string, string>[] {
-  if (Array.isArray(value)) return value.flatMap(imagePartsFromField);
-  const url = mediaSource(value);
-  return url ? [{ image: url }] : [];
-}
-
 function imageResultUrls(responseData: unknown): string[] {
   const choices = (responseData as { output?: { choices?: unknown } })?.output?.choices;
   if (!Array.isArray(choices)) return [];
@@ -80,67 +63,6 @@ function imageResultUrls(responseData: unknown): string[] {
     }
   }
   return urls;
-}
-
-function buildImagePayload(payload: unknown, model: string): Record<string, unknown> {
-  const originalPayload = (payload ?? {}) as Record<string, unknown>;
-  const existingInput =
-    originalPayload.input && typeof originalPayload.input === 'object' ? originalPayload.input : null;
-  if (existingInput) {
-    return {
-      model,
-      input: existingInput,
-      parameters:
-        originalPayload.parameters && typeof originalPayload.parameters === 'object'
-          ? originalPayload.parameters
-          : undefined,
-    };
-  }
-
-  const content: Record<string, string>[] = [];
-  const mediaKeys = new Set<string>();
-  for (const [key, value] of Object.entries(originalPayload)) {
-    if (!isImageField(key, value)) continue;
-    mediaKeys.add(key);
-    content.push(...imagePartsFromField(value));
-  }
-
-  const prompt = trimString(originalPayload.prompt) || trimString(originalPayload.text);
-  if (prompt) content.push({ text: prompt });
-
-  const parameters =
-    originalPayload.parameters && typeof originalPayload.parameters === 'object'
-      ? { ...(originalPayload.parameters as Record<string, unknown>) }
-      : {};
-
-  if (!originalPayload.parameters || typeof originalPayload.parameters !== 'object') {
-    for (const [key, value] of Object.entries(originalPayload)) {
-      if (
-        key === 'prompt' ||
-        key === 'text' ||
-        key === 'input' ||
-        key === 'parameters' ||
-        key === 'model' ||
-        mediaKeys.has(key)
-      ) {
-        continue;
-      }
-      parameters[key] = value;
-    }
-  }
-
-  return {
-    model,
-    input: {
-      messages: [
-        {
-          role: 'user',
-          content,
-        },
-      ],
-    },
-    parameters,
-  };
 }
 
 function pollingEndpoint(apiSchema: AlibabaApiSchema, taskId: string): string {
@@ -179,9 +101,10 @@ async function handleAlibabaImage(context: WebhookVendorContext<AlibabaApiSchema
       });
     }
     console.log('[webhookAlibaba] image request', { endpoint: requestEndpoint, run_id: run.id, db_status: rowStatus });
-    const response = await axios.post(requestEndpoint, buildImagePayload(run.payload, vendorModelName), {
+    const response = await axios.post(requestEndpoint, buildAlibabaImagePayload(run.payload, vendorModelName), {
       headers: headers(apiKey),
       validateStatus: () => true,
+      timeout: 300000,
     });
 
     lastResponse = response.data ?? {};

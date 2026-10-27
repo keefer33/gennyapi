@@ -42,3 +42,14 @@ test('keeps an existing URL extension', () => {
     'photo.png'
   );
 });
+
+test('keeps a .bin name for BFL draft_cache URLs', () => {
+  assert.equal(
+    filenameForDownloadedFile('https://delivery.bfl.ai/v1/draft_cache/abc123', 'application/octet-stream'),
+    'abc123.bin'
+  );
+  assert.equal(
+    filenameForDownloadedFile('https://delivery.bfl.ai/files/cache.bin?token=abc', 'application/octet-stream'),
+    'cache.bin'
+  );
+});

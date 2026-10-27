@@ -3,6 +3,7 @@ export type VendorApisRow = {
   created_at?: string | null;
   vendor_name?: string | null;
   api_key?: string | null;
+  url?: string | null;
   config?: any;
 };
 

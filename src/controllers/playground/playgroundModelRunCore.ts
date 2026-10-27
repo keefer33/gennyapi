@@ -21,6 +21,7 @@ import { runMinimaxModel } from '../../api-vendors/minimax/runMinimaxModel';
 import { runHiggsfieldModel } from '../../api-vendors/higgsfield/runHiggsfieldModel';
 import { runHeygenModel } from '../../api-vendors/heygen/runHeygenModel';
 import { runRecraftModel } from '../../api-vendors/recraft/runRecraftModel';
+import { runBflModel } from '../../api-vendors/bfl/runBflModel';
 import { calculatePlaygroundRunCost } from './calculatePlaygroundRunCost';
 
 type PlaygroundApiSchema = {
@@ -124,6 +125,9 @@ export async function executePlaygroundModelRun(
           break;
         case 'recraft':
           response = await runRecraftModel(genModel, payload);
+          break;
+        case 'bfl':
+          response = await runBflModel(genModel, payload);
           break;
         default:
           throw new AppError('Invalid vendor', {

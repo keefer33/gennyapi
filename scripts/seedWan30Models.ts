@@ -41,20 +41,22 @@ function resolutionProperty(): Json {
   };
 }
 
-function ratioProperty(defaultValue = 'adaptive'): Json {
+function ratioProperty(defaultValue = 'adaptive', description?: string): Json {
   return {
     type: 'string',
     title: 'Aspect ratio',
+    ...(description ? { description } : {}),
     enum: [...RATIOS],
     default: defaultValue,
     'x-ui-component': 'AspectRatioPicker',
   };
 }
 
-function durationProperty(): Json {
+function durationProperty(description?: string): Json {
   return {
     type: 'integer',
     title: 'Duration (seconds)',
+    ...(description ? { description } : {}),
     minimum: 2,
     maximum: 30,
     default: 5,
@@ -124,12 +126,17 @@ function urlProperty(title: string, description: string): Json {
 
 const SHARED_PARAM_KEYS = ['model', 'resolution', 'ratio', 'duration', 'audio', 'prompt_extend', 'seed', 'watermark'];
 
-function sharedProperties(options?: { ratioDefault?: string; promptExtendLocked?: boolean }): Json {
+function sharedProperties(options?: {
+  ratioDefault?: string;
+  ratioDescription?: string;
+  durationDescription?: string;
+  promptExtendLocked?: boolean;
+}): Json {
   return {
     model: modelProperty(),
     resolution: resolutionProperty(),
-    ratio: ratioProperty(options?.ratioDefault),
-    duration: durationProperty(),
+    ratio: ratioProperty(options?.ratioDefault, options?.ratioDescription),
+    duration: durationProperty(options?.durationDescription),
     audio: audioProperty(),
     prompt_extend: promptExtendProperty(options?.promptExtendLocked),
     seed: seedProperty(),
@@ -254,19 +261,34 @@ const MODELS = [
   },
   {
     model_id: 'alibaba/wan-3.0/video-edit',
-    model_name: 'Alibaba Wan 3.0 Video Edit',
-    model_description: 'Edit or extend a video with a prompt. Optional extra image and audio references.',
+    model_name: 'Alibaba Wan 3.0 Video Edit / Extend',
+    model_description:
+      'Edit or extend a clip with the same form. Edit: say “remove”, “replace”, or “change to”. Extend: say “extend Video 1 forward/backward” (or both). Source plus new length must stay under 30 seconds. Optional extra image and audio refs.',
+    tool_description:
+      'Edit or extend an existing video. Attach the clip as reference_videos. The prompt chooses the mode: edit uses words like “edit”, “remove”, “replace”, “change to”; extend uses “extend”, “continue”, “extend Video 1 forward/backward”. Keep source duration plus new footage at or under 30 seconds. Prefer ratio adaptive when extending. Optional reference_images and reference_audios.',
     model_type: 'video-to-video',
-    model_variant: 'video-edit',
+    model_variant: 'video-edit-extend',
     sort_order_variant: 6,
     required: ['prompt', 'reference_videos'],
     order: ['prompt', 'reference_videos', 'reference_images', 'reference_audios', ...SHARED_PARAM_KEYS],
     properties: {
-      prompt: promptProperty('Editing or extension intent, e.g. change style, remove an object, or extend forward.'),
-      reference_videos: mediaPicker('Video', 'video', 1, 5, 'The clip to edit or extend.'),
-      reference_images: mediaPicker('Reference images', 'image', 0, 10),
+      prompt: promptProperty(
+        'Edit: “change the scene to clay style” or “remove the person on the left”. Extend: “extend Video 1 backward 5 seconds: the baker walks to the oven.” Direction words (forward / backward / both) matter.'
+      ),
+      reference_videos: mediaPicker(
+        'Video to edit or extend',
+        'video',
+        1,
+        5,
+        'Required. The clip to edit, or the clip to continue. Mention it as Video 1 in the prompt.'
+      ),
+      reference_images: mediaPicker('Reference images', 'image', 0, 10, 'Optional. Use for “put on the hat from Image 1” style edits.'),
       reference_audios: mediaPicker('Reference audio', 'audio', 0, 5),
-      ...sharedProperties(),
+      ...sharedProperties({
+        ratioDescription: 'Keep Adaptive when extending so the original aspect ratio is preserved.',
+        durationDescription:
+          'Finished length in seconds. For extend, use source length plus extra (max 30 total). For edit, match the source clip.',
+      }),
     },
   },
 ];
@@ -339,14 +361,17 @@ async function main() {
       console.log('updated gen_models', model.model_id);
     }
 
-    const functionName = model.model_name.replace(/\s+/g, '');
+    const functionName = model.model_name.replace(/[\s/]+/g, '');
     const apiRow = {
       gen_models_model_id: model.model_id,
       vendor_api: VENDOR,
       api_schema: schema,
       function_schema: {
         name: functionName,
-        description: model.model_description,
+        description:
+          typeof (model as { tool_description?: string }).tool_description === 'string'
+            ? (model as { tool_description: string }).tool_description
+            : model.model_description,
         type: 'object',
         required: model.required,
         'x-order-properties': model.order,

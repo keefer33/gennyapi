@@ -1,4 +1,6 @@
+import { calculateQwenImageRunCost, isQwenImageModel } from '../../api-vendors/alibaba/alibabaImagePayload';
 import { withAlibabaCostDefaults } from '../../api-vendors/alibaba/alibabaVideoPayload';
+import { withBflCostDefaults } from '../../api-vendors/bfl/bflShared';
 import { calculateRecraftRunCost } from '../../api-vendors/recraft/recraftShared';
 import { getWavespeedCost } from '../../api-vendors/wavespeed/getWavespeedCost';
 import { AppError } from '../../app/error';
@@ -22,6 +24,10 @@ export async function calculatePlaygroundRunCost(
         typeof genModel.gen_models_apis_id?.api_schema?.vendor_model_name === 'string'
           ? genModel.gen_models_apis_id.api_schema.vendor_model_name.trim()
           : '';
+      const payloadModel = typeof payload.model === 'string' ? payload.model.trim() : '';
+      if (isQwenImageModel(payloadModel || defaultModel)) {
+        return calculateQwenImageRunCost(payload, defaultModel);
+      }
       return calculatePricingUtil(
         withAlibabaCostDefaults(payload, defaultModel),
         genModel.gen_models_apis_id?.model_pricing ?? {}
@@ -36,6 +42,11 @@ export async function calculatePlaygroundRunCost(
     case 'higgsfield':
     case 'heygen':
       return calculatePricingUtil(payload, genModel.gen_models_apis_id?.model_pricing ?? {});
+    case 'bfl':
+      return calculatePricingUtil(
+        withBflCostDefaults(payload, genModel.gen_models_apis_id?.api_schema ?? {}),
+        genModel.gen_models_apis_id?.model_pricing ?? {}
+      );
     case 'recraft': {
       const defaultModel =
         typeof genModel.gen_models_apis_id?.api_schema?.vendor_model_name === 'string'
