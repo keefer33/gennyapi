@@ -1,4 +1,5 @@
 import { getServerClient } from '../database/supabaseClient';
+import { withoutDraftCacheFiles } from './fileUtils';
 
 type FileWithEntityIds = {
   character_id?: string | null;
@@ -32,7 +33,21 @@ export async function enrichHistoryRunFilesWithEntityNames<T extends RunWithFile
     }
   }
 
-  if (charIds.size === 0 && voiceIds.size === 0) return runs;
+  const attachNames = (charNames: Map<string, string>, voiceNames: Map<string, string>): T[] =>
+    runs.map(run => ({
+      ...run,
+      user_files: withoutDraftCacheFiles(run.user_files).map(file => {
+        const cid = file.character_id?.trim();
+        const vid = file.voice_id?.trim();
+        return {
+          ...file,
+          character_name: cid ? (charNames.get(cid) ?? null) : null,
+          voice_name: vid ? (voiceNames.get(vid) ?? null) : null,
+        };
+      }),
+    }));
+
+  if (charIds.size === 0 && voiceIds.size === 0) return attachNames(new Map(), new Map());
 
   const { supabaseServerClient } = await getServerClient();
   const charNames = new Map<string, string>();
@@ -82,16 +97,5 @@ export async function enrichHistoryRunFilesWithEntityNames<T extends RunWithFile
     }
   }
 
-  return runs.map(run => ({
-    ...run,
-    user_files: (run.user_files ?? []).map(file => {
-      const cid = file.character_id?.trim();
-      const vid = file.voice_id?.trim();
-      return {
-        ...file,
-        character_name: cid ? (charNames.get(cid) ?? null) : null,
-        voice_name: vid ? (voiceNames.get(vid) ?? null) : null,
-      };
-    }),
-  }));
+  return attachNames(charNames, voiceNames);
 }

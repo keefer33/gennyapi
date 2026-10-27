@@ -64,11 +64,11 @@ test('video edit has no mode and maps video plus prompt', () => {
 
 test('draft enhance sends draft_cache without a prompt', () => {
   const body = buildBflPayload(
-    { draft_cache: 'https://file.genny.bot/draft.bin', resolution: 'uhd' },
+    { video: 'https://file.genny.bot/draft.mp4', resolution: 'uhd' },
     { mode: 'draft_enhance', api_path: '/v1/flux-3-video' }
   );
   assert.equal(body.mode, 'draft_enhance');
-  assert.equal(body.draft_cache, 'https://file.genny.bot/draft.bin');
+  assert.equal(body.draft_cache, 'https://file.genny.bot/draft.mp4');
   assert.equal(body.prompt, undefined);
   assert.equal(body.resolution, 'uhd');
 });

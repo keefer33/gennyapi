@@ -148,6 +148,7 @@ export const FILE_SELECT = `
   upload_type,
   character_id,
   thumbnail_url,
+  gen_model_run_id,
   gen_model_id(
     id,
     model_name,

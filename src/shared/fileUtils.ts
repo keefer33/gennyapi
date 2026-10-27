@@ -255,6 +255,25 @@ function basenameFromUrl(url: string): string {
   return last && last.trim() ? last.trim() : 'file';
 }
 
+/** Hidden FLUX draft-cache binaries — keep them on the run, never show them in library/history UI. */
+export function isDraftCacheLibraryFile(file: {
+  file_name?: string | null;
+  file_path?: string | null;
+  file_type?: string | null;
+}): boolean {
+  const name = (file.file_name ?? '').toLowerCase();
+  const path = (file.file_path ?? '').toLowerCase().split('?')[0] ?? '';
+  return name.endsWith('.bin') || path.endsWith('.bin') || /draft[_-]?cache/i.test(name) || /draft[_-]?cache/i.test(path);
+}
+
+export function withoutDraftCacheFiles<T extends {
+  file_name?: string | null;
+  file_path?: string | null;
+  file_type?: string | null;
+}>(files: T[] | null | undefined): T[] {
+  return (files ?? []).filter(file => !isDraftCacheLibraryFile(file));
+}
+
 /** Prefer a URL extension, then Content-Type, then magic bytes, so Zipline gets a real filename. */
 export function filenameForDownloadedFile(
   url: string,

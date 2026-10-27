@@ -140,6 +140,13 @@ export function buildAlibabaImagePayload(payload: unknown, model: string): Recor
     }
   }
 
+  if (typeof parameters.enable_thinking !== 'boolean') {
+    parameters.enable_thinking = false;
+  }
+  if (parameters.enable_thinking === true) {
+    parameters.prompt_extend = true;
+  }
+
   return {
     model: vendorModel,
     input: {

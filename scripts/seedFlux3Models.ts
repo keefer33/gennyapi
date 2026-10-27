@@ -333,23 +333,23 @@ const MODELS: Array<{
     model_id: 'bfl/flux-3-draft-enhance',
     model_name: 'FLUX 3 Draft Enhance',
     model_description:
-      'Upscale a prior FLUX 3 draft using its saved .bin cache. Cost uses full-render rates at the chosen resolution; duration is estimated at 8s.',
+      'Upscale a prior FLUX 3 draft clip. Pick the draft video — the cache is attached automatically. Cost uses full-render rates at the chosen resolution; duration is estimated at 8s.',
     tool_description:
-      'Enhance a prior FLUX 3 draft. Attach the saved draft_cache .bin from a draft run. No prompt — the bundle already has the original generation. resolution defaults to fhd. Cost is estimated as 8 seconds at full t2v/i2v rates for the chosen resolution (continuation drafts are slightly undercharged).',
+      'Enhance a prior FLUX 3 draft. Attach the draft video (a clip generated with draft true). Do not attach a .bin. No prompt — the bundle already has the original generation. resolution defaults to fhd. Cost is estimated as 8 seconds at full t2v/i2v rates for the chosen resolution (continuation drafts are slightly undercharged).',
     model_type: 'video-to-video',
     generation_type: 'video',
     model_product: 'FLUX 3',
     model_variant: 'draft-enhance',
     sort_order_variant: 4,
-    required: ['draft_cache'],
-    order: ['draft_cache', 'resolution'],
+    required: ['video'],
+    order: ['video', 'resolution'],
     properties: {
-      draft_cache: mediaPicker(
-        'Draft cache',
-        'file',
+      video: mediaPicker(
+        'Draft video',
+        'video',
         1,
         1,
-        'The .bin saved from a prior FLUX 3 draft run. Do not attach the preview video.'
+        'A FLUX 3 clip generated with Draft on. The enhance cache is attached automatically.'
       ),
       resolution: videoResolutionProperty('fhd'),
     },

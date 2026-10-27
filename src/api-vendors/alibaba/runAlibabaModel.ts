@@ -1,10 +1,12 @@
 import axios from 'axios';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
+import { buildAlibabaImagePayload, isQwenImageModel } from './alibabaImagePayload';
 import { buildAlibabaVideoPayload, type AlibabaApiSchema } from './alibabaVideoPayload';
 
 const DEFAULT_ALIBABA_SERVER = 'https://dashscope-intl.aliyuncs.com';
 const DEFAULT_ALIBABA_VIDEO_PATH = '/api/v1/services/aigc/video-generation/video-synthesis';
+const DEFAULT_ALIBABA_IMAGE_PATH = '/api/v1/services/aigc/image-generation/generation';
 
 function trimString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -39,9 +41,12 @@ export async function runAlibabaModel(genModel: GenModelRow, payload: unknown) {
       expose: false,
     });
   }
-  const requestPayload = buildAlibabaVideoPayload(payload, vendorModelName, apiSchema);
-  console.log('buildAlibabaVideoPayload', JSON.stringify(requestPayload, null, 2));
-  const response = await axios.post(alibabaEndpoint(apiSchema, DEFAULT_ALIBABA_VIDEO_PATH), requestPayload, {
+  const isImage = isQwenImageModel(vendorModelName);
+  const requestPayload = isImage
+    ? buildAlibabaImagePayload(payload, vendorModelName)
+    : buildAlibabaVideoPayload(payload, vendorModelName, apiSchema);
+  const fallbackPath = isImage ? DEFAULT_ALIBABA_IMAGE_PATH : DEFAULT_ALIBABA_VIDEO_PATH;
+  const response = await axios.post(alibabaEndpoint(apiSchema, fallbackPath), requestPayload, {
     headers: {
       'Content-Type': 'application/json',
       'X-DashScope-Async': 'enable',
@@ -63,9 +68,9 @@ export async function runAlibabaModel(genModel: GenModelRow, payload: unknown) {
   const output = (response.data?.output ?? {}) as Record<string, unknown>;
   const taskId = trimString(output.task_id);
   if (!taskId) {
-    throw new AppError('Alibaba video response missing task_id', {
+    throw new AppError('Alibaba response missing task_id', {
       statusCode: 502,
-      code: 'alibaba_video_response_missing_task_id',
+      code: 'alibaba_response_missing_task_id',
       details: response.data,
       expose: true,
     });

@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { badRequest, notFound, sendError, sendOk } from '../../../app/response';
 import { getAuthUserId } from '../../../shared/getAuthUserId';
-import { deleteUserFile, getUserFileByIdForUser } from '../../../database/user_files';
+import { deleteOwnedUserFile } from './userFileDeleteCore';
 
 /**
  * DELETE /user/files/:fileId
- * Deletes the owned DB row; Zipline objects are removed by the file-delete webhook
- * using keys from `file_path` / `thumbnail_url`.
+ * Deletes the owned DB row (and a sibling FLUX draft-cache `.bin` when present).
+ * Zipline objects are removed by the file-delete webhook using keys from
+ * `file_path` / `thumbnail_url`.
  */
 export async function deleteUserFileByFileId(req: Request, res: Response): Promise<void> {
   try {
@@ -18,12 +19,10 @@ export async function deleteUserFileByFileId(req: Request, res: Response): Promi
       throw badRequest('Missing file id');
     }
 
-    const row = await getUserFileByIdForUser(fileId, userId);
+    const row = await deleteOwnedUserFile(userId, fileId);
     if (!row) {
       throw notFound('File not found');
     }
-
-    await deleteUserFile(fileId);
 
     sendOk(res, { ok: true });
   } catch (error) {

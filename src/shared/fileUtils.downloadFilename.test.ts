@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filenameForDownloadedFile, sniffImageExtension } from './fileUtils';
+import { filenameForDownloadedFile, isDraftCacheLibraryFile, sniffImageExtension } from './fileUtils';
 
 const RECRAFT_URL =
   'https://img.recraft.ai/LilqLuk6Ws7LOuZXZBujI71U8rIrCTx_6B_ata6t02I/rs:fit:1024:1024:0/raw:1/plain/abs://external/images/6d439e01-7935-423c-8346-2a3995aaa392';
@@ -52,4 +52,10 @@ test('keeps a .bin name for BFL draft_cache URLs', () => {
     filenameForDownloadedFile('https://delivery.bfl.ai/files/cache.bin?token=abc', 'application/octet-stream'),
     'cache.bin'
   );
+});
+
+test('identifies draft cache library files', () => {
+  assert.equal(isDraftCacheLibraryFile({ file_name: 'abc123.bin' }), true);
+  assert.equal(isDraftCacheLibraryFile({ file_path: 'https://file.genny.bot/cache.bin?x=1' }), true);
+  assert.equal(isDraftCacheLibraryFile({ file_name: 'clip.mp4', file_path: 'https://file.genny.bot/clip.mp4' }), false);
 });

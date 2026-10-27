@@ -298,6 +298,7 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
   if (genModelId) query = query.eq('gen_model_id', genModelId);
+  query = query.not('file_name', 'ilike', '%.bin').not('file_path', 'ilike', '%.bin%');
 
   const fileTypePrefixes = [
     fileTypeFilter.includes('images') ? 'image' : null,

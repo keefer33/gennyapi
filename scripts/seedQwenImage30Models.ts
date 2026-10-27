@@ -60,7 +60,7 @@ async function main() {
   const modelDescription =
     'Text-to-image and edit from up to 3 reference images. Strong on-image text and layouts. Standard is $0.03/image; Pro is $0.04 at 1K and $0.075 at 2K, plus $0.003 per reference.';
   const toolDescription =
-    'Generate or edit images with Qwen Image 3.0. Omit images for text-to-image. Attach 1–3 images to edit or fuse references. Set model to qwen-image-3.0 (standard, $0.03) or qwen-image-3.0-pro ($0.04 at 1K / $0.075 at 2K). n is 1–6. Reference images add $0.003 each.';
+    'Generate or edit images with Qwen Image 3.0. Omit images for text-to-image. Attach 1–3 images to edit or fuse references. Set model to qwen-image-3.0 (standard, $0.03) or qwen-image-3.0-pro ($0.04 at 1K / $0.075 at 2K). n is 1–6. Reference images add $0.003 each. Leave enable_thinking false unless quality matters more than speed.';
 
   const modelRow = {
     model_id: modelId,
@@ -105,10 +105,11 @@ async function main() {
     gen_models_model_id: modelId,
     vendor_api: VENDOR,
     api_schema: {
-      type: 'instant',
+      type: 'model_run',
       method: 'POST',
       server: 'https://dashscope-intl.aliyuncs.com',
-      api_path: '/api/v1/services/aigc/multimodal-generation/generation',
+      api_path: '/api/v1/services/aigc/image-generation/generation',
+      polling_path: 'https://dashscope-intl.aliyuncs.com/api/v1/tasks/',
       vendor_model_name: 'qwen-image-3.0',
     },
     function_schema: {
@@ -185,8 +186,8 @@ async function main() {
         enable_thinking: {
           type: 'boolean',
           title: 'Thinking',
-          description: 'Slower, higher-quality reasoning. Requires Enhance prompt.',
-          default: true,
+          description: 'Much slower. Turns on extra reasoning. Requires Enhance prompt.',
+          default: false,
         },
         seed: {
           type: 'integer',

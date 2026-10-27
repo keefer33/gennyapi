@@ -16,6 +16,7 @@ import {
 } from '../../database/user_gen_model_runs';
 import { listUserGenModelRunsForUser } from '../../database/user_gen_models_runs_filters';
 import { deleteUserFileForUser, getUserFilesByRunId } from '../../database/user_files';
+import { withoutDraftCacheFiles } from '../../shared/fileUtils';
 import { getUserProjectForUser } from '../../database/user_projects';
 import { ensureProjectTag, listGenerationIdsForProjectTag } from '../../database/projectFileTags';
 import type { UserGenModelRunListRow } from '../../database/types';
@@ -614,7 +615,7 @@ export async function getGenerationStatusToolResult(
   if (status === 'completed') {
     const generationId = item.id ?? runId;
     const cost = item.cost ?? 0;
-    const generationFiles = userFiles.map(({ status: _st, ...file }) => file);
+    const generationFiles = withoutDraftCacheFiles(userFiles).map(({ status: _st, ...file }) => file);
     const markdown = buildGenerationCompletedMarkdown({
       generation_id: generationId,
       cost,
@@ -643,7 +644,7 @@ export async function getGenerationStatusToolResult(
 }
 
 function slimGenerationFiles(files: GenerationUserFile[]): Array<Record<string, unknown>> {
-  return files.map(file => ({
+  return withoutDraftCacheFiles(files).map(file => ({
     id: file.id ?? null,
     file_name: file.file_name ?? null,
     file_path: file.file_path ?? null,

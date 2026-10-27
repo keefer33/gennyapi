@@ -3,13 +3,13 @@ import { getUserProjectForUser } from '../../database/user_projects';
 import { listProjectTaggedFiles } from '../../database/projectFileTags';
 import {
   createUserFileRow,
-  deleteUserFileForUser,
   getActiveUserFileByUrlForUser,
   getActiveUserFileForUpdate,
   getUserFileByIdFullForUser,
   listUserFilesData,
   updateUserFileName,
 } from '../../database/user_files';
+import { deleteOwnedUserFile } from '../user/files/userFileDeleteCore';
 import {
   createUserTagRow,
   getUserTagByIdForUser,
@@ -274,11 +274,10 @@ export async function deleteFileToolResult(
   if (!fileId) return { success: false, message: 'file_id is required' };
 
   try {
-    const row = await getUserFileByIdFullForUser(fileId, userId);
+    const row = await deleteOwnedUserFile(userId, fileId);
     if (!row) {
       return { success: false, message: 'File not found' };
     }
-    await deleteUserFileForUser(userId, fileId);
     return {
       success: true,
       file_id: fileId,

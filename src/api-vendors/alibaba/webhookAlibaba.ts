@@ -8,10 +8,8 @@ import {
   processResponse,
   tickWebhookRun,
 } from '../../shared/webhooksUtils';
-import { buildAlibabaImagePayload } from './alibabaImagePayload';
 
 const DEFAULT_ALIBABA_SERVER = 'https://dashscope-intl.aliyuncs.com';
-const DEFAULT_ALIBABA_IMAGE_PATH = '/api/v1/services/aigc/multimodal-generation/generation';
 const ACTIVE_TASK_STATUSES = new Set(['pending', 'running']);
 const FAILED_TASK_STATUSES = new Set(['failed', 'canceled', 'unknown']);
 
@@ -65,6 +63,14 @@ function imageResultUrls(responseData: unknown): string[] {
   return urls;
 }
 
+function resultUrls(responseData: unknown): string[] {
+  const output = (responseData as { output?: Record<string, unknown> })?.output ?? {};
+  const urls = imageResultUrls(responseData);
+  const videoUrl = trimString(output.video_url);
+  if (videoUrl) urls.push(videoUrl);
+  return urls;
+}
+
 function pollingEndpoint(apiSchema: AlibabaApiSchema, taskId: string): string {
   const pollingPath = trimString(apiSchema.polling_path);
   if (!pollingPath) {
@@ -83,62 +89,30 @@ function alibabaErrorMessage(responseData: unknown): string {
     trimString(data.message) ||
     trimString(data.code) ||
     trimString((data.output as Record<string, unknown> | undefined)?.message) ||
+    trimString((data.output as Record<string, unknown> | undefined)?.code) ||
     'Generation failed, please try again.'
   );
 }
 
-async function handleAlibabaImage(context: WebhookVendorContext<AlibabaApiSchema>): Promise<void> {
-  const { run, rowStatus, apiSchema, apiKey, vendorModelName } = context;
-  const requestEndpoint = endpoint(apiSchema.server, apiSchema.api_path, DEFAULT_ALIBABA_IMAGE_PATH);
-  let lastResponse: unknown = {};
-
-  try {
-    if (!vendorModelName) {
-      throw new AppError('Alibaba api_schema missing vendor_model_name', {
-        statusCode: 500,
-        code: 'alibaba_api_schema_missing_vendor_model_name',
-        expose: false,
-      });
-    }
-    console.log('[webhookAlibaba] image request', { endpoint: requestEndpoint, run_id: run.id, db_status: rowStatus });
-    const response = await axios.post(requestEndpoint, buildAlibabaImagePayload(run.payload, vendorModelName), {
-      headers: headers(apiKey),
-      validateStatus: () => true,
-      timeout: 300000,
-    });
-
-    lastResponse = response.data ?? {};
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`alibaba image request failed with status ${response.status}`);
-    }
-
-    const urls = imageResultUrls(lastResponse);
-    if (urls.length === 0) {
-      throw new Error(alibabaErrorMessage(lastResponse) || 'alibaba image response did not include images');
-    }
-
-    const savedFiles = await processResponse(urls, run, lastResponse);
-    await completeWebhookRun({ run, response: lastResponse, files: savedFiles, duration: durationForRun(run) });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown error';
-    console.error('[webhookAlibaba] image error', { run_id: run.id, message });
-    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
-    throw error;
-  }
-}
-
-async function handleAlibabaVideo(context: WebhookVendorContext<AlibabaApiSchema>): Promise<void> {
+export async function webhookAlibaba(context: WebhookVendorContext<AlibabaApiSchema>): Promise<void> {
   const { run, runId, rowStatus, apiSchema, apiKey } = context;
   const taskId = trimString(run.task_id);
   let lastResponse: unknown = {};
 
-  if (!taskId) {
-    throw new Error('alibaba video task_id missing');
+  if (!taskId || taskId.startsWith('alibaba-instant-')) {
+    await errorWebhookRun({
+      run,
+      response: {},
+      message: 'This Qwen Image run used the old sync path. Cancel it and generate again.',
+      duration: durationForRun(run),
+      metaError: 'alibaba_instant_image_retired',
+    });
+    return;
   }
 
   try {
     const requestEndpoint = pollingEndpoint(apiSchema, taskId);
-    console.log('[webhookAlibaba] video poll', {
+    console.log('[webhookAlibaba] poll', {
       endpoint: requestEndpoint,
       run_id: run.id,
       task_id: taskId,
@@ -151,23 +125,23 @@ async function handleAlibabaVideo(context: WebhookVendorContext<AlibabaApiSchema
 
     lastResponse = response.data ?? {};
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`alibaba video polling failed with status ${response.status}`);
+      throw new Error(`alibaba polling failed with status ${response.status}`);
     }
 
     const output = (lastResponse as { output?: Record<string, unknown> }).output ?? {};
     const taskStatus = trimString(output.task_status).toLowerCase();
     if (taskStatus === 'succeeded') {
-      const videoUrl = trimString(output.video_url);
-      if (!videoUrl) {
+      const urls = resultUrls(lastResponse);
+      if (urls.length === 0) {
         await errorWebhookRun({
           run,
           response: lastResponse,
-          message: 'alibaba video succeeded but video_url was missing',
+          message: 'alibaba task succeeded but no media URL was returned',
           duration: durationForRun(run),
         });
         return;
       }
-      const savedFiles = await processResponse(videoUrl, run, lastResponse);
+      const savedFiles = await processResponse(urls, run, lastResponse);
       await completeWebhookRun({ run, response: lastResponse, files: savedFiles, duration: durationForRun(run) });
       return;
     }
@@ -190,22 +164,18 @@ async function handleAlibabaVideo(context: WebhookVendorContext<AlibabaApiSchema
     await errorWebhookRun({
       run,
       response: lastResponse,
-      message: `alibaba video returned unexpected task_status: ${taskStatus}`,
+      message: `alibaba returned unexpected task_status: ${taskStatus}`,
       duration: durationForRun(run),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
-    console.error('[webhookAlibaba] video error', { run_id: run.id, message });
-    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
+    console.error('[webhookAlibaba] error', { run_id: run.id, message });
+    await errorWebhookRun({
+      run,
+      response: lastResponse,
+      message,
+      duration: durationForRun(run),
+    });
     throw error;
   }
-}
-
-export async function webhookAlibaba(context: WebhookVendorContext<AlibabaApiSchema>): Promise<void> {
-  const apiSchemaType = trimString(context.apiSchema.type).toLowerCase();
-  if (apiSchemaType === 'instant') {
-    await handleAlibabaImage(context);
-    return;
-  }
-  await handleAlibabaVideo(context);
 }

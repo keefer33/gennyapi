@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AppError } from '../../app/error';
 import type { GenModelRow } from '../../database/types';
+import { resolveBflDraftCacheUrl } from './bflDraftCache';
 import {
   bflEndpoint,
   bflErrorMessage,
@@ -10,7 +11,7 @@ import {
   type BflApiSchema,
 } from './bflShared';
 
-export async function runBflModel(genModel: GenModelRow, payload: unknown) {
+export async function runBflModel(genModel: GenModelRow, payload: unknown, userId?: string) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema as BflApiSchema | null) ?? {};
   const apiKey = trimBflString(genModel.gen_models_apis_id?.vendor_api?.api_key);
   const apiPath = trimBflString(apiSchema.api_path);
@@ -30,6 +31,20 @@ export async function runBflModel(genModel: GenModelRow, payload: unknown) {
   }
 
   const requestPayload = buildBflPayload(payload, apiSchema);
+  const mode = trimBflString(apiSchema.mode).toLowerCase();
+  if (mode === 'draft_enhance') {
+    if (!userId) {
+      throw new AppError('FLUX draft enhance requires a signed-in user', {
+        statusCode: 401,
+        code: 'bfl_draft_enhance_user_required',
+        expose: true,
+      });
+    }
+    requestPayload.draft_cache = await resolveBflDraftCacheUrl(
+      userId,
+      trimBflString(requestPayload.draft_cache)
+    );
+  }
   const endpoint = bflEndpoint(trimBflString(apiSchema.server), apiPath, apiPath);
   const headers = bflHeaders(apiKey);
   let response = await axios.post(endpoint, requestPayload, {

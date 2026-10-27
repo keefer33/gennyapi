@@ -280,7 +280,11 @@ export function buildBflPayload(payload: unknown, apiSchema: BflApiSchema = {}):
   if (mode === 'draft_enhance') {
     const body: Record<string, unknown> = {
       mode: 'draft_enhance',
-      draft_cache: mediaUrls(original.draft_cache)[0] || trimString(original.draft_cache),
+      draft_cache:
+        mediaUrls(original.video)[0] ||
+        mediaUrls(original.draft_video)[0] ||
+        mediaUrls(original.draft_cache)[0] ||
+        trimString(original.draft_cache),
     };
     setIfDefined(body, 'resolution', trimString(original.resolution) || undefined);
     setIfDefined(body, 'safety_tolerance', safety);

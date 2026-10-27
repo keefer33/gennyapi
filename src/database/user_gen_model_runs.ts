@@ -3,6 +3,7 @@ import { AppError } from '../app/error';
 import { CreateUserGenModelRunResult, UserGenModelRuns } from './types';
 import { RUN_HISTORY_SELECT } from './const';
 import { sanitizeGenerationData } from '../shared/sanitizeGenerationData';
+import { withoutDraftCacheFiles } from '../shared/fileUtils';
 
 export async function createUserGenModelRun(input: UserGenModelRuns): Promise<CreateUserGenModelRunResult> {
   const { supabaseServerClient } = await getServerClient();
@@ -187,7 +188,13 @@ export async function getUserGenModelRunByIdForUser(
       expose: false,
     });
   }
-  return row;
+  if (!row || !Array.isArray((row as { user_files?: unknown }).user_files)) return row;
+  return {
+    ...row,
+    user_files: withoutDraftCacheFiles(
+      (row as { user_files: Array<{ file_name?: string | null; file_path?: string | null }> }).user_files
+    ),
+  } as UserGenModelRuns;
 }
 
 export async function updateUserGenModelRunAppForUser(

@@ -127,7 +127,7 @@ export async function executePlaygroundModelRun(
           response = await runRecraftModel(genModel, payload);
           break;
         case 'bfl':
-          response = await runBflModel(genModel, payload);
+          response = await runBflModel(genModel, payload, userId);
           break;
         default:
           throw new AppError('Invalid vendor', {

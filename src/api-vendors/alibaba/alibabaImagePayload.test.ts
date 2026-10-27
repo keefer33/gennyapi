@@ -33,6 +33,20 @@ test('uses payload model over the vendor default', () => {
   assert.equal(body.model, 'qwen-image-3.0-pro');
 });
 
+test('defaults enable_thinking to false so DashScope does not think for minutes', () => {
+  const body = buildAlibabaImagePayload({ prompt: 'fox' }, 'qwen-image-3.0');
+  assert.equal((body.parameters as { enable_thinking?: unknown }).enable_thinking, false);
+});
+
+test('thinking mode forces prompt_extend true', () => {
+  const body = buildAlibabaImagePayload(
+    { prompt: 'fox', enable_thinking: true, prompt_extend: false },
+    'qwen-image-3.0'
+  );
+  assert.equal((body.parameters as { enable_thinking?: unknown }).enable_thinking, true);
+  assert.equal((body.parameters as { prompt_extend?: unknown }).prompt_extend, true);
+});
+
 test('maps reference images before the prompt text', () => {
   const body = buildAlibabaImagePayload(
     {
@@ -48,6 +62,7 @@ test('maps reference images before the prompt text', () => {
     { text: 'put her in a blazer' },
   ]);
   assert.equal((body.parameters as { n?: unknown }).n, 2);
+  assert.equal((body.parameters as { enable_thinking?: unknown }).enable_thinking, false);
 });
 
 test('keeps boolean prompt_extend in parameters', () => {
@@ -65,6 +80,7 @@ test('keeps boolean prompt_extend in parameters', () => {
 test('normalizes size x separator to DashScope asterisk', () => {
   const body = buildAlibabaImagePayload({ prompt: 'cat', size: '1024x768' }, 'qwen-image-3.0');
   assert.equal((body.parameters as { size?: unknown }).size, '1024*768');
+  assert.equal((body.parameters as { enable_thinking?: unknown }).enable_thinking, false);
 });
 
 test('qwen image cost uses n, 1K/2K pro tiers, and reference fee', () => {
