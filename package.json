@@ -13,7 +13,7 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "type-check": "tsc --noEmit",
-    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts src/api-vendors/google/googleImageVideoPart.test.ts src/api-vendors/higgsfield/higgsfieldShared.test.ts src/api-vendors/heygen/heygenShared.test.ts src/api-vendors/recraft/recraftShared.test.ts src/api-vendors/recraft/webhookRecraft.test.ts src/api-vendors/alibaba/alibabaVideoPayload.test.ts src/api-vendors/alibaba/alibabaImagePayload.test.ts src/api-vendors/bfl/bflShared.test.ts src/shared/fileUtils.downloadFilename.test.ts src/controllers/user/files/userFileDeleteCore.test.ts src/database/projectFileTags.test.ts src/controllers/agents/agentUtils.prompt.test.ts",
+    "test": "node --test --require ts-node/register src/api-vendors/minimax/mapMinimaxVideoPayload.test.ts src/api-vendors/google/googleImageVideoPart.test.ts src/api-vendors/google/lyriaShared.test.ts src/api-vendors/higgsfield/higgsfieldShared.test.ts src/api-vendors/heygen/heygenShared.test.ts src/api-vendors/recraft/recraftShared.test.ts src/api-vendors/recraft/webhookRecraft.test.ts src/api-vendors/alibaba/alibabaVideoPayload.test.ts src/api-vendors/alibaba/alibabaImagePayload.test.ts src/api-vendors/bfl/bflShared.test.ts src/shared/fileUtils.downloadFilename.test.ts src/controllers/user/files/userFileDeleteCore.test.ts src/database/projectFileTags.test.ts src/controllers/agents/agentUtils.prompt.test.ts",
     "remotion:sync": "node scripts/sync-remotion-bundle.js"
   },
   "keywords": [

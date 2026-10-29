@@ -98,7 +98,8 @@ function mediaPicker(
   allowed: 'image' | 'video' | 'audio' | 'file',
   min: number,
   max: number,
-  description?: string
+  description?: string,
+  extraSettings?: Record<string, unknown>
 ): Json {
   return {
     type: max > 1 ? 'array' : 'string',
@@ -107,7 +108,7 @@ function mediaPicker(
     ...(max > 1 ? { items: { type: 'string' }, minItems: min, maxItems: max } : {}),
     'x-ui-component': {
       type: 'MediaFilePicker',
-      settings: { min, max, allowed_file_types: [allowed] },
+      settings: { min, max, allowed_file_types: [allowed], ...extraSettings },
     },
   };
 }
@@ -349,7 +350,8 @@ const MODELS: Array<{
         'video',
         1,
         1,
-        'A FLUX 3 clip generated with Draft on. The enhance cache is attached automatically.'
+        'A FLUX 3 clip generated with Draft on. The enhance cache is attached automatically.',
+        { has_draft_cache: true }
       ),
       resolution: videoResolutionProperty('fhd'),
     },

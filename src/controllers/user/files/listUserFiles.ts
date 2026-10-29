@@ -4,7 +4,7 @@ import { getAuthUserId } from '../../../shared/getAuthUserId';
 import { listUserFilesData } from '../../../database/user_files';
 
 /**
- * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all|images_videos|images_audio|videos_audio&gen_model_id=uuid
+ * GET /user/files?page=1&limit=12&tags=id1,id2&uploadType=upload&fileTypeFilter=images|videos|audio|all|images_videos|images_audio|videos_audio&gen_model_id=uuid&has_draft_cache=true
  */
 export async function listUserFiles(req: Request, res: Response): Promise<void> {
   try {
@@ -28,6 +28,12 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
       typeof req.query.gen_model_id === 'string' && req.query.gen_model_id.trim()
         ? req.query.gen_model_id.trim()
         : null;
+    const draftCacheRaw = req.query.has_draft_cache;
+    const hasDraftCache = ['true', '1', 'yes'].includes(
+      String(Array.isArray(draftCacheRaw) ? draftCacheRaw[0] : draftCacheRaw ?? '')
+        .trim()
+        .toLowerCase()
+    );
 
     const result = await listUserFilesData({
       userId,
@@ -37,6 +43,7 @@ export async function listUserFiles(req: Request, res: Response): Promise<void> 
       uploadType,
       fileTypeFilter,
       genModelId,
+      hasDraftCache,
     });
 
     sendOk(res, result);

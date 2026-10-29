@@ -255,9 +255,47 @@ export async function updateUserFileName(fileId: string, userId: string, fileNam
   return data as UserFileRow;
 }
 
+function emptyFileList(page: number): ListUserFilesResult {
+  return {
+    files: [],
+    total: 0,
+    totalPages: 0,
+    currentPage: page,
+    hasNextPage: false,
+    hasPrevPage: false,
+  };
+}
+
+async function listDraftCacheRunIdsForUser(userId: string): Promise<string[]> {
+  const { supabaseServerClient } = await getServerClient();
+  const { data, error } = await supabaseServerClient
+    .from('user_files')
+    .select('gen_model_run_id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .not('gen_model_run_id', 'is', null)
+    .or('file_name.ilike."%.bin%",file_path.ilike."%.bin%"');
+
+  if (error) {
+    throw new AppError(error.message, {
+      statusCode: 500,
+      code: 'user_files_draft_cache_runs_failed',
+    });
+  }
+
+  const ids = new Set<string>();
+  for (const row of data ?? []) {
+    const runId = typeof (row as { gen_model_run_id?: unknown }).gen_model_run_id === 'string'
+      ? (row as { gen_model_run_id: string }).gen_model_run_id.trim()
+      : '';
+    if (runId) ids.add(runId);
+  }
+  return [...ids];
+}
+
 export async function listUserFilesData(params: ListUserFilesParams): Promise<ListUserFilesResult> {
   const { supabaseServerClient } = await getServerClient();
-  const { userId, page, limit, tagIds, uploadType, fileTypeFilter, genModelId } = params;
+  const { userId, page, limit, tagIds, uploadType, fileTypeFilter, genModelId, hasDraftCache } = params;
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -278,15 +316,14 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
 
     allowedIds = [...new Set((taggedFiles ?? []).map((t: { file_id: string }) => t.file_id))];
     if (allowedIds.length === 0) {
-      return {
-        files: [],
-        total: 0,
-        totalPages: 0,
-        currentPage: page,
-        hasNextPage: false,
-        hasPrevPage: false,
-      };
+      return emptyFileList(page);
     }
+  }
+
+  let draftCacheRunIds: string[] | null = null;
+  if (hasDraftCache) {
+    draftCacheRunIds = await listDraftCacheRunIdsForUser(userId);
+    if (draftCacheRunIds.length === 0) return emptyFileList(page);
   }
 
   let query = supabaseServerClient
@@ -298,6 +335,7 @@ export async function listUserFilesData(params: ListUserFilesParams): Promise<Li
   if (allowedIds !== null) query = query.in('id', allowedIds);
   if (uploadType !== null) query = query.eq('upload_type', uploadType);
   if (genModelId) query = query.eq('gen_model_id', genModelId);
+  if (draftCacheRunIds) query = query.in('gen_model_run_id', draftCacheRunIds);
   query = query.not('file_name', 'ilike', '%.bin').not('file_path', 'ilike', '%.bin%');
 
   const fileTypePrefixes = [

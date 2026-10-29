@@ -15,15 +15,20 @@ import {
 } from '../../shared/webhooksUtils';
 
 import {
+  GOOGLE_LYRIA_CREATE_TIMEOUT_MS,
   googleInteractionsEndpoint,
+  googleLyriaHeaders,
   googleOmniPollingEndpoint,
   googleServer,
+  isGoogleLyriaPlaceholderTaskId,
   isGoogleOmniPlaceholderTaskId,
   isGoogleVideoModel,
+  isLyriaModel,
   isOmniModel,
   trimString,
   type GoogleApiSchema,
 } from './googleApiShared';
+import { buildLyriaRequestPayload, extractLyriaOutput } from './lyriaShared';
 import {
   collectInteractionOutputImages,
   googleYouTubeImageInteractionRequest,
@@ -801,8 +806,146 @@ async function handleGoogleOmni(context: WebhookVendorContext<GoogleApiSchema>):
   }
 }
 
+async function handleGoogleLyria(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
+  const { apiSchema, apiKey, vendorModelName } = context;
+  let { run, runId, rowStatus } = context;
+  let taskId = trimString(run.task_id);
+  let lastResponse: unknown = run.response ?? {};
+
+  if (!taskId) {
+    throw new Error('google lyria task_id missing');
+  }
+
+  try {
+    if (isGoogleLyriaPlaceholderTaskId(taskId)) {
+      const createEndpoint = googleInteractionsEndpoint(apiSchema);
+      console.log('[webhookGoogle] lyria create', {
+        endpoint: createEndpoint,
+        run_id: run.id,
+        db_status: rowStatus,
+        model: vendorModelName,
+      });
+      const createResponse = await axios.post(
+        createEndpoint,
+        await buildLyriaRequestPayload(run.payload, vendorModelName || 'lyria-3.5'),
+        {
+          headers: googleLyriaHeaders(apiKey),
+          timeout: GOOGLE_LYRIA_CREATE_TIMEOUT_MS,
+          validateStatus: () => true,
+        }
+      );
+
+      lastResponse = createResponse.data ?? {};
+      if (createResponse.status < 200 || createResponse.status >= 300) {
+        throw new Error(`google lyria create failed with status ${createResponse.status}`);
+      }
+
+      const interaction = interactionResponseRecord(lastResponse) ?? {};
+      const interactionId = trimString(interaction.id) || trimString((lastResponse as Record<string, unknown>).id);
+      if (interactionId) {
+        taskId = interactionId;
+        await updateUserGenModelRun({
+          id: runId,
+          task_id: interactionId,
+          response: lastResponse,
+        });
+        run = { ...run, task_id: interactionId, response: lastResponse };
+      }
+    } else {
+      const endpoint = googleOmniPollingEndpoint(apiSchema, taskId);
+      console.log('[webhookGoogle] lyria poll', {
+        endpoint,
+        run_id: run.id,
+        task_id: taskId,
+        db_status: rowStatus,
+      });
+      const response = await axios.get(endpoint, {
+        headers: googleLyriaHeaders(apiKey),
+        validateStatus: () => true,
+      });
+      lastResponse = response.data ?? {};
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`google lyria polling failed with status ${response.status}`);
+      }
+    }
+
+    if ((lastResponse as Record<string, unknown>).error) {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse),
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const interaction = interactionResponseRecord(lastResponse) ?? {};
+    if (interaction.error) {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(interaction),
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const status = trimString(interaction.status).toLowerCase();
+    if (status === 'failed' || status === 'error' || status === 'cancelled') {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: googleErrorMessage(lastResponse) || 'Lyria generation failed',
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    const output = extractLyriaOutput(lastResponse);
+    if (output) {
+      const ext = getFileExtensionFromMimeType(output.mimeType);
+      const savedFile = await saveFileFromBuffer(
+        Buffer.from(output.audioBase64, 'base64'),
+        `google-${runId}.${ext === 'bin' ? 'mp3' : ext}`,
+        output.mimeType.startsWith('audio/') ? output.mimeType : 'audio/mpeg',
+        run,
+        lastResponse,
+        output.lyrics ? { lyrics: output.lyrics } : undefined
+      );
+      await completeWebhookRun({
+        run,
+        response: lastResponse,
+        files: savedFile ? [savedFile] : [],
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    if (status === 'completed') {
+      await errorWebhookRun({
+        run,
+        response: lastResponse,
+        message: 'Lyria completed but no audio was returned',
+        duration: durationForRun(run),
+      });
+      return;
+    }
+
+    await tickWebhookRun({ runId, duration: durationForRun(run), delayMs: 5000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.error('[webhookGoogle] lyria error', { run_id: run.id, message });
+    await errorWebhookRun({ run, response: lastResponse, message, duration: durationForRun(run) });
+    throw error;
+  }
+}
+
 export async function webhookGoogle(context: WebhookVendorContext<GoogleApiSchema>): Promise<void> {
   const apiSchema = context.apiSchema;
+  if (isLyriaModel(context.vendorModelName, context.genModel.generation_type)) {
+    await handleGoogleLyria(context);
+    return;
+  }
   if (isOmniModel(context.vendorModelName, apiSchema)) {
     await handleGoogleOmni(context);
     return;

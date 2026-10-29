@@ -105,7 +105,16 @@ export function interactionResponseRecord(responseData: unknown): Record<string,
   const root = asRecord(responseData);
   if (!root) return null;
   const nested = asRecord(root.interaction);
-  if (nested && (nested.output_image || nested.outputImage || nested.steps || nested.status || nested.id)) {
+  if (
+    nested &&
+    (nested.output_image ||
+      nested.outputImage ||
+      nested.output_audio ||
+      nested.outputAudio ||
+      nested.steps ||
+      nested.status ||
+      nested.id)
+  ) {
     return nested;
   }
   return root;

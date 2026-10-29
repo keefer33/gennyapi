@@ -5,7 +5,9 @@ import { getActiveUserFileByUrlForUser } from '../../database/user_files';
 import { base64WithoutDataUrl, mimeFromBase64DataUrl } from '../../shared/fileUtils';
 import {
   DEFAULT_GOOGLE_GEMINI_SERVER,
+  GOOGLE_LYRIA_PLACEHOLDER_PREFIX,
   GOOGLE_OMNI_PLACEHOLDER_PREFIX,
+  isLyriaModel,
   isOmniModel,
   trimString,
   type GoogleApiSchema,
@@ -457,6 +459,16 @@ function deferredGoogleOmniResponse(model: string) {
   };
 }
 
+function deferredGoogleLyriaResponse(model: string) {
+  return {
+    id: `${GOOGLE_LYRIA_PLACEHOLDER_PREFIX}${Date.now()}`,
+    request_id: null,
+    status: 'pending',
+    deferred_to_webhook: true,
+    model,
+  };
+}
+
 function deferredGoogleImageResponse(model: string) {
   return {
     id: `google-image-${Date.now()}`,
@@ -522,6 +534,10 @@ async function runGoogleVeoModel(genModel: GenModelRow, apiSchema: GoogleApiSche
 export async function runGoogleModel(genModel: GenModelRow, payload: unknown) {
   const apiSchema = (genModel.gen_models_apis_id?.api_schema as GoogleApiSchema | null) ?? {};
   const vendorModelName = apiSchema.vendor_model_name?.trim() || '';
+
+  if (isLyriaModel(vendorModelName, genModel.generation_type)) {
+    return deferredGoogleLyriaResponse(vendorModelName);
+  }
 
   if (!isVideoGenerationType(genModel.generation_type)) {
     return deferredGoogleImageResponse(vendorModelName);

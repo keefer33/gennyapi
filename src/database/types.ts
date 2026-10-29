@@ -438,6 +438,8 @@ export type ListUserFilesParams = {
   uploadType: string | null;
   fileTypeFilter: string;
   genModelId?: string | null;
+  /** When true, only files whose run also has a hidden FLUX draft-cache `.bin`. */
+  hasDraftCache?: boolean;
 };
 
 export type ListUserFilesResult = {
