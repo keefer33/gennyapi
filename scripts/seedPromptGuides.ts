@@ -17,6 +17,13 @@ const BRAND_GUIDES: Array<{ slug: string; name: string; file: string }> = [
   { slug: 'qwen', name: 'Qwen', file: 'qwen.md' },
   { slug: 'recraft', name: 'Recraft', file: 'recraft.md' },
   { slug: 'minimax', name: 'Minimax', file: 'minimax.md' },
+  { slug: 'xai', name: 'Xai', file: 'xai.md' },
+];
+
+const PRODUCT_GUIDES: Array<{ product: string; file: string }> = [
+  { product: 'grok-imagine-video-v1.5', file: 'xai-grok-imagine-video-1.5.md' },
+  { product: 'grok-imagine-video-v1.5-lite', file: 'xai-grok-imagine-video-1.5-lite.md' },
+  { product: 'grok-imagine-image-2.0', file: 'xai-grok-imagine-image-2.0.md' },
 ];
 
 const MODEL_GUIDES: Array<{ model_id: string; file: string }> = [
@@ -60,6 +67,23 @@ async function main() {
       continue;
     }
     console.log(`updated brand ${data[0].slug} (${data[0].name})`);
+  }
+
+  for (const product of PRODUCT_GUIDES) {
+    const prompt_guide = readGuide(product.file);
+    const { data, error } = await supabase
+      .from('gen_models')
+      .update({ prompt_guide })
+      .eq('model_product', product.product)
+      .select('id, model_id, model_name, model_product');
+    throwIf(error, `gen_models.prompt_guide product ${product.product}`);
+    if (!data?.length) {
+      console.warn(`skip product ${product.product}: no matching gen_models rows`);
+      continue;
+    }
+    for (const row of data) {
+      console.log(`updated product ${row.model_product} model ${row.model_id} (${row.model_name})`);
+    }
   }
 
   for (const model of MODEL_GUIDES) {
