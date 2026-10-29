@@ -118,6 +118,68 @@ test('passes through an existing content array', () => {
   assert.deepEqual(body.content, content);
 });
 
+test('maps MiniMax-H3-Highspeed text-to-video at 768P', () => {
+  const body = mapMinimaxVideoPayload(
+    {
+      prompt: 'A courier weaving through a night market',
+      duration: 6,
+      resolution: '768P',
+      aspect_ratio: '9:16',
+    },
+    'MiniMax-H3-Highspeed'
+  );
+  assert.equal(body.model, 'MiniMax-H3-Highspeed');
+  assert.equal(body.resolution, '768P');
+  assert.equal(body.duration, 6);
+  assert.equal(body.ratio, '9:16');
+  assert.equal(body.extra, undefined);
+});
+
+test('MiniMax-H3-Lite image-to-video still uses adaptive ratio', () => {
+  const body = mapMinimaxVideoPayload(
+    {
+      prompt: 'Add steam to the ramen',
+      duration: 5,
+      resolution: '480P',
+      aspect_ratio: '4:3',
+      image_url: 'https://cdn.example.com/first.png',
+    },
+    'MiniMax-H3-Lite'
+  );
+  assert.equal(body.model, 'MiniMax-H3-Lite');
+  assert.equal(body.ratio, 'adaptive');
+  assert.equal(body.resolution, '480P');
+  assert.equal(body.extra, undefined);
+});
+
+test('MiniMax-H3-Lite reference-to-video requires a concrete ratio', () => {
+  const body = mapMinimaxVideoPayload(
+    {
+      prompt: 'Character speaks: Follow the wind.',
+      duration: 8,
+      resolution: '768P',
+      aspect_ratio: '9:16',
+      reference_image_urls: ['https://cdn.example.com/ref.png'],
+    },
+    'MiniMax-H3-Lite'
+  );
+  assert.equal(body.model, 'MiniMax-H3-Lite');
+  assert.equal(body.ratio, '9:16');
+});
+
+test('MiniMax-H3-Lite reference-to-video defaults adaptive to 16:9', () => {
+  const body = mapMinimaxVideoPayload(
+    {
+      prompt: 'Character walks through a market',
+      duration: 6,
+      resolution: '480P',
+      reference_video_urls: ['https://cdn.example.com/ref.mp4'],
+    },
+    'MiniMax-H3-Lite'
+  );
+  assert.equal(body.ratio, '16:9');
+});
+
 test('omits extra.prompt_expansion_mode for MiniMax-H3', () => {
   const body = mapMinimaxVideoPayload(
     {

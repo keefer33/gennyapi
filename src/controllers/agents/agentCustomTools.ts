@@ -13,6 +13,7 @@ import {
   deleteGenerationToolResult,
 } from './agentUtils';
 import { getGenModelsList } from '../../database/gen_models';
+import { getModelPromptGuideToolResult } from './agentPromptGuide';
 import { describeFileFromUrl, DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION } from '../../shared/describeFileVision';
 import {
   assistSpeechScriptToolResultForUser,
@@ -263,6 +264,23 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
         }),
         execute: async ({ modelId, form_values_json }: { modelId: string; form_values_json: string }) =>
           calculateModelCostToolResult(modelId, form_values_json),
+      }),
+      experimental_createTool('GET_MODEL_PROMPT_GUIDE', {
+        name: 'Get Model Prompt Guide',
+        description:
+          'Load the prompting guide for a playground generation model. Pass gen_model_id (the same UUID used for CALCULATE_MODEL_COST) or model_id (e.g. google/lyria-3.5). Call this before writing a generation prompt. Follow the returned guide; do not paste it to the user unless they ask.',
+        inputParams: z.object({
+          gen_model_id: z
+            .string()
+            .optional()
+            .describe('gen_models.id UUID — same modelId used for CALCULATE_MODEL_COST'),
+          model_id: z
+            .string()
+            .optional()
+            .describe('Vendor model_id string, e.g. google/lyria-3.5'),
+        }),
+        execute: async (input: { gen_model_id?: string; model_id?: string }) =>
+          getModelPromptGuideToolResult(input),
       }),
       experimental_createTool('GET_GENERATION_STATUS', {
         name: 'Get Generation Status',
@@ -555,6 +573,12 @@ export default async function getAgentCustomTools(_authToken: string, userId: st
         name: 'Calculate Model Cost',
         description:
           'Estimate cost from toolName (schema name of the tool) and form_values_json (JSON string of tools input fields) before starting a generation.',
+      },
+      {
+        slug: 'GET_MODEL_PROMPT_GUIDE',
+        name: 'Get Model Prompt Guide',
+        description:
+          'Load the prompting guide for a playground model (gen_model_id UUID or model_id string) before writing a generation prompt.',
       },
       {
         slug: 'GET_GENERATION_STATUS',

@@ -17,6 +17,11 @@ test('system prompt has no character toolkit', () => {
   assert.match(prompt, /playground/i);
 });
 
+test('system prompt tells agents to load prompting guides', () => {
+  assert.match(prompt, /GET_MODEL_PROMPT_GUIDE/);
+  assert.match(prompt, /Do not paste the full guide to the user/);
+});
+
 test('system prompt describes tagged project files', () => {
   assert.match(prompt, /tagged with the project name/);
   assert.match(PROJECT_ASSETS_INVENTORY_RULES, /LIST_USER_FILES with project_id/);

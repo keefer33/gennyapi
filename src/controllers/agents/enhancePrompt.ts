@@ -3,8 +3,14 @@ import { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { badRequest, sendError } from '../../app/response';
 import { getAgentModelsData } from '../../database/agent_models';
+import { getGenModelById } from '../../database/gen_models';
 import type { AgentModelRow } from '../../database/types';
 import { DESCRIBE_FILE_FOR_GENERATION_PROMPT_INSTRUCTION, describeFileFromUrl } from '../../shared/describeFileVision';
+import {
+  effectivePromptGuide,
+  isUuid,
+  truncatePromptGuide,
+} from '../../shared/promptGuide';
 
 const MEDIA_URL_KEYS = new Set([
   'file_path',
@@ -216,6 +222,48 @@ function buildUserMessageWithDescriptions(message: string, descriptions: Describ
   );
 }
 
+export function composeEnhancePromptSystemPrompt(opts: {
+  generationType: string;
+  referenceInstruction?: string;
+  lengthInstruction?: string;
+  promptGuide?: string | null;
+}): string {
+  const referenceInstruction = opts.referenceInstruction ?? '';
+  const lengthInstruction = opts.lengthInstruction ?? '';
+  const guide = truncatePromptGuide(opts.promptGuide);
+  const guideInstruction = guide
+    ? ` Follow this model's prompting guide when writing the prompt:\n\n${guide}`
+    : '';
+  return `You are an expert prompt engineer for AI ${opts.generationType} generation. The user will send instructions and context. Your job is to respond with a single, ready-to-use ${opts.generationType} prompt.${referenceInstruction}${lengthInstruction}${guideInstruction}`;
+}
+
+async function loadPromptGuideForEnhance(rawGenModelId: unknown): Promise<string | null> {
+  if (typeof rawGenModelId !== 'string' || !isUuid(rawGenModelId)) return null;
+  try {
+    const genModel = await getGenModelById(rawGenModelId.trim());
+    return truncatePromptGuide(effectivePromptGuide(genModel));
+  } catch {
+    return null;
+  }
+}
+
+export async function buildEnhancePromptSystemPrompt(opts: {
+  generationType: string;
+  referenceInstruction?: string;
+  lengthInstruction?: string;
+  genModelId?: unknown;
+  promptGuide?: string | null;
+}): Promise<string> {
+  const promptGuide =
+    opts.promptGuide !== undefined ? opts.promptGuide : await loadPromptGuideForEnhance(opts.genModelId);
+  return composeEnhancePromptSystemPrompt({
+    generationType: opts.generationType,
+    referenceInstruction: opts.referenceInstruction,
+    lengthInstruction: opts.lengthInstruction,
+    promptGuide,
+  });
+}
+
 export const enhancePrompt = async (req: Request, res: Response): Promise<void> => {
   const requestId = `enhance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -278,7 +326,12 @@ export const enhancePrompt = async (req: Request, res: Response): Promise<void> 
         'Do not invent extra tags. Do not replace tags with URLs. Use the written descriptions to decide how each reference contributes to the prompt.'
       : '';
 
-    const systemPrompt = `You are an expert prompt engineer for AI ${normalizedType} generation. The user will send instructions and context. Your job is to respond with a single, ready-to-use ${normalizedType} prompt.${referenceInstruction}${lengthInstruction}`;
+    const systemPrompt = await buildEnhancePromptSystemPrompt({
+      generationType: normalizedType,
+      referenceInstruction,
+      lengthInstruction,
+      genModelId: req.body?.gen_model_id ?? req.body?.genModelId,
+    });
 
     // Streaming response headers (same as aiGatewayPrompt pattern)
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');

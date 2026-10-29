@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 import { AppError } from '../../app/error';
 import { sendError, sendOk } from '../../app/response';
 import { getServerClient } from '../../database/supabaseClient';
-import { PLAYGROUND_LIST_SELECT } from '../../database/const';
+import {
+  PLAYGROUND_LIST_SELECT,
+  genModelSelectWithoutPromptGuide,
+  isMissingPromptGuideColumn,
+} from '../../database/const';
 
 function toList(input: unknown): string[] {
   if (Array.isArray(input)) {
@@ -36,34 +40,38 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     const modelProductFilters = toList(req.query.model_product);
     const modelVariantFilters = toList(req.query.model_variant);
 
-    // Start with SQL-friendly filters (search, brand, model_type).
-    let query = supabaseServerClient
-      .from('gen_models')
-      .select(PLAYGROUND_LIST_SELECT)
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('sort_order_variant', { ascending: true, nullsFirst: false });
+    const runQuery = async (select: string) => {
+      let query = supabaseServerClient
+        .from('gen_models')
+        .select(select)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('sort_order_variant', { ascending: true, nullsFirst: false });
 
-    if (search) {
-      const escaped = search.replace(/%/g, '\\%').replace(/_/g, '\\_');
-      query = query.or(
-        `model_id.ilike.%${escaped}%,model_name.ilike.%${escaped}%,model_description.ilike.%${escaped}%`
-      );
-    }
-    if (id) {
-      query = query.eq('id', id);
-    }
-    if (modelId) {
-      query = query.eq('model_id', modelId);
-    }
-    // Brand filter is applied after mapping so links can use brands.slug.
-    if (modelTypeFilters.length > 0) {
-      query = query.in('model_type', modelTypeFilters);
-    }
-    if (generationTypeFilters.length > 0) {
-      query = query.in('generation_type', generationTypeFilters);
-    }
+      if (search) {
+        const escaped = search.replace(/%/g, '\\%').replace(/_/g, '\\_');
+        query = query.or(
+          `model_id.ilike.%${escaped}%,model_name.ilike.%${escaped}%,model_description.ilike.%${escaped}%`
+        );
+      }
+      if (id) {
+        query = query.eq('id', id);
+      }
+      if (modelId) {
+        query = query.eq('model_id', modelId);
+      }
+      if (modelTypeFilters.length > 0) {
+        query = query.in('model_type', modelTypeFilters);
+      }
+      if (generationTypeFilters.length > 0) {
+        query = query.in('generation_type', generationTypeFilters);
+      }
+      return query as unknown as Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+    };
 
-    const { data: rows, error } = await query;
+    let { data: rows, error } = await runQuery(PLAYGROUND_LIST_SELECT);
+    if (error && isMissingPromptGuideColumn(error.message)) {
+      ({ data: rows, error } = await runQuery(genModelSelectWithoutPromptGuide(PLAYGROUND_LIST_SELECT)));
+    }
     if (error) {
       throw new AppError(error.message, {
         statusCode: 500,
@@ -71,10 +79,16 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
       });
     }
 
-
+    type PlaygroundListRow = {
+      brand_name?: unknown;
+      model_product?: string | null;
+      model_variant?: string | null;
+      model_type?: string | null;
+    };
 
     // brand/model_product/model_variant are mapped, so filter in memory.
-    const filteredRows = rows.filter(row => {
+    const listed = (rows ?? []) as PlaygroundListRow[];
+    const filteredRows = listed.filter(row => {
       const brandSlug = brandSlugFromEmbed(row.brand_name);
       const brandOk =
         brandFilters.length === 0 ||
@@ -88,11 +102,11 @@ export async function playgroundModelsList(req: Request, res: Response): Promise
     });
 
     const brands = Array.from(
-      new Set(rows.map(r => brandSlugFromEmbed(r.brand_name)).filter((s): s is string => Boolean(s)))
+      new Set(listed.map(r => brandSlugFromEmbed(r.brand_name)).filter((s): s is string => Boolean(s)))
     ).sort();
-    const model_types = Array.from(new Set(rows.map(r => r.model_type).filter(Boolean))).sort();
-    const model_products = Array.from(new Set(rows.map(r => r.model_product).filter(Boolean))).sort();
-    const model_variants = Array.from(new Set(rows.map(r => r.model_variant).filter(Boolean))).sort();
+    const model_types = Array.from(new Set(listed.map(r => r.model_type).filter(Boolean))).sort();
+    const model_products = Array.from(new Set(listed.map(r => r.model_product).filter(Boolean))).sort();
+    const model_variants = Array.from(new Set(listed.map(r => r.model_variant).filter(Boolean))).sort();
 
     sendOk(res, {
       items: filteredRows,

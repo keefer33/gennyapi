@@ -101,6 +101,21 @@ function throwMappingError(message: string, code: string): never {
   });
 }
 
+function requireConcreteRatio(ratioRaw: string, fallback?: string): string {
+  const ratio =
+    !ratioRaw || ratioRaw.toLowerCase() === 'adaptive' ? fallback || '' : ratioRaw;
+  if (!ratio || ratio.toLowerCase() === 'adaptive') {
+    throwMappingError(
+      'text-to-video requires a concrete ratio (not adaptive)',
+      'minimax_t2v_ratio_required'
+    );
+  }
+  if (!T2V_RATIOS.has(ratio)) {
+    throwMappingError(`unsupported ratio: ${ratio}`, 'minimax_invalid_ratio');
+  }
+  return ratio;
+}
+
 /**
  * Maps a playground form payload onto MiniMax Video Generation V2.
  * Accepts either a native `content` array or flat fields (`prompt`, `image_url`, …).
@@ -201,22 +216,23 @@ export function mapMinimaxVideoPayload(payload: unknown, vendorModelName: string
     );
   }
 
+  const isLite = model === 'MiniMax-H3-Lite';
+
   let ratio: string | undefined;
   if (hasFrame) {
     ratio = 'adaptive';
   } else if (hasReference) {
-    ratio = ratioRaw || 'adaptive';
+    // Lite does not support adaptive for reference-to-video.
+    if (isLite) {
+      ratio = requireConcreteRatio(ratioRaw, '16:9');
+    } else {
+      ratio = ratioRaw || 'adaptive';
+      if (ratio !== 'adaptive' && !T2V_RATIOS.has(ratio)) {
+        throwMappingError(`unsupported ratio: ${ratio}`, 'minimax_invalid_ratio');
+      }
+    }
   } else {
-    if (!ratioRaw || ratioRaw.toLowerCase() === 'adaptive') {
-      throwMappingError(
-        'text-to-video requires a concrete ratio (not adaptive)',
-        'minimax_t2v_ratio_required'
-      );
-    }
-    if (!T2V_RATIOS.has(ratioRaw)) {
-      throwMappingError(`unsupported ratio: ${ratioRaw}`, 'minimax_invalid_ratio');
-    }
-    ratio = ratioRaw;
+    ratio = requireConcreteRatio(ratioRaw);
   }
 
   const body: MinimaxVideoGenerationBody = {

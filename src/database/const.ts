@@ -17,17 +17,29 @@ export const USAGE_LOG_TYPES = [
   { id: 4, log_type: 'credit', reason_code: 'ai_model_error_refund', meta: null },
 ];
 
+export function genModelSelectWithoutPromptGuide(select: string): string {
+  return select
+    .replace(/\n\s*prompt_guide,\s*\n/g, '\n')
+    .replace(/brand_name\(id, name, slug, logo, prompt_guide\)/g, 'brand_name(id, name, slug, logo)');
+}
+
+export function isMissingPromptGuideColumn(message: string | undefined | null): boolean {
+  if (!message) return false;
+  return /prompt_guide/i.test(message) && /schema cache|does not exist|column/i.test(message);
+}
+
 /** Pricing / schemas / vendor keys live on `gen_models_apis`; join for API responses. */
 export const PLAYGROUND_LIST_SELECT = `
   id,
   model_id,
   model_name,
   model_description,
+  prompt_guide,
   model_type,
   generation_type,
   model_product,
   model_variant,
-  brand_name(id, name, slug, logo),
+  brand_name(id, name, slug, logo, prompt_guide),
   sort_order,
   sort_order_variant,
   gen_models_apis_id,
@@ -168,11 +180,12 @@ export const GEN_MODEL_DETAIL_SELECT = `
   model_id,
   model_name,
   model_description,
+  prompt_guide,
   model_type,
   generation_type,
   model_product,
   model_variant,
-  brand_name(id, name, slug, logo),
+  brand_name(id, name, slug, logo, prompt_guide),
   sort_order,
   sort_order_variant,
   gen_models_apis_id(

@@ -1,7 +1,7 @@
 import { getServerClient } from './supabaseClient';
 import { AppError } from '../app/error';
 import { GenModelRow } from './types';
-import { GEN_MODEL_DETAIL_SELECT } from './const';
+import { GEN_MODEL_DETAIL_SELECT, genModelSelectWithoutPromptGuide, isMissingPromptGuideColumn } from './const';
 
 /**
  * Vendor key for webhooks / routing (`vendor_apis.vendor_name`), after `gen_models_apis` normalization.
@@ -14,14 +14,13 @@ export function genModelVendorKey(gm: GenModelRow | null | undefined): string | 
   return null;
 }
 
-export async function getGenModelById(id: string): Promise<GenModelRow | null> {
-  const { supabaseServerClient } = await getServerClient();
-  const { data, error } = await supabaseServerClient
-    .from('gen_models')
-    .select(GEN_MODEL_DETAIL_SELECT)
-    .eq('id', id)
-    .maybeSingle();
-    
+async function selectGenModels<T>(
+  run: (select: string) => PromiseLike<{ data: T | null; error: { message: string } | null }>
+): Promise<T | null> {
+  let { data, error } = await run(GEN_MODEL_DETAIL_SELECT);
+  if (error && isMissingPromptGuideColumn(error.message)) {
+    ({ data, error } = await run(genModelSelectWithoutPromptGuide(GEN_MODEL_DETAIL_SELECT)));
+  }
   if (error) {
     throw new AppError(error.message, {
       statusCode: 500,
@@ -29,23 +28,31 @@ export async function getGenModelById(id: string): Promise<GenModelRow | null> {
       expose: false,
     });
   }
-  return data as GenModelRow | null;
+  return data;
+}
+
+export async function getGenModelById(id: string): Promise<GenModelRow | null> {
+  const { supabaseServerClient } = await getServerClient();
+  return selectGenModels(select =>
+    supabaseServerClient.from('gen_models').select(select).eq('id', id).maybeSingle()
+  ) as Promise<GenModelRow | null>;
+}
+
+export async function getGenModelByModelId(modelId: string): Promise<GenModelRow | null> {
+  const { supabaseServerClient } = await getServerClient();
+  return selectGenModels(select =>
+    supabaseServerClient.from('gen_models').select(select).eq('model_id', modelId).limit(1).maybeSingle()
+  ) as Promise<GenModelRow | null>;
 }
 
 export async function getGenModelsList(): Promise<GenModelRow[]> {
   const { supabaseServerClient } = await getServerClient();
-  const { data: rows, error } = await supabaseServerClient
-    .from('gen_models')
-    .select(GEN_MODEL_DETAIL_SELECT)
-    .order('sort_order', { ascending: true, nullsFirst: false })
-    .order('sort_order_variant', { ascending: true, nullsFirst: false });
-
-  if (error) {
-    throw new AppError(error.message, {
-      statusCode: 500,
-      code: 'gen_models_fetch_failed',
-      expose: false,
-    });
-  }
-  return rows as GenModelRow[];
+  const rows = await selectGenModels(select =>
+    supabaseServerClient
+      .from('gen_models')
+      .select(select)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('sort_order_variant', { ascending: true, nullsFirst: false })
+  );
+  return (rows ?? []) as GenModelRow[];
 }

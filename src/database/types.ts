@@ -13,6 +13,7 @@ export type BrandRow = {
   slug?: string | null;
   logo?: string | null;
   sort_order?: number | null;
+  prompt_guide?: string | null;
 };
 
 export type GenModelsApisRow = {
@@ -30,6 +31,7 @@ export type GenModelRow = {
   model_id?: string | null;
   model_name?: string | null;
   model_description?: string | null;
+  prompt_guide?: string | null;
   model_type?: string | null;
   generation_type?: string | null;
   model_product?: string | null;
